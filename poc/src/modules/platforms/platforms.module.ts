@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { FacebookAdapter } from './facebook/facebook.adapter';
+import { FacebookModule } from './facebook/facebook.module';
 import { InstagramAdapter } from './instagram/instagram.adapter';
 import { InstagramModule } from './instagram/instagram.module';
 import {
@@ -11,20 +13,28 @@ export { ADAPTER_REGISTRY };
 export type { AdapterRegistry };
 
 /**
- * Central platform registry. Add new adapters here when onboarding a platform
- * (Day 6 ships Facebook — same shape).
+ * Central platform registry. Add a new adapter by:
+ *   1. Creating the adapter file + module under src/modules/platforms/<name>/.
+ *   2. Adding the module to `imports` here.
+ *   3. Adding one line to the factory below.
+ *
+ * Nothing else in the worker, scheduler, admin, or UI needs to change.
  */
 @Module({
-  imports: [InstagramModule],
+  imports: [InstagramModule, FacebookModule],
   providers: [
     {
       provide: ADAPTER_REGISTRY,
-      useFactory: (ig: InstagramAdapter): AdapterRegistry => ({
+      useFactory: (
+        ig: InstagramAdapter,
+        fb: FacebookAdapter,
+      ): AdapterRegistry => ({
         instagram: ig,
+        facebook: fb,
       }),
-      inject: [InstagramAdapter],
+      inject: [InstagramAdapter, FacebookAdapter],
     },
   ],
-  exports: [ADAPTER_REGISTRY, InstagramModule],
+  exports: [ADAPTER_REGISTRY, InstagramModule, FacebookModule],
 })
 export class PlatformsModule {}
