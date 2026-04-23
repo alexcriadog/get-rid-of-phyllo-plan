@@ -90,6 +90,20 @@ Diffs allowed:
 - **Fields connector provides that Phyllo didn't** (e.g., cleaner YT Analytics data) — expected upgrade.
 - **Fields Phyllo enriched but connector doesn't** — these are OUT of connector's scope (business logic stayed in backend-api); should be unchanged through the flip.
 
+## Day -1 — Phyllo export + Mongo diff (pre-flight data check)
+
+Independent belt-and-suspenders check before each platform's Day 5 flip. See [`../historical-backfill.md`](../historical-backfill.md) §4.
+
+1. Export everything Phyllo has for this platform's accounts (Phyllo data-export API or bulk dump).
+2. Compare against `backend-api` MongoDB:
+   - Post counts per account (Phyllo vs `posts` collection)
+   - Earliest + latest content timestamps
+   - Sample-compare N random posts for metric agreement within tolerance
+3. Expected result: no material diff. `backend-api` has written to Mongo on every Phyllo webhook for the life of each account.
+4. Any material diff → document, investigate (usually Phyllo staleness, not a data-loss risk), proceed to flip.
+
+Time: 1-2 days per platform, runs in parallel with other prep. Confirms we won't lose history at cutover.
+
 ---
 
 ## Rollback per platform

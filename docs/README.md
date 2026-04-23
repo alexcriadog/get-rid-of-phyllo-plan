@@ -23,6 +23,7 @@ docs/
 ├── refresh-cadence.md          Tiers, overrides, admin API (Q2)
 ├── manual-refresh.md           On-demand trigger design (Q4)
 ├── connection-portal.md        Where the Connect UI lives (Q5)
+├── historical-backfill.md      Historical data recovery — per platform + migration
 │
 ├── 07-platforms/               Per-platform deep dives
 │   ├── instagram.md

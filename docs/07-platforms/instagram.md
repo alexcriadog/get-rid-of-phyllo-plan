@@ -121,6 +121,16 @@ Tokens are envelope-encrypted (D-07, see [`../08-operations/security.md`](../08-
 
 ---
 
+## Historical backfill
+
+- **Content list:** full history available. Paginate `/me/media` backward; no depth limit other than our choice.
+- **Metrics:** current state only. Historical daily series is what we've been polling (now in backend-api's MongoDB).
+- **Stories:** not recoverable — 24h TTL on the platform.
+- **Insights historical windows:** some Business Insights expose `lifetime` / `days_28` periods that return data going back weeks; adapter uses where applicable for richer first-connect snapshots.
+- **Cost:** IG paginates without extra budget impact beyond the normal user-token bucket.
+
+See [`../historical-backfill.md`](../historical-backfill.md) for the cross-platform policy.
+
 ## Known quirks / landmines
 
 - **Instagram Graph API returns 0s in insights** during the first 24-48h after a Business account connects — the Insights backend takes time to populate. Adapter tolerates empty responses and marks `supported` in field_support; dashboard shows "populating" state for first day.

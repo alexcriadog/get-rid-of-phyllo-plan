@@ -96,6 +96,16 @@ Bucket config in [`../rate-limiting.md`](../rate-limiting.md) §10. One bucket p
 
 ---
 
+## Historical backfill
+
+- **Content list:** paginate `/v2/video/list/` backward via cursor. TikTok's effective limit is not strictly documented; adapter paginates until the cursor runs out or the platform returns empty. Observed behaviour historically returns at least 1-2 years of content for active Business accounts; less reliable for very long-lived accounts.
+- **Metrics at backfill:** current state only.
+- **Video details (views/likes/shares):** `video.insights` scope exposes richer per-video metrics but no historical time-series.
+- **Audience:** limited to current (and only if the account has sufficient activity).
+- **Cost:** paginates via the standard user-endpoint buckets.
+
+See [`../historical-backfill.md`](../historical-backfill.md) for the cross-platform policy.
+
 ## Known quirks / landmines
 
 - **App Review per scope:** adding a new scope = new review cycle. Plan ahead for audience/comments phase-2 scopes.

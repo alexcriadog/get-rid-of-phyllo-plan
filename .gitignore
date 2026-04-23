@@ -1,0 +1,33 @@
+# env
+.env
+.env.local
+.env.*.local
+
+# node
+node_modules/
+poc/node_modules/
+poc/web/node_modules/
+dist/
+poc/dist/
+poc/web/.next/
+poc/web/out/
+
+# prisma
+poc/prisma/migrations/dev.db*
+*.sqlite
+*.sqlite-journal
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# logs
+*.log
+npm-debug.log*
+
+# OS
+Thumbs.db

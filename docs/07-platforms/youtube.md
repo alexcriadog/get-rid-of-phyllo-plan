@@ -139,6 +139,22 @@ See [`../rate-limiting.md`](../rate-limiting.md) §4 for full strategy. The shor
 
 ---
 
+## Historical backfill — the strongest of all five platforms
+
+YouTube is our most "historically recoverable" platform by a wide margin.
+
+- **Content list:** full channel history via `playlistItems.list` on the uploads playlist. **1 unit per call** of 50 items. 10,000 videos listable/day within zero quota headroom.
+- **Video statistics:** current state only from Data API.
+- **Audience + engagement history:** ⭐ **YouTube Analytics API** exposes daily-resolution reports going back ~2 years. Adapter does a two-pass backfill:
+  1. Pass 1 — `playlistItems.list` → full video list + basic metadata
+  2. Pass 2 — `reports.query` with `startDate/endDate` spanning backfill window, per dimension (age, gender, country, per-video views) → populates `posts.metric_history` and `audience_snapshots_history` in MongoDB via events
+- **Analytics quota is separate** (~2,000 queries/day). Respected by its own bucket.
+- **Deleted / private videos:** disappear from listings; adapter detects absence and marks `content.deleted` if previously tracked.
+
+This makes YouTube unique: **re-backfill at any time reconstructs meaningful daily history**, not just a point-in-time snapshot.
+
+See [`../historical-backfill.md`](../historical-backfill.md) for the cross-platform policy.
+
 ## Known quirks / landmines
 
 - **Two APIs with separate quotas:** Data API v3 and Analytics API are different. We track both.

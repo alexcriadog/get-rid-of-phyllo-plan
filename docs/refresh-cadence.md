@@ -306,5 +306,6 @@ See [`adr/0010-refresh-cadence-tiers.md`](adr/0010-refresh-cadence-tiers.md) for
 - [`rate-limiting.md`](rate-limiting.md) — aggressive cadences still respect rate buckets
 - [`ingestion-modes.md`](ingestion-modes.md) — polling cadence is one input; webhooks accelerate detection without changing cadence state
 - [`manual-refresh.md`](manual-refresh.md) — force a fetch ahead of schedule
+- [`historical-backfill.md`](historical-backfill.md) — **backfill depth** is a separate knob from cadence (one-time at connect, not per-cycle)
 - [`05-api-contract.md`](05-api-contract.md) — OpenAPI spec for the admin endpoints above
 - [`08-operations/runbook.md`](08-operations/runbook.md) — tiering a new client account, handling campaign-week overrides

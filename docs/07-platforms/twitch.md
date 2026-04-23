@@ -135,6 +135,24 @@ App access tokens (client credentials) for EventSub subscription creation: obtai
 
 ---
 
+## Historical backfill — the weakest of the five
+
+Twitch is the only platform where **content itself can be permanently lost** before we see it.
+
+- **VOD retention on the platform side:**
+  - Non-Partner: 14 days
+  - Affiliate: 14 days
+  - Partner: 60 days
+  Old VODs disappear from `/helix/videos`. There is nothing we can do to recover them.
+- **Clips:** persist long-term. Paginate `/helix/clips` with date-range parameters for full historical list.
+- **Streams history:** past live sessions exist as VODs (subject to above) or Highlights (Partner-curated). No separate "ever-been-live" history via API.
+- **Metrics:** current state only; no historical analytics API.
+- **Stream title / game history:** tracked only via `channel.update` EventSub events going forward — not reconstructable for the past.
+
+Backfill depth for Twitch is effectively "whatever the platform still has". `platform_field_support` marks `content_before_retention_window = not_supported`.
+
+See [`../historical-backfill.md`](../historical-backfill.md) for the cross-platform policy.
+
 ## Known quirks / landmines
 
 - **EventSub is the primary signal for "stream online/offline"** — polling the `streams` endpoint is a fallback when EventSub silences.

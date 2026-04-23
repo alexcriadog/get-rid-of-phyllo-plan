@@ -88,6 +88,16 @@ Shared Meta app-level BUC limits with Instagram. See [`../rate-limiting.md`](../
 
 ---
 
+## Historical backfill
+
+- **Content list:** full history of Page posts and videos. Paginate `/{page-id}/posts` and `/videos`.
+- **Metrics at backfill:** current state for each post.
+- **Page Insights historical windows:** `lifetime` / `days_28` periods available back up to 2 years for many metrics. Adapter uses these for richer first-connect context where the platform exposes them.
+- **Live broadcasts:** past broadcasts are listable as videos; live-state events are only in real-time via EventSub-equivalent (Meta doesn't push historical live transitions).
+- **Cost:** paginates within the normal BUC budget.
+
+See [`../historical-backfill.md`](../historical-backfill.md) for the cross-platform policy.
+
 ## Known quirks / landmines
 
 - **Today's `backend-api` has an FB video URL workaround** (RapidAPI resolve via `withFacebookVideoRateLimit`) because InsightIQ returned image URLs for video posts. With direct Graph API access via our adapter, this workaround becomes **unnecessary** for the connector. Backend-api's S3 copy logic can drop the RapidAPI dependency when it switches to connector events. This is a meaningful operational win.
