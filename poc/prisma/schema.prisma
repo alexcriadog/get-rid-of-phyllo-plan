@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                   BigInt   @id @default(autoincrement())
+  platform             String
+  canonicalUserId      String   @map("canonical_user_id")
+  handle               String?
+  displayName          String?  @map("display_name")
+  status               String   @default("ready")
+  syncTier             String   @default("standard") @map("sync_tier")
+  owningOrganizationId String   @default("demo") @map("owning_organization_id")
+  connectedAt          DateTime @default(now()) @map("connected_at")
+  disconnectedAt       DateTime? @map("disconnected_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  tokens    OAuthToken[]
+  syncJobs  SyncJob[]
+  overrides AccountCadenceOverride[]
+
+  @@unique([platform, canonicalUserId])
+  @@map("accounts")
+}
+
+model OAuthToken {
+  id                    BigInt   @id @default(autoincrement())
+  accountId             BigInt   @unique @map("account_id")
+  accessTokenCiphertext Bytes    @map("access_token_ciphertext")
+  scopes                Json
+  expiresAt             DateTime? @map("expires_at")
+  lastRefreshedAt       DateTime? @map("last_refreshed_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+  account               Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("oauth_tokens")
+}
+
+model SyncJob {
+  id            BigInt   @id @default(autoincrement())
+  accountId     BigInt   @map("account_id")
+  product       String
+  status        String   @default("idle")
+  priority      String   @default("NORMAL")
+  nextRunAt     DateTime? @map("next_run_at")
+  lastSuccessAt DateTime? @map("last_success_at")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  lastError     String?  @db.Text @map("last_error")
+  failureCount  Int      @default(0) @map("failure_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, product])
+  @@index([status, nextRunAt])
+  @@map("sync_jobs")
+}
+
+model Cadence {
+  platform               String
+  product                String
+  defaultIntervalSeconds Int     @map("default_interval_seconds")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  @@id([platform, product])
+  @@map("cadences")
+}
+
+model AccountCadenceOverride {
+  accountId               BigInt   @map("account_id")
+  product                 String
+  overrideIntervalSeconds Int      @map("override_interval_seconds")
+  reason                  String?
+  createdAt               DateTime @default(now()) @map("created_at")
+  expiresAt               DateTime? @map("expires_at")
+  account                 Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, product])
+  @@map("account_cadences")
+}
+
+model InboundWebhookLog {
+  id              BigInt   @id @default(autoincrement())
+  platform        String
+  eventId         String   @map("event_id")
+  receivedAt      DateTime @default(now()) @map("received_at")
+  signatureValid  Boolean  @map("signature_valid")
+  accountResolved Boolean  @default(false) @map("account_resolved")
+  payloadSnippet  String?  @db.Text @map("payload_snippet")
+  processed       Boolean  @default(false)
+
+  @@unique([platform, eventId])
+  @@index([receivedAt])
+  @@map("inbound_webhook_log")
+}
+
+model ApiCallLog {
+  id            BigInt   @id @default(autoincrement())
+  platform      String
+  endpoint      String
+  method        String
+  statusCode    Int      @map("status_code")
+  durationMs    Int      @map("duration_ms")
+  rateBucketKey String?  @map("rate_bucket_key")
+  tokensBefore  Int?     @map("tokens_before")
+  tokensAfter   Int?     @map("tokens_after")
+  usageHeader   Json?    @map("usage_header")
+  accountId     BigInt?  @map("account_id")
+  calledAt      DateTime @default(now()) @map("called_at")
+
+  @@index([calledAt])
+  @@index([platform, calledAt])
+  @@map("api_call_log")
+}
