@@ -12,5 +12,7 @@ import { ManualRefreshController } from './manual-refresh.controller';
 @Module({
   imports: [SharedDatabaseModule, SyncModule, PlatformsModule],
   controllers: [ManualRefreshController],
+  providers: [ManualRefreshController],
+  exports: [ManualRefreshController],
 })
 export class ApiModule {}
