@@ -24,7 +24,8 @@ export interface SeedAccountResult {
  */
 const PRODUCTS_BY_PLATFORM: Record<Platform, ReadonlyArray<string>> = {
   instagram: ['identity', 'audience', 'engagement_new', 'stories'],
-  facebook: ['identity', 'audience', 'engagement_new'],
+  // Page Stories API is GA in v22 — see FacebookAdapter.fetchStories.
+  facebook: ['identity', 'audience', 'engagement_new', 'stories'],
 };
 
 @Injectable()

@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GetServerSideProps } from 'next';
 import { getDb } from '../../../lib/mongo';
 import { fmtRelative, fmtNumber, fmtDateTime, truncate } from '../../../lib/format';
+import { RelativeTime } from '../../../components/RelativeTime';
 
 type PostMetrics = {
   likes?: number;
@@ -451,7 +452,7 @@ function PostCard({ post, onClick }: { post: Post; onClick: () => void }) {
             className="v-meta"
             style={{ color: 'var(--v-text-muted)' }}
           >
-            {fmtRelative(d?.publishedAt)}
+            <RelativeTime value={d?.publishedAt} />
           </span>
         </div>
       </div>
@@ -501,11 +502,13 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
 
   const activeIdx = Math.min(slideIdx, slides.length - 1);
   const active = slides[activeIdx];
+  // Stories can be photo OR video — the contentType doesn't tell us which.
+  // Trust the media URL extension instead of assuming type=story → video.
   const activeIsVideo =
+    !!active.mediaUrl &&
     (active.mediaType === 'video' ||
       active.mediaType === 'reel' ||
-      active.mediaType === 'story') &&
-    !!active.mediaUrl;
+      isLikelyVideoUrl(active.mediaUrl));
 
   const metrics = d?.metrics ?? {};
   // Top-level scalar metrics + entries from metrics.extra flattened.
@@ -541,8 +544,16 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
     >
       <div
         className="v-dialog"
+        style={{ position: 'relative' }}
         onClick={(e) => e.stopPropagation()}
       >
+        <button
+          onClick={onClose}
+          className="v-dialog-close"
+          aria-label="Close dialog (Escape)"
+        >
+          Close · ESC
+        </button>
         <div className="v-dialog-media">
           <div
             style={{
@@ -566,7 +577,7 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
                   preload="metadata"
                   style={{
                     maxWidth: '100%',
-                    maxHeight: '92vh',
+                    maxHeight: '100%',
                     width: 'auto',
                     height: 'auto',
                     display: 'block',
@@ -582,7 +593,7 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
                   referrerPolicy="no-referrer"
                   style={{
                     maxWidth: '100%',
-                    maxHeight: '92vh',
+                    maxHeight: '100%',
                     width: 'auto',
                     height: 'auto',
                     objectFit: 'contain',
@@ -598,7 +609,7 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
                 referrerPolicy="no-referrer"
                 style={{
                   maxWidth: '100%',
-                  maxHeight: '92vh',
+                  maxHeight: '100%',
                   objectFit: 'contain',
                 }}
               />
@@ -714,31 +725,34 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 10,
+              gap: 8,
+              flexWrap: 'wrap',
+              // Reserve room for the floating CLOSE button (top-right of the
+              // dialog, ~110px wide) so the date doesn't slide under it.
+              paddingRight: 120,
             }}
           >
             <span className="v-tag mint">{d?.contentType || 'post'}</span>
             <span className="v-tag outline">{post.platform}</span>
-            <div style={{ flex: 1 }} />
-            <button onClick={onClose} className="v-pill-secondary" style={{ padding: '8px 16px' }}>
-              Close (Esc)
-            </button>
+            {d?.publishedAt && (
+              <span
+                className="v-meta"
+                style={{ marginLeft: 4, whiteSpace: 'nowrap' }}
+              >
+                {fmtDateTime(d.publishedAt)}
+              </span>
+            )}
           </div>
 
-          {d?.caption && (
-            <p
-              className="v-body"
-              style={{
-                whiteSpace: 'pre-wrap',
-                color: '#ffffff',
-                margin: 0,
-              }}
-            >
-              {d.caption}
-            </p>
-          )}
+          {d?.caption && <ExpandableCaption text={d.caption} />}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+              gap: 10,
+            }}
+          >
             {metricsList.length === 0 ? (
               <div
                 className="v-body"
@@ -924,6 +938,78 @@ function CarouselArrow({
     >
       {side === 'left' ? '‹' : '›'}
     </button>
+  );
+}
+
+/**
+ * Caption that clamps to 6 lines by default and toggles to full text via a
+ * "Show more / Show less" button. Heuristic: only show the toggle when the
+ * underlying paragraph actually overflows. We lean on CSS line-clamp for
+ * the visual clip, then read scrollHeight vs clientHeight after layout to
+ * decide whether the button is even needed (avoids showing it for short
+ * captions). Re-measures on viewport resize.
+ */
+function ExpandableCaption({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const measure = () => {
+      const el = ref.current;
+      if (!el) return;
+      // Compare full content height to the clamped height by toggling the
+      // clamp class off momentarily isn't ideal; instead read scrollHeight
+      // (full height, ignores overflow) vs clientHeight (clamped height).
+      setOverflows(el.scrollHeight - el.clientHeight > 1);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [text]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <p
+        ref={ref}
+        className="v-body"
+        style={{
+          whiteSpace: 'pre-wrap',
+          color: '#ffffff',
+          margin: 0,
+          lineHeight: 1.55,
+          ...(expanded
+            ? {}
+            : {
+                display: '-webkit-box',
+                WebkitLineClamp: 6,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }),
+        }}
+      >
+        {text}
+      </p>
+      {overflows && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          style={{
+            all: 'unset',
+            cursor: 'pointer',
+            alignSelf: 'flex-start',
+            color: 'var(--v-mint)',
+            fontFamily: 'var(--v-mono)',
+            fontSize: 11,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            paddingTop: 4,
+          }}
+        >
+          {expanded ? 'Show less ↑' : 'Show more ↓'}
+        </button>
+      )}
+    </div>
   );
 }
 

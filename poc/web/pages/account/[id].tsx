@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
 import type { GetServerSideProps } from 'next';
 import { getDb } from '../../lib/mongo';
-import { fmtRelative, fmtNumber } from '../../lib/format';
+import { fmtNumber } from '../../lib/format';
+import { RelativeTime } from '../../components/RelativeTime';
 import { refreshAccount } from '../../lib/api';
 
 type IdentityData = {
@@ -341,7 +342,7 @@ function ProfileHero({ identity }: { identity: IdentitySnapshot }) {
           )}
           <div style={{ flex: 1 }} />
           <span className="v-meta">
-            Synced {identity.updated_at ? fmtRelative(identity.updated_at) : 'never'}
+            Synced {identity.updated_at ? <RelativeTime value={identity.updated_at} /> : 'never'}
           </span>
         </div>
 
@@ -518,7 +519,7 @@ function PanelAccountInsights({ insights }: { insights: AccountInsights }) {
       {insights.followerCountSeries && insights.followerCountSeries.length > 0 && (
         <div style={{ marginTop: 24 }}>
           <div className="v-kicker" style={{ marginBottom: 8 }}>
-            New followers · daily
+            Followers · daily snapshot
           </div>
           <FollowerSparkline series={insights.followerCountSeries} />
         </div>
@@ -614,8 +615,12 @@ function FollowerSparkline({
   const path = `M${pts.join(' L')}`;
   const area = `${path} L${pointX(sorted.length - 1).toFixed(1)},${(padTop + plotH).toFixed(1)} L${padX.toFixed(1)},${(padTop + plotH).toFixed(1)} Z`;
 
-  const totalDelta = sorted.reduce((a, s) => a + s.value, 0);
-  const toneClass = totalDelta >= 0 ? '#3cffd0' : '#ef4444';
+  // The series values are cumulative follower counts (snapshots at end of
+  // each day), NOT daily deltas. Net change in the window is just
+  // last - first; summing the snapshots produces a meaningless number.
+  const netDelta =
+    sorted.length >= 2 ? sorted[sorted.length - 1].value - sorted[0].value : 0;
+  const toneClass = netDelta >= 0 ? '#3cffd0' : '#ef4444';
 
   const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current;
@@ -643,7 +648,7 @@ function FollowerSparkline({
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
         role="img"
-        aria-label="Daily follower net change"
+        aria-label="Daily follower count snapshot"
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIdx(null)}
         style={{ display: 'block', cursor: 'crosshair' }}
@@ -736,8 +741,7 @@ function FollowerSparkline({
             {hovered.endTime.slice(0, 10)}
           </div>
           <div style={{ fontSize: 14, fontFamily: 'var(--v-display)' }}>
-            {hovered.value >= 0 ? '+' : ''}
-            {fmtNumber(hovered.value)}
+            {fmtNumber(hovered.value)} followers
           </div>
         </div>
       )}
@@ -756,8 +760,8 @@ function FollowerSparkline({
       >
         <span>{sorted[0]?.endTime.slice(0, 10)}</span>
         <span style={{ color: toneClass }}>
-          {totalDelta >= 0 ? '+' : ''}
-          {fmtNumber(totalDelta)} new in 28d
+          {netDelta >= 0 ? '+' : ''}
+          {fmtNumber(netDelta)} new in 28d
         </span>
         <span>{sorted[sorted.length - 1]?.endTime.slice(0, 10)}</span>
       </div>
@@ -911,7 +915,7 @@ function PanelDemographics({
         </div>
         {aud.fetchedAt && (
           <div className="v-meta" style={{ marginTop: 20 }}>
-            Captured {fmtRelative(aud.fetchedAt)}
+            Captured <RelativeTime value={aud.fetchedAt} />
           </div>
         )}
       </div>
@@ -1040,7 +1044,7 @@ function PanelDemographics({
 
       {aud.fetchedAt && (
         <div className="v-meta" style={{ marginTop: 20 }}>
-          Captured {fmtRelative(aud.fetchedAt)}
+          Captured <RelativeTime value={aud.fetchedAt} />
         </div>
       )}
     </div>
@@ -1158,7 +1162,7 @@ function PanelGeo({ aud }: { aud: AudienceData | null }) {
             color="#5200ff"
           />
           {aud.fetchedAt && (
-            <div className="v-meta">Captured {fmtRelative(aud.fetchedAt)}</div>
+            <div className="v-meta">Captured <RelativeTime value={aud.fetchedAt} /></div>
           )}
         </div>
       )}

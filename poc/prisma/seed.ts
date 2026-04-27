@@ -232,6 +232,12 @@ const FB_SCOPES = [
   'pages_read_engagement',
   'pages_read_user_content',
   'business_management',
+  // `read_insights` unlocks demographic Page Insights metrics (page_fans_country,
+  // page_fans_gender_age, page_fans_city). Without it Meta rejects them with the
+  // generic `(#100) The value must be a valid insights metric` error — the same
+  // wording it uses for invalid metric names, which is misleading.
+  // Confirmed by comparing scopes against Phyllo's OAuth URL.
+  'read_insights',
 ];
 
 async function main(): Promise<void> {

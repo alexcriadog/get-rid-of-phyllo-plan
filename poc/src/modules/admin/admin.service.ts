@@ -1245,10 +1245,12 @@ export class AdminService {
   }> {
     const warnings: string[] = [];
 
-    // 1. /me with a fat field set so we can disambiguate User vs Page in one
-    //    round-trip. For a Page token, `category` and
-    //    `instagram_business_account` are populated; for a User token they
-    //    aren't.
+    // 1. /me with the SAFE field set (id+name only — both User and Page
+    //    objects have these). Asking for `category` or
+    //    `instagram_business_account` here breaks User tokens with
+    //    `(#100) Tried accessing nonexisting field (category)` because
+    //    those fields only exist on Page objects. Disambiguation happens
+    //    in step 2 via /me/accounts (User-token-only edge).
     type MeBody = {
       id?: string;
       name?: string;
@@ -1259,7 +1261,7 @@ export class AdminService {
     try {
       meBody = await this.graphGet<MeBody>(
         '/me',
-        { fields: 'id,name,category,instagram_business_account{id}' },
+        { fields: 'id,name' },
         accessToken,
       );
     } catch (err) {
@@ -1306,21 +1308,29 @@ export class AdminService {
       }));
     } catch (err) {
       const msg = this.extractGraphErrorMessage(err);
-      const looksLikePageToken =
-        /nonexisting field \(accounts\)/i.test(msg) ||
-        meBody.category != null ||
-        meBody.instagram_business_account != null;
+      const looksLikePageToken = /nonexisting field \(accounts\)/i.test(msg);
       if (looksLikePageToken && meBody.id) {
         // Page-token path: synthesize a single page entry from /me. The
-        // supplied token IS the page-scoped token, so reuse it.
+        // supplied token IS the page-scoped token, so reuse it. Hydrate
+        // the IG link via a side-call (we no longer ask for it in step 1
+        // because the field 400s on User tokens).
         tokenType = 'page';
+        let igId: string | null = null;
+        try {
+          const pageBody = await this.graphGet<{
+            instagram_business_account?: { id: string };
+          }>(`/${meBody.id}`, { fields: 'instagram_business_account{id}' }, accessToken);
+          igId = pageBody.instagram_business_account?.id ?? null;
+        } catch {
+          // IG hydration is best-effort. If it fails, the page still shows
+          // up without an IG link.
+        }
         pageRows = [
           {
             page_id: meBody.id,
             page_name: meBody.name ?? meBody.id,
             page_access_token: accessToken,
-            instagram_business_account_id:
-              meBody.instagram_business_account?.id ?? null,
+            instagram_business_account_id: igId,
           },
         ];
         warnings.push(

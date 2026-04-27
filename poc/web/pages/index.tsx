@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import type { GetServerSideProps } from 'next';
 import { safeCollection } from '../lib/mongo';
-import { fmtNumber, fmtRelative } from '../lib/format';
+import { fmtNumber } from '../lib/format';
+import { RelativeTime } from '../components/RelativeTime';
 
 type IdentityData = {
   username?: string;
@@ -390,7 +391,7 @@ function AccountTile({
             className="v-meta"
             style={tone === 'mint' || tone === 'white' ? { color: 'rgba(0,0,0,0.55)' } : undefined}
           >
-            {account.updated_at ? fmtRelative(account.updated_at) : 'never synced'}
+            {account.updated_at ? <RelativeTime value={account.updated_at} /> : 'never synced'}
           </span>
           <div style={{ flex: 1 }} />
           <span

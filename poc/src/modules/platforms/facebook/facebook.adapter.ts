@@ -97,13 +97,29 @@ interface FacebookVideo {
 /** Page Stories API row — see https://developers.facebook.com/docs/page-stories-api/. */
 interface FacebookStory {
   post_id: string;
-  status?: 'PUBLISHED' | 'ARCHIVED';
-  /** UNIX timestamp (seconds). */
-  creation_time?: number;
-  media_type?: 'video' | 'photo';
+  /** Graph returns lowercase ('published' / 'archived'); upstream casing is unstable. */
+  status?: string;
+  /**
+   * UNIX timestamp in seconds. Graph returns it as a STRING despite the docs
+   * implying numeric (verified in raw_platform_responses). Accept both.
+   */
+  creation_time?: string | number;
+  media_type?: 'video' | 'photo' | string;
   media_id?: string;
   /** Public Facebook story URL. */
   url?: string;
+}
+
+interface FacebookPhotoMedia {
+  id: string;
+  images?: Array<{ source: string; height?: number; width?: number }>;
+  picture?: string;
+}
+
+interface FacebookVideoMedia {
+  id: string;
+  source?: string;
+  picture?: string;
 }
 
 interface CallGraphOpts {
@@ -184,10 +200,13 @@ export class FacebookAdapter implements PlatformAdapter {
         verified: 'not_supported',
       },
       audience: {
-        genderDistribution: 'supported',
-        ageDistribution: 'supported',
+        // Country + city via the modern page_follows_country / _city metrics
+        // (replaced the deprecated page_fans_* family in 2024). Gender/age
+        // never got a replacement — Meta sunsetted them with no successor.
         countryDistribution: 'supported',
-        cityDistribution: 'empty_possible',
+        cityDistribution: 'supported',
+        genderDistribution: 'not_supported',
+        ageDistribution: 'not_supported',
         interests: 'not_supported',
       },
       engagement_new: {
@@ -203,16 +222,20 @@ export class FacebookAdapter implements PlatformAdapter {
         views: 'supported',
       },
       stories: {
-        // Page Stories API — GA in v22. Returns {post_id,status,creation_time,
-        // media_type,media_id,url}. Insights for individual stories aren't
-        // exposed by Meta on this endpoint (no per-story metrics today), so
-        // metric fields are declared as `empty_possible`.
+        // Page Stories API — GA in v22. Story object: {post_id, status,
+        // creation_time, media_type, media_id, url}. Per-story insights via
+        // GET /{post_id}/insights (no metric param) returns the 9 metrics
+        // surfaced below. `views` is empty_possible because Meta seems to
+        // populate `story_media_view` mostly for video stories.
         permalink: 'supported',
         publishedAt: 'supported',
-        mediaUrls: 'empty_possible',
-        likes: 'not_supported',
-        reach: 'not_supported',
-        replies: 'not_supported',
+        mediaUrls: 'supported',
+        likes: 'supported',
+        shares: 'supported',
+        impressions: 'supported',
+        reach: 'supported',
+        views: 'empty_possible',
+        replies: 'supported',
       },
     };
   }
@@ -263,10 +286,17 @@ export class FacebookAdapter implements PlatformAdapter {
     const ctx = this.context(accessToken, canonicalId, metadata);
     const accountId = this.accountIdFromMeta(metadata);
 
-    // Meta removed demographic breakdowns (country / gender_age / city) for
-    // Facebook Pages in v22. What's still available are activity counters.
-    // Pull them in parallel with period=day and aggregate over 28 days so
-    // the admin panel has meaningful totals + a follower time series.
+    // Meta removed the legacy demographic metrics (page_fans_country,
+    // page_fans_city, page_fans_gender_age) in March 2024. They were
+    // renamed (no "s" in "follow"):
+    //   page_fans_country  →  page_follows_country  (works)
+    //   page_fans_city     →  page_follows_city     (works)
+    //   page_fans_gender_age → no replacement       (genuinely gone)
+    //   page_fans_locale     → no replacement
+    // The new metrics return values shaped {COUNTRY_CODE: count} per day;
+    // we take the last snapshot, not a sum.
+    // Activity counters (page_media_view, page_views_total, etc.) still
+    // accept the old names and we pull them as a 28-day time series.
     const PERIOD_DAYS = 28;
     const until = Math.floor(Date.now() / 1000);
     const since = until - PERIOD_DAYS * 86_400;
@@ -275,6 +305,8 @@ export class FacebookAdapter implements PlatformAdapter {
       name: string;
       mapTo?: keyof AccountInsightsCounterMap;
       timeSeries?: boolean;
+      /** When set, parse the latest object value into the named distribution. */
+      distribution?: 'country' | 'city';
     };
     const specs: MetricSpec[] = [
       { name: 'page_follows', mapTo: 'page_follows', timeSeries: true },
@@ -282,6 +314,8 @@ export class FacebookAdapter implements PlatformAdapter {
       { name: 'page_total_media_view_unique', mapTo: 'reach' },
       { name: 'page_views_total', mapTo: 'profileViews' },
       { name: 'page_total_actions', mapTo: 'totalInteractions' },
+      { name: 'page_follows_country', distribution: 'country' },
+      { name: 'page_follows_city', distribution: 'city' },
     ];
 
     const results = await Promise.all(
@@ -313,6 +347,8 @@ export class FacebookAdapter implements PlatformAdapter {
       page_follows: 0,
     };
     const followerSeries: Array<{ endTime: string; value: number }> = [];
+    const countryDistribution: DistributionBucket[] = [];
+    const cityDistribution: DistributionBucket[] = [];
     const errors: string[] = [];
 
     for (const r of results) {
@@ -322,16 +358,41 @@ export class FacebookAdapter implements PlatformAdapter {
       }
       for (const insight of r.body.data ?? []) {
         const values = insight.values ?? [];
+
+        if (r.spec.distribution) {
+          // Distribution metric — last snapshot wins (it's the current state,
+          // not a per-day delta we want to sum).
+          const latest = values[values.length - 1]?.value;
+          if (latest && typeof latest === 'object') {
+            const bucket =
+              r.spec.distribution === 'country'
+                ? countryDistribution
+                : cityDistribution;
+            for (const [label, raw] of Object.entries(latest as Record<string, unknown>)) {
+              if (typeof raw === 'number') {
+                bucket.push({ label, value: raw, unit: 'count' });
+              }
+            }
+          }
+          continue;
+        }
+
+        // `page_follows/day` is a CUMULATIVE snapshot (running total of
+        // followers at end of each day), not a delta. Summing it is
+        // meaningless. Store the daily series and let the consumer derive
+        // the net change. All other counters are true daily counts that
+        // are safely additive (impressions, reach, profile_views, etc.).
         let total = 0;
         for (const v of values) {
           if (typeof v.value === 'number') {
-            total += v.value;
             if (r.spec.timeSeries && v.end_time) {
               followerSeries.push({ endTime: v.end_time, value: v.value });
+            } else {
+              total += v.value;
             }
           }
         }
-        if (r.spec.mapTo) counters[r.spec.mapTo] += total;
+        if (r.spec.mapTo && !r.spec.timeSeries) counters[r.spec.mapTo] += total;
       }
     }
 
@@ -347,10 +408,13 @@ export class FacebookAdapter implements PlatformAdapter {
     }
 
     return {
+      // Meta does NOT expose gender/age for FB Pages (no replacement metric
+      // for the deprecated `page_fans_gender_age`). Confirmed by exhaustive
+      // probe — see docs/07-platforms/facebook.md §Known quirks.
       genderDistribution: [],
       ageDistribution: [],
-      countryDistribution: [],
-      cityDistribution: [],
+      countryDistribution,
+      cityDistribution,
       accountInsights: {
         periodDays: PERIOD_DAYS,
         impressions: counters.impressions,
@@ -359,7 +423,17 @@ export class FacebookAdapter implements PlatformAdapter {
         totalInteractions: counters.totalInteractions,
         followerCountSeries: followerSeries,
         extra: {
-          page_follows_28d: counters.page_follows,
+          // Net change in followers across the window (latest cumulative
+          // snapshot minus earliest). Drop-in replacement for the broken
+          // `page_follows_28d` that summed cumulative snapshots.
+          page_follows_net_28d:
+            followerSeries.length >= 2
+              ? followerSeries[followerSeries.length - 1].value -
+                followerSeries[0].value
+              : 0,
+          // Current absolute follower count (last cumulative snapshot).
+          followers_count_current:
+            followerSeries[followerSeries.length - 1]?.value ?? 0,
         },
       },
       fetchedAt: new Date(),
@@ -468,8 +542,11 @@ export class FacebookAdapter implements PlatformAdapter {
    * + `pages_show_list` (already in FB_SCOPES) plus the OAuth user must
    * have CREATE_CONTENT on the Page.
    *
-   * No per-story insights endpoint is exposed today, so metrics are left
-   * empty — the SupportMatrix declares them `not_supported`/`empty_possible`.
+   * Per story we also issue:
+   *   - 1 call to /{media_id} to resolve the playable URL + thumbnail.
+   *   - 1 call to /{post_id}/insights (no metric param) to pull the 9
+   *     story metrics Meta exposes today (see fetchStoryInsights).
+   * Both run in parallel batches to keep wall-clock low.
    */
   async fetchStories(
     accessToken: string,
@@ -489,38 +566,136 @@ export class FacebookAdapter implements PlatformAdapter {
       accountId,
     });
 
+    const stories = (body.data ?? []).filter((s) => !!s.post_id);
+    const BATCH_SIZE = 5;
     const out: ContentData[] = [];
-    for (const story of body.data ?? []) {
-      if (!story.post_id) continue;
-      out.push(this.storyToContent(story));
+
+    for (let i = 0; i < stories.length; i += BATCH_SIZE) {
+      const batch = stories.slice(i, i + BATCH_SIZE);
+      const enriched = await Promise.all(
+        batch.map(async (story) => {
+          const base = this.storyToContent(story);
+          const [resolved, insights] = await Promise.all([
+            this.resolveStoryMedia(story, accessToken, ctx, accountId),
+            this.fetchStoryInsights(story, accessToken, ctx, accountId),
+          ]);
+          const baseExtra = base.metrics.extra ?? {};
+          const insightsExtra = insights.extra ?? {};
+          return {
+            ...base,
+            mediaUrls: resolved.mediaUrls,
+            thumbnailUrl: resolved.thumbnailUrl ?? base.thumbnailUrl,
+            metrics: {
+              ...base.metrics,
+              ...insights,
+              extra: { ...baseExtra, ...insightsExtra },
+            },
+          };
+        }),
+      );
+      out.push(...enriched);
     }
+    return out;
+  }
+
+  /**
+   * Story insights — `GET /{post_id}/insights` with NO `metric` param.
+   * Returns the 9 metrics Meta exposes for Page stories today (verified
+   * against Meta's own validation error which lists the canonical set):
+   *   page_story_impressions_by_story_id            -> impressions
+   *   page_story_impressions_by_story_id_unique     -> reach
+   *   pages_fb_story_replies                        -> extra.story_replies
+   *   pages_fb_story_shares                         -> shares
+   *   pages_fb_story_thread_lightweight_reactions   -> likes (quick reacts)
+   *   pages_fb_story_sticker_interactions           -> extra.sticker_interactions
+   *   story_interaction                             -> extra.total_interactions
+   *   story_media_view                              -> views
+   *   story_total_media_view_unique                 -> extra.unique_media_views
+   * Failures are non-fatal — the story still gets persisted with its
+   * known fields, just without the metric overlay.
+   */
+  private async fetchStoryInsights(
+    story: FacebookStory,
+    accessToken: string,
+    ctx: PlatformAdapterContext,
+    accountId: bigint | undefined,
+  ): Promise<Partial<ContentMetrics>> {
+    try {
+      const body = await this.callGraph<{ data?: GraphInsight[] }>({
+        endpoint: `/${story.post_id}/insights`,
+        // No `metric` param — Graph returns the full story metric set.
+        params: {},
+        accessToken,
+        context: ctx,
+        accountId,
+      });
+      return this.mapStoryInsights(body.data ?? []);
+    } catch (err) {
+      this.logger.debug(
+        `story insights failed post_id=${story.post_id}: ${this.audienceErrorMessage(err)}`,
+      );
+      return {};
+    }
+  }
+
+  private mapStoryInsights(data: GraphInsight[]): Partial<ContentMetrics> {
+    const out: Partial<ContentMetrics> = {};
+    const extra: Record<string, number> = {};
+    for (const insight of data) {
+      const v =
+        insight.values?.[insight.values.length - 1]?.value ?? insight.values?.[0]?.value;
+      if (typeof v !== 'number') continue;
+      switch (insight.name) {
+        case 'page_story_impressions_by_story_id':
+          out.impressions = v;
+          break;
+        case 'page_story_impressions_by_story_id_unique':
+          out.reach = v;
+          break;
+        case 'pages_fb_story_shares':
+          out.shares = v;
+          break;
+        case 'pages_fb_story_thread_lightweight_reactions':
+          out.likes = v;
+          break;
+        case 'story_media_view':
+          out.views = v;
+          break;
+        case 'pages_fb_story_replies':
+          extra['story_replies'] = v;
+          break;
+        case 'pages_fb_story_sticker_interactions':
+          extra['sticker_interactions'] = v;
+          break;
+        case 'story_interaction':
+          extra['total_interactions'] = v;
+          break;
+        case 'story_total_media_view_unique':
+          extra['unique_media_views'] = v;
+          break;
+        default:
+          extra[insight.name] = v;
+      }
+    }
+    if (Object.keys(extra).length > 0) out.extra = extra;
     return out;
   }
 
   private storyToContent(story: FacebookStory): ContentData {
     const serialized = JSON.stringify(story);
     const hash = createHash('sha256').update(serialized).digest('hex');
-    const publishedAt =
-      typeof story.creation_time === 'number'
-        ? new Date(story.creation_time * 1000)
-        : null;
+    const publishedAt = this.parseCreationTime(story.creation_time);
 
     return {
       platformContentId: story.post_id,
       contentType: 'story',
       caption: null,
       permalink: story.url ?? null,
-      // Page Stories API returns a `media_id` only — resolving it to a
-      // playable URL is an extra `/{media_id}?fields=source|images` call
-      // that we skip on this iteration. Consumers that need the asset can
-      // hit the permalink (`url`) which renders publicly on Facebook.
       mediaUrls: [],
       thumbnailUrl: null,
-      metrics: {
-        extra: {
-          ...(story.media_id ? { fb_media_id: Number(story.media_id) || 0 } : {}),
-        },
-      },
+      // No metrics yet — fetchStoryInsights() fills them in.
+      // media_id stays in the raw response (not surfaced as a metric).
+      metrics: {},
       publishedAt,
       fetchedAt: new Date(),
       mediaProductType: 'STORY',
@@ -529,6 +704,81 @@ export class FacebookAdapter implements PlatformAdapter {
         contentHash: hash,
       },
     };
+  }
+
+  /**
+   * Page Stories returns a `media_id` only — fetch the media object to
+   * pull out the playable URL + poster. Branches on `media_type`:
+   *   - photo  → `/{media_id}?fields=images,picture` → largest images[].source
+   *   - video  → `/{media_id}?fields=source,picture` → source URL + poster
+   * Failures are logged at debug and degrade to empty mediaUrls so the
+   * grid card still renders the type tag and permalink.
+   */
+  private async resolveStoryMedia(
+    story: FacebookStory,
+    accessToken: string,
+    ctx: PlatformAdapterContext,
+    accountId: bigint | undefined,
+  ): Promise<{ mediaUrls: string[]; thumbnailUrl: string | null }> {
+    if (!story.media_id) return { mediaUrls: [], thumbnailUrl: null };
+    const isVideo = (story.media_type ?? '').toLowerCase() === 'video';
+
+    try {
+      if (isVideo) {
+        const body = await this.callGraph<FacebookVideoMedia>({
+          endpoint: `/${story.media_id}`,
+          params: { fields: 'source,picture' },
+          accessToken,
+          context: ctx,
+          accountId,
+        });
+        const urls = body.source ? [body.source] : [];
+        return { mediaUrls: urls, thumbnailUrl: body.picture ?? null };
+      }
+
+      const body = await this.callGraph<FacebookPhotoMedia>({
+        endpoint: `/${story.media_id}`,
+        params: { fields: 'images,picture' },
+        accessToken,
+        context: ctx,
+        accountId,
+      });
+      const sorted = (body.images ?? [])
+        .slice()
+        .sort((a, b) => (b.width ?? 0) - (a.width ?? 0));
+      const largest = sorted[0];
+      // Pick a card-friendly thumbnail (>=480px wide). Falls back to the
+      // largest if no mid-size exists, then to the s130x130 `picture`.
+      // The s130x130 alone looks blurry on retina cards (220px @ 2x = 440).
+      const thumbCandidate =
+        sorted.filter((i) => (i.width ?? 0) >= 480).slice(-1)[0] ?? largest;
+      const fullUrl = largest?.source ?? body.picture ?? null;
+      return {
+        mediaUrls: fullUrl ? [fullUrl] : [],
+        thumbnailUrl: thumbCandidate?.source ?? body.picture ?? null,
+      };
+    } catch (err) {
+      this.logger.debug(
+        `story media resolve failed media_id=${story.media_id} type=${story.media_type ?? '—'}: ${this.audienceErrorMessage(err)}`,
+      );
+      return { mediaUrls: [], thumbnailUrl: null };
+    }
+  }
+
+  private parseCreationTime(raw: string | number | undefined): Date | null {
+    if (raw == null) return null;
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      return new Date(raw * 1000);
+    }
+    if (typeof raw === 'string') {
+      // UNIX seconds as a string ("1777199988"): the documented + observed
+      // shape on the Page Stories API.
+      if (/^\d{9,}$/.test(raw)) return new Date(Number(raw) * 1000);
+      // ISO 8601 fallback (mirrors the format used by /{page_id}/posts).
+      const parsed = new Date(raw);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+    return null;
   }
 
   private async fetchPosts(

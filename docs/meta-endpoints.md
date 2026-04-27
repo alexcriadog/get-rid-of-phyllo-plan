@@ -172,7 +172,12 @@ Calls per run: **1**.
 
 ### 6.2 Audience — product `audience` — every 24 h
 
-> Meta removed demographic breakdowns (country / gender_age / city) for Pages in v22. We pull activity counters with `period=day` over a 28-day window.
+> Meta renamed the legacy `page_fans_*` demographic metrics in March 2024. The adapter pulls the modern replacements:
+> - `page_follows_country` → `countryDistribution` (works)
+> - `page_follows_city` → `cityDistribution` (works)
+> - `page_fans_gender_age` → no replacement (genuinely removed; `genderDistribution` and `ageDistribution` stay empty arrays)
+>
+> The trick: drop the "s" from "follow" — `page_followers_country` (with "s") is rejected, `page_follows_country` (without) works. Meta surfaces both as the same generic `(#100) The value must be a valid insights metric` error, so the rename is invisible from the API alone. Activity counters (`page_media_view`, `page_views_total`, etc.) are pulled alongside with `period=day` over 28 days. See [`07-platforms/facebook.md`](07-platforms/facebook.md) §Known quirks for the full discovery trail.
 
 | Endpoint | Method | Params | Required scopes |
 |---|---|---|---|
@@ -198,15 +203,34 @@ Calls per run (default `limit=25`): **1 list + up to 25 enrichment calls** in ba
 
 ### 6.4 Stories — product `stories` — every 1 h
 
-Implemented via the Page Stories API (GA in v22).
+Implemented via the Page Stories API (GA in v22) plus per-story enrichment.
 
 | Endpoint | Method | Key params | Required scopes |
 |---|---|---|---|
-| `/{page_id}/stories` | GET | `fields=post_id,status,creation_time,media_type,media_id,url` (optional `since`/`until`) | `pages_read_engagement`, `pages_show_list` (+ user must hold the `CREATE_CONTENT` capability on the Page) |
+| `/{page_id}/stories` | GET | `fields=post_id,status,creation_time,media_type,media_id,url` | `pages_read_engagement`, `pages_show_list` (+ user must hold `CREATE_CONTENT` on the Page) |
+| `/{media_id}` (per story, photo) | GET | `fields=images,picture` | `pages_read_engagement`, `pages_show_list` |
+| `/{media_id}` (per story, video) | GET | `fields=source,picture` | `pages_read_engagement`, `pages_show_list` |
+| `/{post_id}/insights` (per story) | GET | **no `metric` param** — Graph returns the full story metric set | `pages_read_engagement`, `pages_show_list` |
 
-Calls per run: **1**. Mapped to `ContentData` with `contentType='story'`, `mediaProductType='STORY'`, `permalink=url`, `publishedAt = creation_time × 1000`. `media_id` is preserved in `metrics.extra.fb_media_id`.
+Per-story insights metrics (the canonical set, surfaced by Meta's own validation error when an unsupported metric is requested):
 
-> No per-story insights endpoint is exposed by Meta on this resource today — metadata only. The adapter declares story metric fields as `not_supported` / `empty_possible` in its `SupportMatrix`. If Meta exposes a metrics endpoint later, enrichment can be added with the same per-batch pattern as Instagram.
+| Meta metric | Canonical slot |
+|---|---|
+| `page_story_impressions_by_story_id` | `metrics.impressions` |
+| `page_story_impressions_by_story_id_unique` | `metrics.reach` |
+| `pages_fb_story_thread_lightweight_reactions` | `metrics.likes` (quick reacts) |
+| `pages_fb_story_shares` | `metrics.shares` |
+| `story_media_view` | `metrics.views` |
+| `pages_fb_story_replies` | `metrics.extra.story_replies` |
+| `pages_fb_story_sticker_interactions` | `metrics.extra.sticker_interactions` |
+| `story_interaction` | `metrics.extra.total_interactions` |
+| `story_total_media_view_unique` | `metrics.extra.unique_media_views` |
+
+Calls per run: **1 list + 2 per story** (1 media-resolve + 1 insights), in parallel batches of 5. Failures on either enrichment call are non-fatal — the story still gets persisted with whatever fields succeeded.
+
+> The composite id `{page_id}_{post_id}` does **not** work for stories (returns 404). Use the bare `post_id`. The `/{media_id}/insights` and `/{media_id}/video_insights` endpoints accept post-style metrics but always return zeros — they are NOT where story metrics live.
+
+> **Aggregation lag (24-48h+):** Reactions and `story_interaction` populate immediately, but reach / impressions / views remain `value: 0` with `end_time: "1970-01-02T00:00:00+0000"` (Meta's "no data yet" sentinel) for 24-48h or longer after publish. The Pages Manager UI shows the real number (e.g. 90 viewers) within minutes because it queries a real-time backend the public Graph API does not expose. There is no workaround at the API level — our 1h cadence will surface the values once Meta backfills. See `docs/07-platforms/facebook.md` §Known quirks for details.
 
 ### 6.5 Pagination follow-ups (both engagement endpoints)
 
@@ -248,8 +272,8 @@ Assumes default cadence and `limit=25` content fetches.
 | Identity | 4 | 1 | 4 |
 | Audience | 1 | 5 | 5 |
 | Engagement | 12 | up to 26 | up to 312 |
-| Stories | 24 | 1 | 24 |
-| **Total** | | | **~345** |
+| Stories | 24 | 1 + 2·N (N = active stories) | 24 + 48·N |
+| **Total** (no stories) | | | **~321** |
 
 Both fit comfortably under the 200 pts/h × 24 h = 4 800 daily token budget per bucket — assuming Meta keeps `costPerCall=1`. The `X-*-Usage` headers are the source of truth in production and feed the `platform_api_usage_percent_from_headers` gauge.
 
@@ -272,6 +296,8 @@ Both fit comfortably under the 200 pts/h × 24 h = 4 800 daily token budget per 
 | `/{page_id}_{post_id}/insights` | FB | engagement_new | 2 h | `pages_read_engagement`, `read_insights` |
 | `/{video_id}/video_insights` | FB | engagement_new | 2 h | `pages_read_engagement`, `read_insights` |
 | `/{page_id}/stories` | FB | stories | 1 h | `pages_read_engagement`, `pages_show_list` |
+| `/{media_id}` (story media resolve) | FB | stories | 1 h | `pages_read_engagement`, `pages_show_list` |
+| `/{post_id}/insights` (story insights, no metric param) | FB | stories | 1 h | `pages_read_engagement`, `pages_show_list` |
 
 ---
 
