@@ -1,43 +1,66 @@
 import { useMemo, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
-import DataTable, { Column } from '../../components/DataTable';
 import { useLive } from '../../lib/useLive';
 import { adminPost } from '../../lib/api';
-import { fmtTime, fmtRelative, truncate } from '../../lib/format';
+import { fmtTime, fmtRelative } from '../../lib/format';
+import { LineChart, HBarChart, STATUS_COLORS, seriesColor } from '../../components/charts';
+import { Section } from '@/components/admin/section';
+import { Empty } from '@/components/admin/empty';
+import { KpiCard } from '@/components/admin/kpi-card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
-type Webhook = {
-  id: number | string;
-  platform?: string;
-  event_id?: string;
+type WebhookRow = {
+  id: string;
+  platform: string;
+  topic?: string;
   received_at?: string;
-  signature_valid?: boolean;
-  account_resolved?: boolean;
-  payload_snippet?: string;
-  processed?: boolean;
+  account_id?: string | null;
+  status?: string;
+  body_excerpt?: string;
 };
 
-type Silence = {
-  account_id: number | string;
-  handle?: string;
-  platform?: string;
-  product?: string;
-  last_received_at?: string;
-  silence_ms?: number;
+type SilenceRow = {
+  account_id: string;
+  account_handle?: string | null;
+  platform: string;
+  last_received_at?: string | null;
+  silence_minutes?: number;
 };
+
+const ROW_GRID = 'grid-cols-[64px_84px_140px_80px_minmax(0,1fr)_56px]';
 
 export default function WebhooksPage() {
-  const inbound = useLive<Webhook[]>('/admin/webhooks/inbound?limit=100');
-  const silence = useLive<Silence[]>('/admin/webhooks/silence');
+  const inboundLive = useLive<WebhookRow[]>('/admin/webhooks/inbound?limit=300', 4000);
+  const silenceLive = useLive<SilenceRow[]>('/admin/webhooks/silence', 10000);
+
+  const [tab, setTab] = useState('inbound');
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const replay = async (id: number | string) => {
-    const k = String(id);
-    setBusy(k);
+  const inbound = inboundLive.data ?? [];
+  const silence = silenceLive.data ?? [];
+
+  const series = useMemo(() => buildWebhookSeries(inbound), [inbound]);
+  const topTopics = useMemo(() => buildTopTopics(inbound), [inbound]);
+
+  const replay = async (id: string) => {
+    setBusy(id);
     setErr(null);
     try {
-      await adminPost(`/admin/webhooks/replay/${id}`);
-      inbound.refresh();
+      await adminPost(`/admin/webhooks/replay/${id}`, {});
+      inboundLive.refresh();
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -45,149 +68,257 @@ export default function WebhooksPage() {
     }
   };
 
-  const rows = inbound.data || [];
-  const invalidRate = useMemo(() => {
-    if (!rows.length) return 0;
-    const bad = rows.filter((r) => r.signature_valid === false).length;
-    return bad / rows.length;
-  }, [rows]);
-
-  const inboundCols: Column<Webhook>[] = [
-    { key: 'received_at', label: 'Time', sortable: true, render: (r) => fmtTime(r.received_at) },
-    { key: 'platform', label: 'Platform', render: (r) => <span className="badge">{r.platform}</span> },
-    {
-      key: 'signature_valid',
-      label: 'Sig',
-      render: (r) =>
-        r.signature_valid ? (
-          <span className="badge ok">valid</span>
-        ) : (
-          <span className="badge danger">INVALID</span>
-        ),
-    },
-    {
-      key: 'account_resolved',
-      label: 'Resolved',
-      render: (r) =>
-        r.account_resolved ? (
-          <span className="badge ok">yes</span>
-        ) : (
-          <span className="badge warn">no</span>
-        ),
-    },
-    {
-      key: 'processed',
-      label: 'Processed',
-      render: (r) =>
-        r.processed ? (
-          <span className="badge ok">yes</span>
-        ) : (
-          <span className="badge warn">pending</span>
-        ),
-    },
-    { key: 'event_id', label: 'Event', render: (r) => <span className="mono">{truncate(r.event_id, 24)}</span> },
-    {
-      key: 'payload_snippet',
-      label: 'Payload',
-      render: (r) => <span className="mono faint">{truncate(r.payload_snippet, 64)}</span>,
-    },
-    {
-      key: 'actions',
-      label: '',
-      render: (r) => (
-        <button disabled={busy === String(r.id)} onClick={() => replay(r.id)}>
-          Replay
-        </button>
-      ),
-    },
-  ];
-
-  const silenceCols: Column<Silence>[] = [
-    {
-      key: 'handle',
-      label: 'Account',
-      render: (r) => <span className="mono">{r.handle || `#${r.account_id}`}</span>,
-    },
-    { key: 'platform', label: 'Platform', render: (r) => <span className="badge">{r.platform}</span> },
-    { key: 'product', label: 'Product', render: (r) => <span className="mono">{r.product}</span> },
-    {
-      key: 'silence_ms',
-      label: 'Silence',
-      sortable: true,
-      render: (r) => {
-        const days = (r.silence_ms ?? 0) / 86400000;
-        const tone = days > 7 ? 'danger' : days > 3 ? 'warn' : '';
-        return <span className={`badge ${tone}`}>{fmtRelative(r.last_received_at)}</span>;
-      },
-    },
-    { key: 'last_received_at', label: 'Last received', render: (r) => fmtRelative(r.last_received_at) },
-  ];
-
   return (
     <AdminLayout title="Webhooks">
-      {inbound.error && !inbound.data && <div className="banner">{inbound.error}</div>}
-      {err && <div className="banner">{err}</div>}
-
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 'var(--space-5)' }}
-      >
-        <div className="panel">
-          <div className="kpi-label">Inbound (last 100)</div>
-          <div className="kpi-value">{rows.length}</div>
+      {err && (
+        <div className="mb-5 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
+          {err}
         </div>
-        <div className="panel">
-          <div className="kpi-label">Sig-invalid rate</div>
-          <div
-            className="kpi-value"
-            style={{ color: invalidRate > 0 ? 'var(--danger)' : 'var(--ok)' }}
+      )}
+
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <TabsList>
+          <TabsTrigger value="inbound">Inbound stream</TabsTrigger>
+          <TabsTrigger value="silence">Silence detector</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="inbound" className="mt-5">
+          <Section
+            title="Webhook deliveries · last 60 min"
+            description="Stacked area · grouped by topic"
           >
-            {(invalidRate * 100).toFixed(1)}%
-          </div>
-        </div>
-        <div className="panel">
-          <div className="kpi-label">Silent accounts</div>
-          <div className="kpi-value">{silence.data?.length ?? 0}</div>
-        </div>
-      </div>
+            <LineChart
+              series={series}
+              height={200}
+              area
+              stacked
+              xLabels={{ left: '-60m', mid: '-30m', right: 'now' }}
+              emptyMessage="No webhook traffic in window. Meta will deliver IG/FB events here when subscribed."
+            />
+          </Section>
 
-      <div className="panel" style={{ marginBottom: 'var(--space-5)', padding: 0 }}>
-        <div
-          style={{
-            padding: 'var(--space-3) var(--space-4)',
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
-          <div className="panel-title" style={{ margin: 0 }}>
-            Inbound
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <Section title="Top topics">
+              <HBarChart items={topTopics} showPct emptyMessage="No webhook traffic." />
+            </Section>
+            <Section title="Stats" description="Inbound webhook overview">
+              <Stats inbound={inbound} silence={silence} />
+            </Section>
           </div>
-        </div>
-        <DataTable<Webhook>
-          rows={rows}
-          columns={inboundCols}
-          rowKey={(r) => String(r.id)}
-          emptyLabel="No inbound webhooks yet."
-        />
-      </div>
 
-      <div className="panel" style={{ padding: 0 }}>
-        <div
-          style={{
-            padding: 'var(--space-3) var(--space-4)',
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
-          <div className="panel-title" style={{ margin: 0 }}>
-            Silence detector
-          </div>
-        </div>
-        <DataTable<Silence>
-          rows={silence.data || []}
-          columns={silenceCols}
-          rowKey={(r) => `${r.account_id}:${r.product}`}
-          emptyLabel="No silent accounts."
-        />
-      </div>
+          <Section
+            title={`Recent ${Math.min(inbound.length, 100)} deliveries`}
+            description="Click ↻ to replay through the queue"
+            bare
+          >
+            <InboundTable inbound={inbound.slice(0, 100)} busy={busy} onReplay={replay} />
+          </Section>
+        </TabsContent>
+
+        <TabsContent value="silence" className="mt-5">
+          <Section
+            title="Silence detector"
+            description="Accounts that haven't received any webhook lately — possible subscription issue."
+          >
+            {silence.length === 0 ? (
+              <Empty message="All subscribed accounts received recent webhooks." />
+            ) : (
+              <SilenceTable rows={silence} />
+            )}
+          </Section>
+        </TabsContent>
+      </Tabs>
     </AdminLayout>
   );
+}
+
+function Stats({ inbound, silence }: { inbound: WebhookRow[]; silence: SilenceRow[] }) {
+  const cutoff = Date.now() - 3600_000;
+  const lastHour = inbound.filter(
+    (w) => w.received_at && new Date(w.received_at).getTime() >= cutoff,
+  ).length;
+  const platforms = new Map<string, number>();
+  for (const w of inbound) platforms.set(w.platform, (platforms.get(w.platform) ?? 0) + 1);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <KpiCard label="Total tracked" value={String(inbound.length)} tone="primary" />
+        <KpiCard label="Last hour" value={String(lastHour)} tone="info" />
+        <KpiCard
+          label="Silenced accounts"
+          value={String(silence.length)}
+          tone={silence.length > 0 ? 'warn' : 'ok'}
+        />
+      </div>
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Platforms
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {Array.from(platforms.entries()).map(([p, n]) => (
+            <Badge key={p} variant="default">
+              {p} · {n}
+            </Badge>
+          ))}
+          {platforms.size === 0 && (
+            <span className="font-mono text-[11px] text-muted-foreground/70">—</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InboundTable({
+  inbound,
+  busy,
+  onReplay,
+}: {
+  inbound: WebhookRow[];
+  busy: string | null;
+  onReplay: (id: string) => void;
+}) {
+  if (inbound.length === 0) {
+    return (
+      <div className="p-5">
+        <Empty message="No deliveries recorded yet." />
+      </div>
+    );
+  }
+  return (
+    <ScrollArea className="h-[540px] rounded-md border border-border bg-secondary/30">
+      <div
+        className={`grid ${ROW_GRID} sticky top-0 z-10 gap-3 border-b border-border bg-secondary px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground`}
+      >
+        <span>Time</span>
+        <span>Platform</span>
+        <span>Topic</span>
+        <span>Account</span>
+        <span>Body excerpt</span>
+        <span className="text-right">Action</span>
+      </div>
+      {inbound.map((w) => (
+        <div
+          key={w.id}
+          className={`grid ${ROW_GRID} items-center gap-3 border-b border-border/70 px-3 py-1.5 font-mono text-[11.5px] last:border-0`}
+        >
+          <span className="text-muted-foreground/70">{fmtTime(w.received_at)}</span>
+          <span>
+            <Badge variant="default" className="w-full justify-center">
+              {w.platform}
+            </Badge>
+          </span>
+          <span className="truncate" style={{ color: STATUS_COLORS.info }}>
+            {w.topic ?? '—'}
+          </span>
+          <span>
+            <Badge variant="default" className="w-full justify-center">
+              #{w.account_id ?? '—'}
+            </Badge>
+          </span>
+          <span
+            className="overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-muted-foreground/70"
+            title={w.body_excerpt ?? ''}
+          >
+            {w.body_excerpt ?? ''}
+          </span>
+          <span className="flex justify-end">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => onReplay(w.id)}
+              disabled={busy === w.id}
+              title="Replay this webhook through the queue"
+              aria-label="Replay webhook"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${busy === w.id ? 'animate-spin' : ''}`} />
+            </Button>
+          </span>
+        </div>
+      ))}
+    </ScrollArea>
+  );
+}
+
+function SilenceTable({ rows }: { rows: SilenceRow[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Account</TableHead>
+          <TableHead>Platform</TableHead>
+          <TableHead>Last received</TableHead>
+          <TableHead className="text-right">Silence</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((r) => {
+          const tone =
+            (r.silence_minutes ?? 0) > 60
+              ? STATUS_COLORS.danger
+              : (r.silence_minutes ?? 0) > 15
+                ? STATUS_COLORS.warn
+                : STATUS_COLORS.ok;
+          return (
+            <TableRow key={r.account_id}>
+              <TableCell className="font-mono text-xs">
+                <div>{r.account_handle ?? `Account ${r.account_id}`}</div>
+                <div className="text-[10px] text-muted-foreground/70">#{r.account_id}</div>
+              </TableCell>
+              <TableCell>
+                <Badge variant="default">{r.platform}</Badge>
+              </TableCell>
+              <TableCell className="font-mono text-xs text-muted-foreground/80">
+                {fmtRelative(r.last_received_at)}
+              </TableCell>
+              <TableCell
+                className="text-right font-mono text-xs font-semibold"
+                style={{ color: tone }}
+              >
+                {r.silence_minutes != null ? `${r.silence_minutes}m` : '—'}
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
+function buildWebhookSeries(rows: WebhookRow[]) {
+  const now = Date.now();
+  const start = now - 60 * 60_000;
+  const topics = new Set<string>();
+  for (const w of rows) topics.add(w.topic ?? '—');
+  const list = Array.from(topics).sort();
+  const buckets: Record<string, number[]> = {};
+  for (const t of list) buckets[t] = Array.from({ length: 60 }, () => 0);
+  for (const w of rows) {
+    if (!w.received_at) continue;
+    const t = new Date(w.received_at).getTime();
+    if (t < start || t > now) continue;
+    const idx = Math.floor((t - start) / 60_000);
+    if (idx < 0 || idx >= 60) continue;
+    const topic = w.topic ?? '—';
+    buckets[topic][idx] += 1;
+  }
+  return list.map((t, i) => ({
+    label: t,
+    color: seriesColor(i),
+    points: buckets[t].map((y, j) => ({ x: start + j * 60_000, y })),
+  }));
+}
+
+function buildTopTopics(rows: WebhookRow[]) {
+  const grouped = new Map<string, number>();
+  for (const w of rows) {
+    const k = w.topic ?? '—';
+    grouped.set(k, (grouped.get(k) ?? 0) + 1);
+  }
+  return Array.from(grouped.entries())
+    .map(([label, value], i) => ({ label, value, color: seriesColor(i) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
 }

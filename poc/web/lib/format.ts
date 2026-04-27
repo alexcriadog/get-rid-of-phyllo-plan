@@ -67,3 +67,44 @@ export function statusClass(code: number | null | undefined): 'ok' | 'warn' | 'd
   if (code >= 500) return 'danger';
   return '';
 }
+
+export type ProductKind = 'identity' | 'audience' | 'engagement_new' | 'stories';
+
+const KNOWN_PRODUCTS: ReadonlySet<ProductKind> = new Set([
+  'identity',
+  'audience',
+  'engagement_new',
+  'stories',
+]);
+
+/**
+ * Resolve which product an API call belongs to.
+ *
+ * Source of truth: the `product` field tagged by the worker via
+ * AsyncLocalStorage and persisted to `api_call_log.product`. If the row
+ * predates that plumbing (or the API didn't return it), fall back to a
+ * URL heuristic. Order matters: the *specific* patterns
+ * (posts/videos/media/video_insights, stories) must be checked BEFORE the
+ * generic `/insights` pattern, because post-level insights endpoints
+ * (`/{post_id}/insights`) and audience-level ones (`/{account_id}/insights`)
+ * are indistinguishable by path alone.
+ */
+export function productFromCall(call: {
+  endpoint?: string | null;
+  product?: string | null;
+}): ProductKind {
+  if (call.product && KNOWN_PRODUCTS.has(call.product as ProductKind)) {
+    return call.product as ProductKind;
+  }
+  const ep = call.endpoint ?? '';
+  // Meta post insights ride on `/{accountId}_{postId}/insights` — the `_`
+  // separator is the only stable signal that distinguishes post-level from
+  // account-level insights when only the URL is available (legacy rows).
+  if (/\/\d+_\d+\/insights/.test(ep)) return 'engagement_new';
+  if (/\/(posts|videos|video_insights|media)(\b|\/|\?|$)/.test(ep)) {
+    return 'engagement_new';
+  }
+  if (/\/stories(\b|\/|\?|$)/.test(ep)) return 'stories';
+  if (/\/insights(\b|\/|\?|$)/.test(ep)) return 'audience';
+  return 'identity';
+}

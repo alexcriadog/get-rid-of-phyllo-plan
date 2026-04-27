@@ -34,6 +34,12 @@ async function bootstrapApi(): Promise<void> {
     bufferLogs: false,
   });
   app.enableShutdownHooks();
+  // Allow the Next.js UI on :3001 (dev) to call the admin + public endpoints.
+  // For PoC we accept any localhost origin.
+  app.enableCors({
+    origin: (origin, cb) => cb(null, !origin || /localhost:\d+$/.test(origin)),
+    credentials: true,
+  });
   mountRawBodyForWebhooks(app);
   const port = Number(process.env.API_PORT) || 3000;
   await app.listen(port);

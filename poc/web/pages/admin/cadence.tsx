@@ -1,338 +1,399 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
-import { adminPatch, adminPost, adminDelete } from '../../lib/api';
-import { fmtNumber } from '../../lib/format';
+import { adminPatch } from '../../lib/api';
+import { fmtRelative } from '../../lib/format';
+import { Heatmap } from '../../components/charts';
+import { Section } from '@/components/admin/section';
+import { Empty } from '@/components/admin/empty';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
 type Cadence = {
   platform: string;
   product: string;
   default_interval_seconds: number;
-  updated_at?: string;
 };
 
-type Override = {
-  product: string;
-  override_interval_seconds: number;
-  reason?: string;
-  expires_at?: string;
+type ProductHealth = {
+  product?: string;
+  override_active?: boolean;
+  next_run_at?: string | null;
 };
 
 type AdminAccount = {
-  id: number | string;
+  id: string;
   platform: string;
-  handle?: string;
-  display_name?: string;
+  handle?: string | null;
   sync_tier?: string;
-  overrides?: Override[];
+  status?: string;
+  products?: ProductHealth[] | Record<string, ProductHealth>;
 };
 
-type Projection =
-  | { per_platform: { platform: string; calls_per_hour: number }[] }
-  | { [platform: string]: { calls_per_hour: number } };
+type NextRun = {
+  accountId: string;
+  accountHandle?: string | null;
+  platform: string;
+  product: string;
+  next_run_at: string;
+};
 
-const TIERS = ['vip', 'standard', 'lite', 'demo', 'paused'];
+const PRESETS: Array<{ label: string; s: number }> = [
+  { label: '30m', s: 1800 },
+  { label: '1h', s: 3600 },
+  { label: '2h', s: 7200 },
+  { label: '6h', s: 21600 },
+  { label: '24h', s: 86400 },
+];
 
 export default function CadencePage() {
-  const cadences = useLive<Cadence[]>('/admin/cadences');
-  const accounts = useLive<AdminAccount[]>('/admin/accounts');
-  const projection = useLive<Projection>('/admin/cadences/projection');
+  const cadencesLive = useLive<Cadence[]>('/admin/cadences', 5000);
+  const accountsLive = useLive<AdminAccount[]>('/admin/accounts', 8000);
+  const nextRunsLive = useLive<NextRun[]>(
+    '/admin/next-runs?horizon_hours=24',
+    8000,
+  );
+
+  const [tab, setTab] = useState('defaults');
+  const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  const saveCadence = async (c: Cadence, newSeconds: number) => {
+  const cadences = cadencesLive.data ?? [];
+  const accounts = accountsLive.data ?? [];
+  const nextRuns = nextRunsLive.data ?? [];
+
+  const heatmap = useMemo(() => buildScheduleHeatmap(nextRuns), [nextRuns]);
+  const overrides = useMemo(() => collectOverrides(accounts), [accounts]);
+
+  const updateInterval = async (
+    platform: string,
+    product: string,
+    intervalSeconds: number,
+  ) => {
+    const k = `${platform}:${product}`;
+    setBusy(k);
     setErr(null);
     try {
-      await adminPatch(`/admin/cadences/${c.platform}/${c.product}`, {
-        interval_seconds: newSeconds,
+      await adminPatch(`/admin/cadences/${platform}/${product}`, {
+        interval_seconds: intervalSeconds,
       });
-      cadences.refresh();
-      projection.refresh();
+      cadencesLive.refresh();
     } catch (e) {
       setErr((e as Error).message);
+    } finally {
+      setBusy(null);
     }
   };
-
-  const saveTier = async (account: AdminAccount, tier: string) => {
-    setErr(null);
-    try {
-      await adminPatch(`/admin/accounts/${account.id}/sync-tier`, { tier });
-      accounts.refresh();
-      projection.refresh();
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  };
-
-  const projectionEntries = normaliseProjection(projection.data);
 
   return (
-    <AdminLayout title="Cadence control">
-      {err && <div className="banner">{err}</div>}
+    <AdminLayout title="Cadence">
+      {err && (
+        <div className="mb-5 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
+          {err}
+        </div>
+      )}
 
-      <div className="panel" style={{ marginBottom: 'var(--space-5)' }}>
-        <div className="panel-title">Projected API calls / hour</div>
-        {projectionEntries.length === 0 ? (
-          <div className="muted">
-            {projection.error ? projection.error : 'Projection unavailable.'}
-          </div>
-        ) : (
-          <div className="row wrap" style={{ gap: 'var(--space-5)' }}>
-            {projectionEntries.map((p) => (
-              <div key={p.platform}>
-                <div className="kpi-label">{p.platform}</div>
-                <div className="kpi-value">{fmtNumber(Math.round(p.calls_per_hour))}</div>
-                <div className="faint" style={{ fontSize: 11 }}>
-                  calls / hour
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <TabsList>
+          <TabsTrigger value="defaults">Defaults</TabsTrigger>
+          <TabsTrigger value="schedule">Upcoming schedule</TabsTrigger>
+          <TabsTrigger value="overrides">Active overrides</TabsTrigger>
+        </TabsList>
 
-      <div className="panel" style={{ marginBottom: 'var(--space-5)' }}>
-        <div className="panel-title">Platform defaults</div>
-        {!cadences.data || cadences.data.length === 0 ? (
-          <div className="muted">{cadences.error ? cadences.error : 'No cadences yet.'}</div>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Platform</th>
-                <th>Product</th>
-                <th>Interval (s)</th>
-                <th>Human</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {cadences.data.map((c) => (
-                <CadenceRow key={`${c.platform}:${c.product}`} cadence={c} onSave={saveCadence} />
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+        <TabsContent value="defaults">
+          <Section
+            title="Default cadences"
+            description="Edit the interval applied to every account on this (platform, product). Per-account overrides are kept separately."
+          >
+            {cadences.length === 0 ? (
+              <Empty message="No cadences registered yet." />
+            ) : (
+              <DefaultsTable
+                cadences={cadences}
+                busy={busy}
+                onSave={updateInterval}
+              />
+            )}
+          </Section>
+        </TabsContent>
 
-      <div className="panel" style={{ marginBottom: 'var(--space-5)' }}>
-        <div className="panel-title">Account tiers</div>
-        {!accounts.data || accounts.data.length === 0 ? (
-          <div className="muted">No accounts.</div>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Account</th>
-                <th>Platform</th>
-                <th>Tier</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.data.map((a) => (
-                <tr key={String(a.id)}>
-                  <td>
-                    <div className="mono">{a.handle || `#${a.id}`}</div>
-                    <div className="faint" style={{ fontSize: 11 }}>
-                      {a.display_name}
-                    </div>
-                  </td>
-                  <td className="mono">{a.platform}</td>
-                  <td>
-                    <select
-                      value={a.sync_tier ?? 'standard'}
-                      onChange={(e) => saveTier(a, e.target.value)}
-                    >
-                      {TIERS.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+        <TabsContent value="schedule">
+          <Section
+            title="Upcoming sync schedule · next 24h"
+            description="Each cell counts how many syncs are scheduled for that (account · product) in that hour."
+          >
+            {heatmap.rows.length === 0 ? (
+              <Empty message="No upcoming syncs in the next 24h." />
+            ) : (
+              <Heatmap
+                rows={heatmap.rows}
+                cols={heatmap.cols}
+                cells={heatmap.cells}
+                cellSize={20}
+                unitLabel="syncs"
+              />
+            )}
+          </Section>
+        </TabsContent>
 
-      <OverridesPanel
-        accounts={accounts.data || []}
-        onChange={() => {
-          accounts.refresh();
-          projection.refresh();
-        }}
-      />
+        <TabsContent value="overrides">
+          <Section
+            title="Active per-account overrides"
+            description="Products where the account-level override is currently active. To change them, open the account detail page."
+          >
+            {overrides.length === 0 ? (
+              <Empty message="No active overrides — every account uses the default cadence." />
+            ) : (
+              <OverridesTable overrides={overrides} />
+            )}
+          </Section>
+        </TabsContent>
+      </Tabs>
     </AdminLayout>
+  );
+}
+
+function DefaultsTable({
+  cadences,
+  busy,
+  onSave,
+}: {
+  cadences: Cadence[];
+  busy: string | null;
+  onSave: (platform: string, product: string, sec: number) => Promise<void>;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Platform</TableHead>
+          <TableHead>Product</TableHead>
+          <TableHead className="text-right">Interval</TableHead>
+          <TableHead>Quick presets</TableHead>
+          <TableHead className="text-right">Save</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {cadences.map((c) => (
+          <CadenceRow
+            key={`${c.platform}:${c.product}`}
+            cadence={c}
+            busy={busy}
+            onSave={onSave}
+          />
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
 function CadenceRow({
   cadence,
+  busy,
   onSave,
 }: {
   cadence: Cadence;
-  onSave: (c: Cadence, seconds: number) => void;
+  busy: string | null;
+  onSave: (platform: string, product: string, sec: number) => Promise<void>;
 }) {
-  const [value, setValue] = useState(String(cadence.default_interval_seconds));
-  useEffect(() => {
-    setValue(String(cadence.default_interval_seconds));
-  }, [cadence.default_interval_seconds]);
-
-  const dirty = Number(value) !== cadence.default_interval_seconds;
+  const [value, setValue] = useState(cadence.default_interval_seconds);
+  const k = `${cadence.platform}:${cadence.product}`;
+  const dirty = value !== cadence.default_interval_seconds;
   return (
-    <tr>
-      <td className="mono">{cadence.platform}</td>
-      <td className="mono">{cadence.product}</td>
-      <td>
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          style={{ width: 100 }}
-        />
-      </td>
-      <td className="faint mono">{secondsHuman(Number(value))}</td>
-      <td>
-        <button
-          className={dirty ? 'primary' : ''}
-          disabled={!dirty || !Number.isFinite(Number(value))}
-          onClick={() => onSave(cadence, Number(value))}
-        >
-          Save
-        </button>
-      </td>
-    </tr>
-  );
-}
-
-function OverridesPanel({
-  accounts,
-  onChange,
-}: {
-  accounts: AdminAccount[];
-  onChange: () => void;
-}) {
-  const [accountId, setAccountId] = useState('');
-  const [product, setProduct] = useState('identity');
-  const [seconds, setSeconds] = useState('300');
-  const [reason, setReason] = useState('');
-  const [err, setErr] = useState<string | null>(null);
-
-  const add = async () => {
-    setErr(null);
-    try {
-      await adminPost(`/admin/accounts/${accountId}/cadence-overrides`, {
-        product,
-        interval_seconds: Number(seconds),
-        reason: reason || undefined,
-      });
-      setReason('');
-      onChange();
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  };
-
-  const remove = async (id: string | number, prod: string) => {
-    setErr(null);
-    try {
-      await adminDelete(`/admin/accounts/${id}/cadence-overrides/${prod}`);
-      onChange();
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  };
-
-  const rows = accounts.flatMap((a) => (a.overrides || []).map((o) => ({ ...o, account: a })));
-
-  return (
-    <div className="panel">
-      <div className="panel-title">Per-account overrides</div>
-      {err && <div className="banner">{err}</div>}
-
-      <div className="row wrap" style={{ gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
-        <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-          <option value="">— pick account —</option>
-          {accounts.map((a) => (
-            <option key={String(a.id)} value={String(a.id)}>
-              {a.handle || `#${a.id}`} ({a.platform})
-            </option>
+    <TableRow className="font-mono text-xs">
+      <TableCell>
+        <Badge variant="outline">{cadence.platform}</Badge>
+      </TableCell>
+      <TableCell>{cadence.product}</TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-2">
+          <Input
+            type="number"
+            value={value}
+            min={60}
+            max={30 * 86_400}
+            onChange={(e) => setValue(Number(e.target.value))}
+            className="h-8 w-[110px] text-right font-mono text-xs"
+          />
+          <span className="text-muted-foreground">
+            s · {humanInterval(value)}
+          </span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex flex-wrap gap-1">
+          {PRESETS.map((p) => (
+            <Button
+              key={p.label}
+              variant={value === p.s ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 px-2 text-[10px]"
+              onClick={() => setValue(p.s)}
+            >
+              {p.label}
+            </Button>
           ))}
-        </select>
-        <select value={product} onChange={(e) => setProduct(e.target.value)}>
-          <option value="identity">identity</option>
-          <option value="audience">audience</option>
-          <option value="engagement_new">engagement_new</option>
-          <option value="stories">stories</option>
-        </select>
-        <input
-          type="number"
-          value={seconds}
-          onChange={(e) => setSeconds(e.target.value)}
-          placeholder="seconds"
-          style={{ width: 100 }}
-        />
-        <input
-          placeholder="reason (optional)"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          style={{ flex: 1, minWidth: 180 }}
-        />
-        <button className="primary" disabled={!accountId || !seconds} onClick={add}>
-          Add override
-        </button>
-      </div>
-
-      {rows.length === 0 ? (
-        <div className="muted">No active overrides.</div>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Account</th>
-              <th>Product</th>
-              <th>Interval</th>
-              <th>Reason</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={`${r.account.id}:${r.product}`}>
-                <td className="mono">{r.account.handle || `#${r.account.id}`}</td>
-                <td className="mono">{r.product}</td>
-                <td className="mono">{secondsHuman(r.override_interval_seconds)}</td>
-                <td className="faint">{r.reason || '—'}</td>
-                <td>
-                  <button className="danger" onClick={() => remove(r.account.id, r.product)}>
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
+        </div>
+      </TableCell>
+      <TableCell className="text-right">
+        <Button
+          size="sm"
+          variant={dirty ? 'default' : 'outline'}
+          disabled={!dirty || busy === k}
+          onClick={() => onSave(cadence.platform, cadence.product, value)}
+          className={cn(!dirty && 'opacity-50')}
+        >
+          {busy === k ? '…' : 'Save'}
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 }
 
-function secondsHuman(s: number): string {
-  if (!Number.isFinite(s) || s <= 0) return '—';
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.round(s / 60)}m`;
-  if (s < 86400) return `${(s / 3600).toFixed(1)}h`;
-  return `${(s / 86400).toFixed(1)}d`;
+type Override = {
+  accountId: string;
+  accountHandle?: string | null;
+  platform: string;
+  product: string;
+  nextRunAt?: string | null;
+};
+
+function collectOverrides(accounts: AdminAccount[]): Override[] {
+  const out: Override[] = [];
+  for (const a of accounts) {
+    const products = normalizeProducts(a.products);
+    for (const [product, p] of products.entries()) {
+      if (p.override_active) {
+        out.push({
+          accountId: a.id,
+          accountHandle: a.handle,
+          platform: a.platform,
+          product,
+          nextRunAt: p.next_run_at ?? null,
+        });
+      }
+    }
+  }
+  return out;
 }
 
-function normaliseProjection(
-  p: Projection | null,
-): { platform: string; calls_per_hour: number }[] {
-  if (!p) return [];
-  if ('per_platform' in p && Array.isArray(p.per_platform)) return p.per_platform;
-  return Object.entries(p as Record<string, { calls_per_hour: number }>).map(([platform, v]) => ({
-    platform,
-    calls_per_hour: v?.calls_per_hour ?? 0,
-  }));
+function OverridesTable({ overrides }: { overrides: Override[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Account</TableHead>
+          <TableHead>Product</TableHead>
+          <TableHead>Next run</TableHead>
+          <TableHead className="text-right" />
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {overrides.map((o) => (
+          <TableRow
+            key={`${o.accountId}:${o.product}`}
+            className="font-mono text-xs"
+          >
+            <TableCell>
+              <div>{o.accountHandle ?? `Account ${o.accountId}`}</div>
+              <div className="font-mono text-[10px] text-muted-foreground">
+                {o.platform} · #{o.accountId}
+              </div>
+            </TableCell>
+            <TableCell>{o.product}</TableCell>
+            <TableCell className="text-muted-foreground">
+              {fmtRelative(o.nextRunAt)}
+            </TableCell>
+            <TableCell className="text-right">
+              <Button asChild variant="ghost" size="sm">
+                <Link href={`/admin/accounts/${o.accountId}`}>
+                  Open detail →
+                </Link>
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function humanInterval(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = seconds / 60;
+  if (m < 60) return `${m.toFixed(0)}m`;
+  const h = m / 60;
+  if (h < 24) return `${h.toFixed(h < 4 ? 1 : 0)}h`;
+  return `${(h / 24).toFixed(0)}d`;
+}
+
+function normalizeProducts(
+  raw: AdminAccount['products'],
+): Map<string, ProductHealth> {
+  const m = new Map<string, ProductHealth>();
+  if (!raw) return m;
+  if (Array.isArray(raw)) {
+    for (const p of raw) {
+      if (p.product) m.set(p.product, p);
+    }
+  } else {
+    for (const [k, v] of Object.entries(raw)) {
+      m.set(k, v);
+    }
+  }
+  return m;
+}
+
+function buildScheduleHeatmap(runs: NextRun[]) {
+  const now = new Date();
+  const cols = Array.from({ length: 24 }, (_, i) => {
+    const d = new Date(now.getTime() + i * 3600_000);
+    return pad2(d.getHours());
+  });
+
+  const rowSet = new Set<string>();
+  const cellMap = new Map<string, number>();
+  const start = now.getTime();
+  const end = start + 24 * 3600_000;
+
+  for (const r of runs) {
+    if (!r.next_run_at) continue;
+    const t = new Date(r.next_run_at).getTime();
+    if (t < start || t > end) continue;
+    const offsetH = Math.floor((t - start) / 3600_000);
+    if (offsetH < 0 || offsetH >= 24) continue;
+    const colHour = cols[offsetH];
+    const rowLabel = `${r.accountHandle ?? `#${r.accountId}`} · ${r.product}`;
+    rowSet.add(rowLabel);
+    const k = `${rowLabel}::${colHour}`;
+    cellMap.set(k, (cellMap.get(k) ?? 0) + 1);
+  }
+
+  const rows = Array.from(rowSet).sort();
+  const cells = Array.from(cellMap.entries()).map(([k, value]) => {
+    const [row, col] = k.split('::');
+    return { row, col, value };
+  });
+  return { rows, cols, cells };
+}
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : String(n);
 }

@@ -104,7 +104,14 @@ if denied_idx ~= nil then
   for i = 1, n do
     local key = KEYS[i]
     local tok = new_tokens[i][1]
-    redis.call('HMSET', key, 'tokens', tok, 'last_refill_ts', now)
+    local capacity = tonumber(ARGV[(i - 1) * 3 + 1])
+    local refill = tonumber(ARGV[(i - 1) * 3 + 2])
+    redis.call('HMSET',
+      key,
+      'tokens', tok,
+      'last_refill_ts', now,
+      'capacity', capacity,
+      'refill_per_ms', refill)
     redis.call('HINCRBY', key, 'denies', 1)
   end
   return { 0, KEYS[denied_idx], denied_reset }
@@ -115,11 +122,15 @@ local min_key = KEYS[1]
 for i = 1, n do
   local key = KEYS[i]
   local tok = new_tokens[i][1] - new_tokens[i][2]
+  local capacity = tonumber(ARGV[(i - 1) * 3 + 1])
+  local refill = tonumber(ARGV[(i - 1) * 3 + 2])
   redis.call('HMSET',
     key,
     'tokens', tok,
     'last_refill_ts', now,
-    'last_acquire_ts', now)
+    'last_acquire_ts', now,
+    'capacity', capacity,
+    'refill_per_ms', refill)
   redis.call('HINCRBY', key, 'hits', 1)
   if min_remaining == nil or tok < min_remaining then
     min_remaining = tok
@@ -207,16 +218,29 @@ export class RateBucketService {
       'last_acquire_ts',
       'hits',
       'denies',
+      'capacity',
+      'refill_per_ms',
     );
 
-    const [tokensRaw, lastRefillRaw, lastAcquireRaw, hitsRaw, deniesRaw] = raw;
+    const [
+      tokensRaw,
+      lastRefillRaw,
+      lastAcquireRaw,
+      hitsRaw,
+      deniesRaw,
+      capacityRaw,
+      refillRaw,
+    ] = raw;
 
     if (tokensRaw === null && !meta) {
       return null;
     }
 
-    const capacity = meta?.capacity ?? 0;
-    const refillPerMs = meta?.refillPerMs ?? 0;
+    // Prefer in-process meta (most up-to-date for the worker) but fall back
+    // to persisted Redis fields so the API process — which never calls
+    // acquire() — can still report capacity/refill in admin endpoints.
+    const capacity = meta?.capacity ?? (capacityRaw ? Number(capacityRaw) : 0);
+    const refillPerMs = meta?.refillPerMs ?? (refillRaw ? Number(refillRaw) : 0);
     const lastRefillTs = lastRefillRaw ? Number(lastRefillRaw) : null;
     let tokens = tokensRaw !== null ? Number(tokensRaw) : capacity;
 

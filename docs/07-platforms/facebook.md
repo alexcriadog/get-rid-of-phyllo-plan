@@ -50,9 +50,10 @@ No retries typically needed; `/me/accounts` is synchronous.
 | Audience | ✓ | `GET /{page-id}/insights?metric=page_fans_country,page_fans_gender_age,page_fans_city&period=lifetime` |
 | Engagement (posts) | ✓ | `GET /{page-id}/posts?fields=id,message,created_time,permalink_url,full_picture,attachments,insights.metric(post_impressions,post_reactions_by_type_total)` |
 | Engagement (videos) | ✓ | `GET /{page-id}/videos?fields=id,title,description,source,length,created_time,video_insights.metric(total_video_views)` |
+| Stories | ✓ (1h cadence) | `GET /{page-id}/stories?fields=post_id,status,creation_time,media_type,media_id,url` — Page Stories API, GA in v22. No per-story insights endpoint exposed today; we collect metadata only. TTL 24h on the platform side, same as IG. |
 | Comments (P2) | planned | `GET /{post-id}/comments` |
 
-Content types: `post`, `video`. FB doesn't have "stories" at Page level.
+Content types: `post`, `video`, `story`.
 
 ---
 

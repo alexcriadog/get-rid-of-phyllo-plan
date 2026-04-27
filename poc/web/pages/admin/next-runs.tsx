@@ -1,255 +1,214 @@
 import { useMemo, useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
-import DataTable, { Column } from '../../components/DataTable';
 import { useLive } from '../../lib/useLive';
-import { fmtRelative, fmtDateTime } from '../../lib/format';
+import { fmtRelative, fmtTime } from '../../lib/format';
+import { Timeline, STATUS_COLORS } from '../../components/charts';
+import { Section } from '@/components/admin/section';
+import { Empty } from '@/components/admin/empty';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
 type NextRun = {
-  job_id: number | string;
-  account_id: number | string;
-  handle?: string;
+  accountId: string;
+  accountHandle?: string | null;
   platform: string;
   product: string;
   next_run_at: string;
-  priority?: string;
   status?: string;
+  failure_count?: number;
 };
 
-const HOUR_MS = 3600000;
-const WINDOW_HOURS = 24;
+const TAB_HOURS: Record<string, number> = {
+  '6h': 6,
+  '24h': 24,
+  '72h': 72,
+};
 
 export default function NextRunsPage() {
-  const { data, error } = useLive<NextRun[]>(`/admin/next-runs?horizon_hours=${WINDOW_HOURS}`);
-  const [pausedSim, setPausedSim] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<'6h' | '24h' | '72h'>('24h');
+  const horizonHours = TAB_HOURS[tab] ?? 24;
 
-  const rows = data || [];
-  const active = useMemo(
-    () => rows.filter((r) => !pausedSim.has(String(r.account_id))),
-    [rows, pausedSim],
+  const { data, error } = useLive<NextRun[]>(
+    `/admin/next-runs?horizon_hours=${horizonHours}`,
+    8000,
   );
 
-  const grouped = useMemo(() => groupByPlatformAccount(active), [active]);
-  const now = Date.now();
-  const horizonEnd = now + WINDOW_HOURS * HOUR_MS;
+  const rows = data ?? [];
 
-  const columns: Column<NextRun>[] = [
-    {
-      key: 'next_run_at',
-      label: 'When',
-      sortable: true,
-      render: (r) => fmtDateTime(r.next_run_at),
-    },
-    {
-      key: 'rel',
-      label: 'Due',
-      render: (r) => fmtRelative(r.next_run_at),
-      accessor: (r) => new Date(r.next_run_at).getTime(),
-    },
-    {
-      key: 'platform',
-      label: 'Platform',
-      sortable: true,
-      render: (r) => <span className="badge">{r.platform}</span>,
-    },
-    {
-      key: 'handle',
-      label: 'Account',
-      sortable: true,
-      render: (r) => <span className="mono">{r.handle || `#${r.account_id}`}</span>,
-    },
-    { key: 'product', label: 'Product', sortable: true, render: (r) => <span className="mono">{r.product}</span> },
-    {
-      key: 'priority',
-      label: 'Priority',
-      render: (r) => <span className="badge">{r.priority || 'NORMAL'}</span>,
-    },
-    { key: 'status', label: 'Status', render: (r) => <span className="mono">{r.status || 'idle'}</span> },
-  ];
+  const { timelineRows, timelineEvents, startMs, endMs } = useMemo(() => {
+    const now = Date.now();
+    const start = now;
+    const end = now + horizonHours * 3600_000;
+    const rowMap = new Map<string, { id: string; label: string }>();
+    const events: Array<{
+      rowId: string;
+      startMs: number;
+      endMs: number;
+      tone: 'ok' | 'warn' | 'danger' | 'info';
+      title: string;
+      meta: Array<{ label: string; value: string }>;
+    }> = [];
 
-  return (
-    <AdminLayout title="Next executions · 24h">
-      {error && !data && <div className="banner">{error}</div>}
-
-      <div className="panel" style={{ marginBottom: 'var(--space-5)' }}>
-        <div className="panel-title">Timeline</div>
-        {grouped.length === 0 ? (
-          <div className="muted">Nothing scheduled in the next {WINDOW_HOURS}h.</div>
-        ) : (
-          <div>
-            <HourAxis now={now} />
-            {grouped.map((g) => (
-              <TimelineRow key={`${g.platform}::${g.account_id}`} group={g} now={now} />
-            ))}
-          </div>
-        )}
-        <div className="faint" style={{ fontSize: 11, marginTop: 'var(--space-3)' }}>
-          Range: {new Date(now).toLocaleString()} → {new Date(horizonEnd).toLocaleString()}
-        </div>
-      </div>
-
-      <div className="panel" style={{ marginBottom: 'var(--space-5)' }}>
-        <div className="panel-title">Simulator — paused accounts</div>
-        {rows.length === 0 ? (
-          <div className="muted">No accounts.</div>
-        ) : (
-          <div className="row wrap" style={{ gap: 'var(--space-2)' }}>
-            {Array.from(new Set(rows.map((r) => String(r.account_id)))).map((aid) => {
-              const sample = rows.find((r) => String(r.account_id) === aid)!;
-              const paused = pausedSim.has(aid);
-              return (
-                <button
-                  key={aid}
-                  onClick={() =>
-                    setPausedSim((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(aid)) next.delete(aid);
-                      else next.add(aid);
-                      return next;
-                    })
-                  }
-                  className={paused ? 'primary' : ''}
-                  style={{ opacity: paused ? 0.6 : 1 }}
-                >
-                  {paused ? '▶ ' : '❚❚ '} {sample.handle || `#${aid}`}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <div className="panel">
-        <div className="panel-title">Next 50 due</div>
-        <DataTable<NextRun>
-          rows={active.slice(0, 50)}
-          columns={columns}
-          rowKey={(r) => String(r.job_id)}
-        />
-      </div>
-    </AdminLayout>
-  );
-}
-
-type Group = {
-  platform: string;
-  account_id: string;
-  handle?: string;
-  runs: NextRun[];
-};
-
-function groupByPlatformAccount(rows: NextRun[]): Group[] {
-  const map = new Map<string, Group>();
-  for (const r of rows) {
-    const key = `${r.platform}::${r.account_id}`;
-    if (!map.has(key)) {
-      map.set(key, {
-        platform: r.platform,
-        account_id: String(r.account_id),
-        handle: r.handle,
-        runs: [],
+    for (const r of rows) {
+      const t = new Date(r.next_run_at).getTime();
+      if (isNaN(t) || t < start || t > end) continue;
+      const rowId = `${r.accountId}:${r.product}`;
+      const label = `${r.accountHandle ?? `#${r.accountId}`} · ${r.product}`;
+      if (!rowMap.has(rowId)) rowMap.set(rowId, { id: rowId, label });
+      const tone: 'ok' | 'warn' | 'danger' | 'info' =
+        (r.failure_count ?? 0) >= 3
+          ? 'danger'
+          : (r.failure_count ?? 0) > 0
+            ? 'warn'
+            : 'info';
+      events.push({
+        rowId,
+        startMs: t,
+        endMs: t + 4 * 60_000,
+        tone,
+        title: r.product,
+        meta: [
+          { label: 'platform', value: r.platform },
+          { label: 'fires', value: fmtTime(r.next_run_at) ?? '—' },
+          { label: 'status', value: r.status ?? 'idle' },
+          { label: 'fails', value: String(r.failure_count ?? 0) },
+        ],
       });
     }
-    map.get(key)!.runs.push(r);
-  }
-  return [...map.values()].sort((a, b) => a.platform.localeCompare(b.platform));
-}
+    return {
+      timelineRows: Array.from(rowMap.values()).sort((a, b) =>
+        a.label.localeCompare(b.label),
+      ),
+      timelineEvents: events,
+      startMs: start,
+      endMs: end,
+    };
+  }, [rows, horizonHours]);
 
-function HourAxis({ now }: { now: number }) {
-  const ticks = Array.from({ length: WINDOW_HOURS + 1 }, (_, i) => i);
-  return (
-    <div
-      className="row"
-      style={{
-        position: 'relative',
-        height: 22,
-        borderBottom: '1px solid var(--border)',
-        marginBottom: 6,
-        paddingLeft: 160,
-      }}
-    >
-      <div style={{ position: 'relative', flex: 1, height: '100%' }}>
-        {ticks.map((h) => (
-          <div
-            key={h}
-            style={{
-              position: 'absolute',
-              left: `${(h / WINDOW_HOURS) * 100}%`,
-              top: 0,
-              bottom: 0,
-              borderLeft: '1px solid var(--border)',
-              color: 'var(--text-muted)',
-              fontSize: 10,
-              fontFamily: 'var(--mono)',
-              paddingLeft: 2,
-              transform: h === WINDOW_HOURS ? 'translateX(-100%)' : undefined,
-            }}
-          >
-            {new Date(now + h * HOUR_MS).getHours()}h
-          </div>
-        ))}
-      </div>
-    </div>
+  const upcomingNext10 = useMemo(
+    () =>
+      [...rows]
+        .filter(
+          (r) =>
+            r.next_run_at && new Date(r.next_run_at).getTime() >= Date.now(),
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.next_run_at).getTime() -
+            new Date(b.next_run_at).getTime(),
+        )
+        .slice(0, 10),
+    [rows],
   );
-}
 
-function TimelineRow({ group, now }: { group: Group; now: number }) {
   return (
-    <div
-      className="row"
-      style={{ alignItems: 'stretch', borderBottom: '1px solid var(--border)', padding: '4px 0' }}
-    >
-      <div
-        style={{
-          width: 160,
-          paddingRight: 8,
-          borderRight: '1px solid var(--border)',
-          flexShrink: 0,
-        }}
-      >
-        <div className="badge" style={{ marginBottom: 2 }}>
-          {group.platform}
+    <AdminLayout title="Next runs">
+      {error && !data && (
+        <div className="mb-5 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
+          {error}
         </div>
-        <div
-          className="mono"
-          style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-        >
-          {group.handle || `#${group.account_id}`}
-        </div>
-      </div>
-      <div
-        style={{
-          position: 'relative',
-          flex: 1,
-          height: 28,
-          background:
-            'repeating-linear-gradient(90deg, transparent, transparent calc(100% / 24 - 1px), var(--border) calc(100% / 24 - 1px), var(--border) calc(100% / 24))',
-        }}
+      )}
+
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as '6h' | '24h' | '72h')}
+        className="w-full"
       >
-        {group.runs.map((r) => {
-          const ts = new Date(r.next_run_at).getTime();
-          const pct = ((ts - now) / (WINDOW_HOURS * HOUR_MS)) * 100;
-          if (pct < -1 || pct > 101) return null;
-          const clamped = Math.max(0, Math.min(99.5, pct));
-          const colour = r.priority === 'HIGH' ? 'var(--danger)' : 'var(--accent)';
-          return (
-            <div
-              key={String(r.job_id)}
-              title={`${r.product} · ${fmtDateTime(r.next_run_at)} · ${r.priority || 'NORMAL'}`}
-              style={{
-                position: 'absolute',
-                left: `${clamped}%`,
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                background: colour,
-                border: '2px solid var(--bg-panel)',
-              }}
+        <TabsList>
+          <TabsTrigger value="6h">Next 6h</TabsTrigger>
+          <TabsTrigger value="24h">Next 24h</TabsTrigger>
+          <TabsTrigger value="72h">Next 72h</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value={tab}>
+          <Section
+            title={`Schedule timeline · next ${horizonHours}h`}
+            description="Each marker is one scheduled (account, product) run. Color = health."
+          >
+            <Timeline
+              rows={timelineRows}
+              events={timelineEvents}
+              startMs={startMs}
+              endMs={endMs}
+              hourTickEvery={
+                horizonHours <= 12 ? 1 : horizonHours <= 24 ? 2 : 6
+              }
             />
-          );
-        })}
-      </div>
-    </div>
+          </Section>
+
+          <Section title="Up next" description="The 10 closest scheduled runs">
+            {upcomingNext10.length === 0 ? (
+              <Empty message="Nothing scheduled in this window." />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>When</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-right">Fails</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {upcomingNext10.map((r) => {
+                    const tone: 'ok' | 'warn' | 'danger' =
+                      (r.failure_count ?? 0) >= 3
+                        ? 'danger'
+                        : (r.failure_count ?? 0) > 0
+                          ? 'warn'
+                          : 'ok';
+                    return (
+                      <TableRow
+                        key={`${r.accountId}:${r.product}`}
+                        className="font-mono text-xs"
+                      >
+                        <TableCell>
+                          <div style={{ color: STATUS_COLORS[tone] }}>
+                            {fmtRelative(r.next_run_at)}
+                          </div>
+                          <div className="font-mono text-[10px] text-muted-foreground">
+                            {fmtTime(r.next_run_at)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>{r.accountHandle ?? `#${r.accountId}`}</div>
+                          <div className="font-mono text-[10px] text-muted-foreground">
+                            {r.platform} · #{r.accountId}
+                          </div>
+                        </TableCell>
+                        <TableCell>{r.product}</TableCell>
+                        <TableCell
+                          className={cn(
+                            'text-right',
+                            (r.failure_count ?? 0) > 0
+                              ? 'text-danger'
+                              : 'text-muted-foreground',
+                          )}
+                        >
+                          {r.failure_count ?? 0}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </Section>
+        </TabsContent>
+      </Tabs>
+    </AdminLayout>
   );
 }

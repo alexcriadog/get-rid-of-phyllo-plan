@@ -1,19 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────
+   shadcn design tokens (HSL triplets, no hsl() wrapper).
+   Tuned to the existing dark connector palette so the migration
+   keeps the same visual identity, just consistent + modern.
+   ───────────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    --sh-background: 225 18% 5%;
+    --sh-foreground: 220 16% 92%;
+
+    --sh-card: 225 14% 9%;
+    --sh-card-foreground: 220 16% 92%;
+
+    --sh-popover: 225 14% 11%;
+    --sh-popover-foreground: 220 16% 92%;
+
+    --sh-primary: 220 100% 74%;
+    --sh-primary-foreground: 225 18% 8%;
+
+    --sh-secondary: 225 12% 14%;
+    --sh-secondary-foreground: 220 14% 88%;
+
+    --sh-muted: 225 12% 14%;
+    --sh-muted-foreground: 220 10% 65%;
+
+    --sh-accent: 225 14% 16%;
+    --sh-accent-foreground: 220 14% 92%;
+
+    --sh-destructive: 0 72% 56%;
+    --sh-destructive-foreground: 0 0% 98%;
+
+    --sh-border: 225 12% 17%;
+    --sh-input: 225 12% 17%;
+    --sh-ring: 220 100% 74%;
+
+    --status-ok: 142 71% 45%;
+    --status-warn: 32 96% 50%;
+    --status-danger: 0 72% 56%;
+    --status-info: 199 89% 60%;
+
+    --radius-lg-tw: 12px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+}
+
 :root {
-  --bg: #0f1115;
-  --bg-panel: #171a21;
-  --bg-panel-hi: #1e222b;
-  --border: #2a2f3a;
-  --border-hi: #3a4150;
-  --text: #e5e7eb;
-  --text-muted: #9ca3af;
-  --text-faint: #6b7280;
+  /* Surfaces — slightly deeper black, clearer panel hierarchy */
+  --bg: #0a0b0e;
+  --bg-panel: #14161c;
+  --bg-panel-hi: #1c1f27;
+  --bg-panel-elev: #232730;
+  --border: #262a33;
+  --border-hi: #383d49;
+
+  /* Text */
+  --text: #e8eaf0;
+  --text-muted: #9ba3b3;
+  --text-faint: #5b6376;
+
+  /* Brand + status */
   --accent: #7aa2ff;
   --accent-hi: #9cbcff;
+  --mint: #5dd4ad;
+  --mint-hi: #7eecc4;
+  --pink: #ff6bcb;
+  --purple: #a78bfa;
+  --amber: #fbbf24;
   --danger: #ef4444;
   --warn: #f59e0b;
   --ok: #22c55e;
+  --info: #38bdf8;
+
+  /* Categorical palette for charts (used cyclically) */
+  --c1: #7aa2ff;
+  --c2: #5dd4ad;
+  --c3: #ff6bcb;
+  --c4: #fbbf24;
+  --c5: #a78bfa;
+  --c6: #38bdf8;
+  --c7: #f87171;
+  --c8: #f472b6;
+
+  /* Type + spacing */
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --radius: 6px;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -21,6 +101,12 @@
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+  --space-7: 48px;
+
+  /* Elevation shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
 
 * {
@@ -205,6 +291,37 @@ tr:hover td {
   gap: var(--space-4);
 }
 
+/* Responsive grid breakpoints — collapse multi-column grids on smaller screens. */
+@media (max-width: 1100px) {
+  .grid[style*='repeat(5'] {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .grid[style*='repeat(4'] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 760px) {
+  .grid[style*='repeat(5'],
+  .grid[style*='repeat(4'],
+  .grid[style*='repeat(3'],
+  .grid[style*='1fr 1fr'],
+  .grid[style*='2fr 1fr'] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Cap the chart panel width so single-series lines don't sprawl on huge monitors. */
+.admin-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@keyframes sh-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+
 .row {
   display: flex;
   gap: var(--space-3);
@@ -249,4 +366,436 @@ tr:hover td {
 
 .ticker .line:last-child {
   border-bottom: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   The Verge design system — public-UI only.
+   Scoped under `.v-canvas` so admin pages keep their existing tokens.
+   Substitutes: Anton → Manuka, Space Grotesk → PolySans,
+                Space Mono → PolySans Mono.
+   ───────────────────────────────────────────────────────────────── */
+
+.v-canvas {
+  --v-canvas: #131313;
+  --v-surface: #2d2d2d;
+  --v-frame: #313131;
+  --v-white: #ffffff;
+  --v-black: #000000;
+  --v-mint: #3cffd0;
+  --v-mint-border: #309875;
+  --v-uv: #5200ff;
+  --v-purple-rule: #3d00bf;
+  --v-link-hover: #3860be;
+  --v-focus: #1eaedb;
+  --v-text: #ffffff;
+  --v-text-muted: #949494;
+  --v-text-subtle: #e9e9e9;
+
+  --v-display: 'Anton', Impact, 'Helvetica Neue Condensed', Helvetica, sans-serif;
+  --v-sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+  --v-mono: 'Space Mono', ui-monospace, 'Courier New', Courier, monospace;
+
+  background: var(--v-canvas);
+  color: var(--v-text);
+  font-family: var(--v-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  min-height: 100vh;
+}
+
+.v-canvas a {
+  color: var(--v-white);
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+.v-canvas a:hover {
+  color: var(--v-link-hover);
+  text-decoration: none;
+}
+
+/* --- Typography --------------------------------------------------- */
+
+.v-display {
+  font-family: var(--v-display);
+  font-weight: 400;
+  /* Anton is wider than Manuka; per design-note loosen by +0.12. */
+  line-height: 0.92;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--v-white);
+  margin: 0;
+}
+.v-display.size-hero {
+  font-size: clamp(48px, 9vw, 107px);
+}
+.v-display.size-secondary {
+  font-size: clamp(40px, 7vw, 90px);
+}
+.v-display.size-tertiary {
+  font-size: clamp(32px, 5vw, 60px);
+}
+
+.v-headline {
+  font-family: var(--v-sans);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1.05;
+  letter-spacing: 0;
+  color: var(--v-white);
+  margin: 0;
+}
+.v-headline.size-lg {
+  font-size: 34px;
+}
+.v-headline.size-sm {
+  font-size: 20px;
+}
+
+.v-kicker {
+  font-family: var(--v-mono);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--v-text-muted);
+}
+.v-kicker.mint {
+  color: var(--v-mint);
+}
+.v-kicker.white {
+  color: var(--v-white);
+}
+
+.v-eyebrow {
+  font-family: var(--v-sans);
+  font-weight: 300;
+  font-size: 19px;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--v-text-subtle);
+}
+
+.v-meta {
+  font-family: var(--v-mono);
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--v-text-muted);
+}
+
+.v-body {
+  font-family: var(--v-sans);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--v-text-subtle);
+}
+
+/* --- Buttons (pill) ---------------------------------------------- */
+
+.v-pill,
+.v-pill-primary,
+.v-pill-secondary,
+.v-pill-outline-mint,
+.v-pill-outline-uv {
+  font-family: var(--v-mono);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-radius: 24px;
+  padding: 10px 24px;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease,
+    border-color 180ms ease, box-shadow 180ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+
+.v-pill-primary {
+  background: var(--v-mint);
+  color: var(--v-black);
+  border-color: var(--v-mint);
+}
+.v-pill-primary:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--v-black);
+  box-shadow: 0 0 0 1px #c2c2c2;
+}
+
+.v-pill-secondary {
+  background: var(--v-surface);
+  color: var(--v-text-subtle);
+  border-color: var(--v-surface);
+}
+.v-pill-secondary:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--v-black);
+  box-shadow: 0 0 0 1px #c2c2c2;
+}
+
+.v-pill-outline-mint {
+  background: transparent;
+  color: var(--v-mint);
+  border-color: var(--v-mint);
+  border-radius: 40px;
+}
+.v-pill-outline-mint:hover {
+  background: var(--v-mint);
+  color: var(--v-black);
+}
+
+.v-pill-outline-uv {
+  background: transparent;
+  color: var(--v-white);
+  border-color: var(--v-uv);
+  border-radius: 30px;
+}
+.v-pill-outline-uv:hover {
+  background: var(--v-uv);
+  color: var(--v-white);
+}
+
+.v-pill:disabled,
+.v-pill-primary:disabled,
+.v-pill-secondary:disabled,
+.v-pill-outline-mint:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Small non-interactive pill tag */
+.v-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-family: var(--v-mono);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.v-tag.mint {
+  background: var(--v-mint);
+  color: var(--v-black);
+}
+.v-tag.uv {
+  background: var(--v-uv);
+  color: var(--v-white);
+}
+.v-tag.white {
+  background: var(--v-white);
+  color: var(--v-black);
+}
+.v-tag.outline {
+  background: transparent;
+  color: var(--v-white);
+  border: 1px solid var(--v-white);
+}
+.v-tag.outline-mint {
+  background: transparent;
+  color: var(--v-mint);
+  border: 1px solid var(--v-mint);
+}
+
+/* --- Tiles / Cards ------------------------------------------------ */
+
+.v-tile {
+  background: var(--v-canvas);
+  border: 1px solid var(--v-white);
+  border-radius: 20px;
+  padding: 24px;
+  transition: border-color 150ms ease;
+  color: var(--v-white);
+}
+.v-tile:hover .v-tile-headline {
+  color: var(--v-link-hover);
+}
+
+.v-tile-feature {
+  border-radius: 24px;
+  padding: 32px;
+}
+
+.v-tile-mint {
+  background: var(--v-mint);
+  color: var(--v-black);
+  border: none;
+  border-radius: 20px;
+  padding: 24px;
+}
+.v-tile-uv {
+  background: var(--v-uv);
+  color: var(--v-white);
+  border: none;
+  border-radius: 20px;
+  padding: 24px;
+}
+.v-tile-white {
+  background: var(--v-white);
+  color: var(--v-black);
+  border: none;
+  border-radius: 20px;
+  padding: 24px;
+}
+
+.v-tile-headline {
+  transition: color 150ms ease;
+}
+
+/* --- Rail (StoryStream spine) ----------------------------------- */
+
+.v-rail {
+  position: relative;
+  padding-left: 120px;
+}
+.v-rail::before {
+  content: '';
+  position: absolute;
+  left: 88px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--v-purple-rule);
+}
+.v-rail-item {
+  position: relative;
+  margin-bottom: 16px;
+}
+.v-rail-item::before {
+  content: '';
+  position: absolute;
+  left: -32px;
+  top: 18px;
+  width: 8px;
+  height: 1px;
+  background: var(--v-purple-rule);
+}
+.v-rail-timestamp {
+  position: absolute;
+  left: -120px;
+  top: 14px;
+  width: 80px;
+  text-align: right;
+  font-family: var(--v-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--v-text-muted);
+  text-transform: uppercase;
+}
+
+/* --- Images ------------------------------------------------------- */
+
+.v-image {
+  border: 1px solid var(--v-frame);
+  border-radius: 4px;
+  display: block;
+  max-width: 100%;
+}
+
+/* --- Inputs ------------------------------------------------------- */
+
+.v-canvas input,
+.v-canvas select,
+.v-canvas textarea {
+  background: var(--v-canvas);
+  color: var(--v-white);
+  border: 1px solid var(--v-white);
+  border-radius: 2px;
+  padding: 8px 10px;
+  font-family: var(--v-sans);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 150ms ease;
+}
+.v-canvas input:focus,
+.v-canvas select:focus,
+.v-canvas textarea:focus {
+  border-color: var(--v-mint);
+}
+
+/* --- Helpers ----------------------------------------------------- */
+
+.v-hairline {
+  border-top: 1px solid var(--v-white);
+}
+.v-hairline-purple {
+  border-top: 1px solid var(--v-purple-rule);
+}
+.v-hairline-mint {
+  border-top: 1px solid var(--v-mint);
+}
+
+/* --- Responsive post dialog -------------------------------------- */
+
+.v-dialog {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(380px, 1fr);
+  width: 100%;
+  max-width: 1040px;
+  max-height: 92vh;
+  overflow: hidden;
+  background: #131313;
+  border: 1px solid #ffffff;
+  border-radius: 24px;
+}
+
+.v-dialog-media {
+  background: #000;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid #3d00bf;
+  position: relative;
+}
+
+.v-dialog-info {
+  overflow-y: auto;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  scrollbar-color: #3d00bf #131313;
+  scrollbar-width: thin;
+}
+.v-dialog-info::-webkit-scrollbar {
+  width: 8px;
+}
+.v-dialog-info::-webkit-scrollbar-track {
+  background: #131313;
+}
+.v-dialog-info::-webkit-scrollbar-thumb {
+  background: #3d00bf;
+  border-radius: 4px;
+}
+
+@media (max-width: 880px) {
+  .v-dialog {
+    grid-template-columns: 1fr;
+    max-height: 94vh;
+    max-width: 100%;
+    overflow-y: auto;
+  }
+  .v-dialog-media {
+    min-height: 240px;
+    max-height: 55vh;
+    border-right: none;
+    border-bottom: 1px solid #3d00bf;
+  }
+  .v-dialog-info {
+    overflow-y: visible;
+    padding: 20px;
+  }
 }

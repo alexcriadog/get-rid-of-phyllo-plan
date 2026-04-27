@@ -29,7 +29,8 @@ export function useLive<T = unknown>(path: string | null, intervalMs = 2000): Li
       try {
         const res = await fetch(url);
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        const json = (await res.json()) as T;
+        const raw = await res.json();
+        const json = unwrapEnvelope(raw) as T;
         if (!isCancelled.current) {
           setData(json);
           setError(null);
@@ -54,4 +55,22 @@ export function useLive<T = unknown>(path: string | null, intervalMs = 2000): Li
   const refresh = () => setNonce((n) => n + 1);
 
   return { data, error, loading, refresh };
+}
+
+const ENVELOPE_KEYS = new Set(['items', 'buckets', 'locks', 'data']);
+
+/**
+ * Admin endpoints wrap lists in a single-key envelope (`{items:[…]}`,
+ * `{buckets:[…]}`, `{locks:[…]}`). UI callers declare bare-array generics,
+ * so unwrap one level when the shape matches exactly — multi-key payloads
+ * like `/overview` are left untouched.
+ */
+function unwrapEnvelope(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const keys = Object.keys(raw as Record<string, unknown>);
+  if (keys.length !== 1) return raw;
+  const only = keys[0];
+  if (!ENVELOPE_KEYS.has(only)) return raw;
+  const inner = (raw as Record<string, unknown>)[only];
+  return Array.isArray(inner) ? inner : raw;
 }

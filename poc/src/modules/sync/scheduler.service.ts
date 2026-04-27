@@ -95,6 +95,13 @@ export class SchedulerService
       where: {
         status: 'idle',
         nextRunAt: { lte: now, not: null },
+        // Defence in depth against ban risk: never enqueue for paused or
+        // broken accounts. The worker enforces the same invariants, but
+        // filtering here stops us from even adding the BullMQ job.
+        account: {
+          syncTier: { not: 'paused' },
+          status: { not: 'needs_reauth' },
+        },
       },
       orderBy: [{ priority: 'desc' }, { nextRunAt: 'asc' }],
       take: MAX_ROWS_PER_TICK,

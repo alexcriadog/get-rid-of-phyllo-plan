@@ -32,9 +32,16 @@ import {
 
 const SYNC_QUEUE_NAME = 'sync';
 const DEFAULT_CONCURRENCY = 4;
-const THROTTLE_SKIP_RETRY_DELAY_MS = 10_000;
 const MAX_RATE_LIMIT_JITTER_MS = 5_000;
 const THROTTLE_LOCK_TTL_SECONDS = 600;
+
+// Strict failure-budget controls (BullMQ attempts=1; no retry storm).
+// After N consecutive failures on a sync_job the account is auto-paused.
+// Between failures, nextRunAt is pushed out exponentially so the scheduler
+// can't re-pick the same failing job every tick.
+const MAX_CONSECUTIVE_FAILURES = 5;
+const FAILURE_BACKOFF_BASE_MS = 60_000;
+const FAILURE_BACKOFF_MAX_MS = 60 * 60_000;
 
 type ProductType = 'identity' | 'audience' | 'engagement_new' | 'stories';
 
@@ -51,12 +58,8 @@ interface FetchResult {
  * BullMQ picks it up through the `failed` path; we re-add before the
  * throw so the scheduler doesn't need to intervene.
  */
-class DelayedRetryError extends Error {
-  constructor(public readonly delayMs: number) {
-    super(`Delayed retry in ${delayMs}ms`);
-    this.name = 'DelayedRetryError';
-  }
-}
+// (DelayedRetryError removed — worker no longer self-enqueues. All retry
+// scheduling is driven by sync_jobs.nextRunAt + the scheduler tick.)
 
 function sha256Hex(input: string): string {
   return createHash('sha256').update(input, 'utf8').digest('hex');
@@ -174,10 +177,19 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
       THROTTLE_LOCK_TTL_SECONDS,
     );
     if (!throttleAcquired) {
+      // Another worker/tick is already processing this (account, product).
+      // Push nextRunAt out by 60s and let the scheduler decide when to
+      // re-pick — no worker-side re-enqueue, so no amplification.
       this.metrics.incr('sync_worker_throttle_skip', { product });
-      await this.reenqueueWithDelay(job, THROTTLE_SKIP_RETRY_DELAY_MS);
-      await this.updateJobStatusIdle(syncJobId);
-      throw new DelayedRetryError(THROTTLE_SKIP_RETRY_DELAY_MS);
+      await this.prisma.syncJob.update({
+        where: { id: syncJobId },
+        data: {
+          status: 'idle',
+          lastAttemptAt: now,
+          nextRunAt: new Date(now.getTime() + 60_000),
+        },
+      });
+      return;
     }
 
     try {
@@ -198,12 +210,20 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         accountId: accountIdBig,
       };
 
-      const fetchResult = await this.dispatchFetch(
-        adapter,
-        product as ProductType,
-        accessToken,
-        account.canonicalUserId,
-        context,
+      // Wrap dispatch in an AsyncLocalStorage context so every downstream
+      // `metrics.observeApiCall` (and its api_call_log row) is tagged with
+      // the product that triggered the fetch — adapters and HTTP layers
+      // don't need to thread the product through their signatures.
+      const fetchResult = await this.metrics.runWithProduct(
+        product,
+        () =>
+          this.dispatchFetch(
+            adapter,
+            product as ProductType,
+            accessToken,
+            account.canonicalUserId,
+            context,
+          ),
       );
 
       if (!fetchResult) {
@@ -219,12 +239,28 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
 
       this.metrics.incr('sync_worker_success', { product, platform: account.platform });
     } catch (err) {
+      // The 10-minute throttle cooldown is only meaningful after a completed
+      // sync. Any failure path below must release the lock, otherwise retries
+      // loop through the throttle-skip branch until the TTL expires.
+      await this.throttle
+        .release(`throttle:${accountIdBig.toString()}:${product}`)
+        .catch(() => undefined);
+
       if (err instanceof RateLimitedError) {
+        // Honour Meta's reset window by pushing nextRunAt out; scheduler
+        // picks it up again once the window has elapsed. No worker-side
+        // re-enqueue → no way for rate-limits to amplify call volume.
         this.metrics.incr('sync_worker_rate_limited', { product });
         const delay =
           Math.max(0, err.resetInMs) + Math.floor(Math.random() * MAX_RATE_LIMIT_JITTER_MS);
-        await this.reenqueueWithDelay(job, delay);
-        await this.updateJobStatusIdle(syncJobId);
+        await this.prisma.syncJob.update({
+          where: { id: syncJobId },
+          data: {
+            status: 'idle',
+            lastAttemptAt: now,
+            nextRunAt: new Date(now.getTime() + delay),
+          },
+        });
         return;
       }
 
@@ -241,19 +277,16 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         return;
       }
 
-      if (err instanceof DelayedRetryError) {
-        // Re-enqueue already scheduled above; swallow to avoid BullMQ retry
-        return;
-      }
-
-      // Persistent failure — bump counter and let BullMQ retry
+      // Persistent failure — bump counter, advance nextRunAt exponentially,
+      // and auto-pause the account once it crosses the failure budget.
       const msg = err instanceof Error ? err.message : String(err);
       this.metrics.incr('sync_worker_error', { product });
-      await this.bumpFailure(syncJobId, now, msg);
-      throw err instanceof Error ? err : new Error(msg);
+      await this.bumpFailure(syncJobId, accountIdBig, now, msg);
+      // Do NOT rethrow: BullMQ attempts=1 plus our own backoff already
+      // handle the retry. Rethrowing here just floods the `failed` handler
+      // logs with the same error.
+      return;
     }
-    // Intentionally no `finally` releasing the throttle lock — we want the
-    // 10-minute cooldown window to remain for the full TTL.
   }
 
   private async dispatchFetch(
@@ -367,7 +400,14 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
   }
 
   private extractContentId(post: ContentData): string | null {
-    const raw = post as unknown as { id?: unknown; platform_content_id?: unknown };
+    const raw = post as unknown as {
+      id?: unknown;
+      platformContentId?: unknown;
+      platform_content_id?: unknown;
+    };
+    // Adapters return camelCase `platformContentId`; we accept the snake_case
+    // and `id` shorthands defensively so future adapters don't silently drop.
+    if (typeof raw.platformContentId === 'string') return raw.platformContentId;
     if (typeof raw.platform_content_id === 'string') return raw.platform_content_id;
     if (typeof raw.id === 'string') return raw.id;
     return null;
@@ -470,9 +510,21 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
 
   private async bumpFailure(
     syncJobId: bigint,
+    accountId: bigint,
     now: Date,
     error: string,
   ): Promise<void> {
+    const current = await this.prisma.syncJob.findUnique({
+      where: { id: syncJobId },
+      select: { failureCount: true },
+    });
+    const nextFailureCount = (current?.failureCount ?? 0) + 1;
+    const backoffMs = Math.min(
+      FAILURE_BACKOFF_BASE_MS * Math.pow(2, nextFailureCount - 1),
+      FAILURE_BACKOFF_MAX_MS,
+    );
+    const nextRunAt = new Date(now.getTime() + backoffMs);
+
     await this.prisma.syncJob.update({
       where: { id: syncJobId },
       data: {
@@ -480,8 +532,21 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         lastAttemptAt: now,
         lastError: error,
         failureCount: { increment: 1 },
+        nextRunAt,
       },
     });
+
+    if (nextFailureCount >= MAX_CONSECUTIVE_FAILURES) {
+      this.logger.warn(
+        `Circuit breaker tripped: account=${accountId.toString()} ` +
+          `sync_job=${syncJobId.toString()} failures=${nextFailureCount} — pausing account`,
+      );
+      await this.prisma.account.update({
+        where: { id: accountId },
+        data: { syncTier: 'paused' },
+      });
+      this.metrics.incr('sync_worker_circuit_break', {});
+    }
   }
 
   private async updateJobStatusIdle(syncJobId: bigint): Promise<void> {
@@ -491,15 +556,4 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
     });
   }
 
-  private async reenqueueWithDelay(
-    job: Job<SyncJobPayload>,
-    delayMs: number,
-  ): Promise<void> {
-    const queue = this.bullmq.getQueue<SyncJobPayload>(SYNC_QUEUE_NAME);
-    await queue.add('sync', job.data, {
-      delay: delayMs,
-      removeOnComplete: { age: 3600, count: 1000 },
-      removeOnFail: { age: 86_400, count: 500 },
-    });
-  }
 }

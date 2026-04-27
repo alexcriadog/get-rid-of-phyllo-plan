@@ -73,8 +73,11 @@ export class BullmqService implements OnModuleDestroy {
       defaultJobOptions: {
         removeOnComplete: { count: 500, age: 24 * 3600 },
         removeOnFail: { count: 500, age: 7 * 24 * 3600 },
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5_000 },
+        // No automatic retries. If a sync fails, the scheduler will pick it
+        // up again on its next tick once `sync_jobs.nextRunAt` elapses, with
+        // exponential backoff baked into `bumpFailure`. This makes Meta API
+        // call volume strictly bounded by the cadence; no retry storms.
+        attempts: 1,
       },
     };
 

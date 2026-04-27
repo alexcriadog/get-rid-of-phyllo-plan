@@ -91,14 +91,20 @@ export class RateLimitedError extends Error {
 
 /** Generic wrapper around unexpected adapter-side failures. */
 export class AdapterFetchError extends Error {
+  public readonly cause: unknown;
+  /** Parsed response body when the upstream returned structured error JSON. */
+  public readonly body?: unknown;
   constructor(
     public readonly platform: string,
     public readonly endpoint: string,
     cause: unknown,
     message?: string,
+    body?: unknown,
   ) {
     const causeMsg = cause instanceof Error ? cause.message : String(cause);
     super(message ?? `Adapter fetch failed (${platform}:${endpoint}): ${causeMsg}`);
     this.name = 'AdapterFetchError';
+    this.cause = cause;
+    this.body = body;
   }
 }

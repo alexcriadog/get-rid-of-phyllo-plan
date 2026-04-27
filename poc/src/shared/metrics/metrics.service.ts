@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   Injectable,
   Logger,
@@ -18,10 +19,15 @@ export interface ApiCallObservation {
   usageHeader: Record<string, unknown> | null;
   accountId: bigint | null;
   rateBucketKey: string | null;
+  product?: string | null;
 }
 
 export interface ApiCallRecord extends ApiCallObservation {
   timestamp: number;
+}
+
+interface ProductContextStore {
+  product: string;
 }
 
 export interface BucketHistoryEntry {
@@ -48,7 +54,25 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   private readonly counters = new Map<string, CounterEntry[]>();
   private readonly apiCalls: ApiCallRecord[] = [];
   private readonly bucketHistory = new Map<string, BucketHistoryEntry[]>();
+  private readonly productAls = new AsyncLocalStorage<ProductContextStore>();
   private snapshotTimer: NodeJS.Timeout | null = null;
+
+  /**
+   * Run `fn` inside an AsyncLocalStorage context that tags every
+   * `observeApiCall` invocation with the given product. Used by the sync
+   * worker to attribute API calls to the product (`identity`/`audience`/
+   * `engagement_new`/`stories`) that triggered them. The product flows
+   * through async boundaries (axios, prisma) without polluting adapter
+   * signatures.
+   */
+  runWithProduct<T>(product: string, fn: () => Promise<T>): Promise<T> {
+    return this.productAls.run({ product }, fn);
+  }
+
+  /** Returns the product currently in scope (set by `runWithProduct`), or null. */
+  currentProduct(): string | null {
+    return this.productAls.getStore()?.product ?? null;
+  }
 
   constructor(
     private readonly prisma: PrismaService,
@@ -96,7 +120,8 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
    * never block the hot fetch path.
    */
   observeApiCall(obs: ApiCallObservation): void {
-    const record: ApiCallRecord = { ...obs, timestamp: Date.now() };
+    const product = obs.product ?? this.currentProduct();
+    const record: ApiCallRecord = { ...obs, product, timestamp: Date.now() };
     this.apiCalls.push(record);
     if (this.apiCalls.length > MAX_API_CALLS) {
       this.apiCalls.splice(0, this.apiCalls.length - MAX_API_CALLS);
@@ -106,6 +131,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       platform: obs.platform,
       endpoint: obs.endpoint,
       status_class: this.statusClass(obs.status),
+      product: product ?? 'unknown',
     });
 
     void this.persistApiCall(record).catch((err: unknown) => {
@@ -197,6 +223,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
           | import('@prisma/client').Prisma.InputJsonValue
           | undefined,
         accountId: record.accountId,
+        product: record.product ?? null,
       },
     });
   }

@@ -1,5 +1,12 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import axios, { AxiosError } from 'axios';
 import { PrismaService } from '@shared/database/prisma.service';
 import { MongoService } from '@shared/database/mongo.service';
 import { RedisService } from '@shared/redis/redis.service';
@@ -17,6 +24,11 @@ import {
   ADAPTER_REGISTRY,
   AdapterRegistry,
 } from '@modules/platforms/platforms.module';
+import { AccountsService, Platform } from '@modules/accounts/accounts.service';
+
+const GRAPH_VERSION = 'v22.0';
+const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
+const DISCOVER_TIMEOUT_MS = 15_000;
 
 const SYNC_QUEUE_NAME: QueueName = 'sync';
 const EVENTS_QUEUE_NAME: QueueName = 'events';
@@ -78,6 +90,7 @@ export class AdminService {
     private readonly metrics: MetricsService,
     private readonly cadence: CadenceService,
     private readonly throttle: ThrottleLockService,
+    private readonly accountsService: AccountsService,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
 
@@ -656,6 +669,7 @@ export class AdminService {
         account_handle: r.accountId
           ? accountMap.get(r.accountId.toString()) ?? null
           : null,
+        product: r.product ?? null,
         called_at: r.calledAt.toISOString(),
       })),
     };
@@ -1083,5 +1097,373 @@ export class AdminService {
       out[k] = v;
     }
     return out;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // System health
+  // ──────────────────────────────────────────────────────────────────────────
+
+  async systemHealth(): Promise<{
+    mysql: { ok: boolean; latency_ms: number | null; error?: string };
+    mongo: { ok: boolean; latency_ms: number | null; error?: string };
+    redis: { ok: boolean; latency_ms: number | null; error?: string };
+    worker: { last_attempt_at: string | null; idle_seconds: number | null };
+    summary: 'ok' | 'warn' | 'danger';
+  }> {
+    const mysql = await this.pingMysql();
+    const mongo = await this.pingMongo();
+    const redis = await this.pingRedis();
+    const worker = await this.workerHeartbeat();
+
+    const idle = worker.idle_seconds;
+    const workerOk = idle != null && idle < 600;
+    const allOk = mysql.ok && mongo.ok && redis.ok && workerOk;
+    const allDown = !mysql.ok && !mongo.ok && !redis.ok;
+
+    return {
+      mysql,
+      mongo,
+      redis,
+      worker,
+      summary: allOk ? 'ok' : allDown ? 'danger' : 'warn',
+    };
+  }
+
+  private async pingMysql(): Promise<{ ok: boolean; latency_ms: number | null; error?: string }> {
+    const start = Date.now();
+    try {
+      await this.prisma.$queryRawUnsafe('SELECT 1');
+      return { ok: true, latency_ms: Date.now() - start };
+    } catch (err) {
+      return { ok: false, latency_ms: null, error: (err as Error).message };
+    }
+  }
+
+  private async pingMongo(): Promise<{ ok: boolean; latency_ms: number | null; error?: string }> {
+    const start = Date.now();
+    try {
+      await this.mongo.getDb().command({ ping: 1 });
+      return { ok: true, latency_ms: Date.now() - start };
+    } catch (err) {
+      return { ok: false, latency_ms: null, error: (err as Error).message };
+    }
+  }
+
+  private async pingRedis(): Promise<{ ok: boolean; latency_ms: number | null; error?: string }> {
+    const start = Date.now();
+    try {
+      await this.redis.client.ping();
+      return { ok: true, latency_ms: Date.now() - start };
+    } catch (err) {
+      return { ok: false, latency_ms: null, error: (err as Error).message };
+    }
+  }
+
+  private async workerHeartbeat(): Promise<{
+    last_attempt_at: string | null;
+    idle_seconds: number | null;
+  }> {
+    try {
+      const row = await this.prisma.syncJob.findFirst({
+        orderBy: { lastAttemptAt: 'desc' },
+        select: { lastAttemptAt: true },
+      });
+      const at = row?.lastAttemptAt ?? null;
+      if (!at) return { last_attempt_at: null, idle_seconds: null };
+      const idle = Math.round((Date.now() - at.getTime()) / 1000);
+      return { last_attempt_at: at.toISOString(), idle_seconds: idle };
+    } catch {
+      return { last_attempt_at: null, idle_seconds: null };
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Cadence overrides — flat list across accounts
+  // ──────────────────────────────────────────────────────────────────────────
+
+  async listCadenceOverrides(): Promise<
+    Array<{
+      account_id: string;
+      account_handle: string | null;
+      platform: string;
+      product: string;
+      interval_seconds: number;
+      reason: string | null;
+      created_at: string;
+      expires_at: string | null;
+    }>
+  > {
+    const rows = await this.prisma.accountCadenceOverride.findMany({
+      include: {
+        account: {
+          select: { id: true, platform: true, handle: true },
+        },
+      },
+      orderBy: [{ accountId: 'asc' }, { product: 'asc' }],
+    });
+    return rows.map((r) => ({
+      account_id: r.account.id.toString(),
+      account_handle: r.account.handle ?? null,
+      platform: r.account.platform,
+      product: r.product,
+      interval_seconds: r.overrideIntervalSeconds,
+      reason: r.reason ?? null,
+      created_at: r.createdAt.toISOString(),
+      expires_at: r.expiresAt ? r.expiresAt.toISOString() : null,
+    }));
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Connect new accounts (discover + seed)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Calls Meta Graph `/me` and `/me/accounts` to enumerate Pages and their
+   * linked Instagram Business accounts. Returns a UI-ready payload so the
+   * admin can one-click connect any of them.
+   *
+   * No data is persisted by this call — it's purely a probe.
+   */
+  async discoverConnections(accessToken: string): Promise<{
+    me: { id: string | null; name: string | null };
+    token_type: 'user' | 'page' | 'unknown';
+    pages: Array<{
+      page_id: string;
+      page_name: string;
+      page_access_token: string;
+      page_already_connected: boolean;
+      instagram?: {
+        ig_business_id: string;
+        username: string | null;
+        name: string | null;
+        followers_count: number | null;
+        profile_picture_url: string | null;
+        already_connected: boolean;
+      };
+    }>;
+    warnings: string[];
+  }> {
+    const warnings: string[] = [];
+
+    // 1. /me with a fat field set so we can disambiguate User vs Page in one
+    //    round-trip. For a Page token, `category` and
+    //    `instagram_business_account` are populated; for a User token they
+    //    aren't.
+    type MeBody = {
+      id?: string;
+      name?: string;
+      category?: string;
+      instagram_business_account?: { id: string };
+    };
+    let meBody: MeBody;
+    try {
+      meBody = await this.graphGet<MeBody>(
+        '/me',
+        { fields: 'id,name,category,instagram_business_account{id}' },
+        accessToken,
+      );
+    } catch (err) {
+      throw new BadRequestException({
+        message:
+          'Token rejected by Meta on /me — check it is a valid User or Page access token.',
+        graph_error: this.extractGraphErrorMessage(err),
+      });
+    }
+    const me = { id: meBody.id ?? null, name: meBody.name ?? null };
+
+    type PageRow = {
+      page_id: string;
+      page_name: string;
+      page_access_token: string;
+      instagram_business_account_id: string | null;
+    };
+    let pageRows: PageRow[] = [];
+    let tokenType: 'user' | 'page' | 'unknown' = 'unknown';
+
+    // 2. Try /me/accounts (User-token path). If Meta says
+    //    "nonexisting field (accounts)", this is a Page token — fall back.
+    try {
+      type GraphPage = {
+        id: string;
+        name: string;
+        access_token: string;
+        instagram_business_account?: { id: string };
+      };
+      const body = await this.graphGet<{ data?: GraphPage[] }>(
+        '/me/accounts',
+        {
+          fields: 'id,name,access_token,instagram_business_account{id}',
+          limit: '100',
+        },
+        accessToken,
+      );
+      tokenType = 'user';
+      pageRows = (body.data ?? []).map((p) => ({
+        page_id: p.id,
+        page_name: p.name,
+        page_access_token: p.access_token,
+        instagram_business_account_id: p.instagram_business_account?.id ?? null,
+      }));
+    } catch (err) {
+      const msg = this.extractGraphErrorMessage(err);
+      const looksLikePageToken =
+        /nonexisting field \(accounts\)/i.test(msg) ||
+        meBody.category != null ||
+        meBody.instagram_business_account != null;
+      if (looksLikePageToken && meBody.id) {
+        // Page-token path: synthesize a single page entry from /me. The
+        // supplied token IS the page-scoped token, so reuse it.
+        tokenType = 'page';
+        pageRows = [
+          {
+            page_id: meBody.id,
+            page_name: meBody.name ?? meBody.id,
+            page_access_token: accessToken,
+            instagram_business_account_id:
+              meBody.instagram_business_account?.id ?? null,
+          },
+        ];
+        warnings.push(
+          'Detected a Page access token. Showing only the Page this token controls. Paste a User token instead to enumerate every Page you manage.',
+        );
+      } else {
+        warnings.push(`Could not list pages: ${msg}`);
+      }
+    }
+
+    // 3. For each IG-linked page, hydrate username/followers in one extra
+    //    call each (cheap, lifetime).
+    const out: Awaited<ReturnType<typeof this.discoverConnections>>['pages'] = [];
+    const existingAccounts = await this.prisma.account.findMany({
+      where: {
+        OR: [
+          {
+            platform: 'facebook',
+            canonicalUserId: { in: pageRows.map((p) => p.page_id) },
+          },
+          {
+            platform: 'instagram',
+            canonicalUserId: {
+              in: pageRows
+                .map((p) => p.instagram_business_account_id)
+                .filter((id): id is string => !!id),
+            },
+          },
+        ],
+      },
+      select: { platform: true, canonicalUserId: true },
+    });
+    const connectedSet = new Set(
+      existingAccounts.map((a) => `${a.platform}:${a.canonicalUserId}`),
+    );
+
+    for (const p of pageRows) {
+      const row: (typeof out)[number] = {
+        page_id: p.page_id,
+        page_name: p.page_name,
+        page_access_token: p.page_access_token,
+        page_already_connected: connectedSet.has(`facebook:${p.page_id}`),
+      };
+      const igId = p.instagram_business_account_id;
+      if (igId) {
+        try {
+          const ig = await this.graphGet<{
+            id: string;
+            username?: string;
+            name?: string;
+            followers_count?: number;
+            profile_picture_url?: string;
+          }>(
+            `/${igId}`,
+            { fields: 'id,username,name,followers_count,profile_picture_url' },
+            p.page_access_token,
+          );
+          row.instagram = {
+            ig_business_id: ig.id,
+            username: ig.username ?? null,
+            name: ig.name ?? null,
+            followers_count: ig.followers_count ?? null,
+            profile_picture_url: ig.profile_picture_url ?? null,
+            already_connected: connectedSet.has(`instagram:${igId}`),
+          };
+        } catch (err) {
+          row.instagram = {
+            ig_business_id: igId,
+            username: null,
+            name: null,
+            followers_count: null,
+            profile_picture_url: null,
+            already_connected: connectedSet.has(`instagram:${igId}`),
+          };
+          warnings.push(
+            `IG metadata for page ${p.page_name} unavailable: ${this.extractGraphErrorMessage(err)}`,
+          );
+        }
+      }
+      out.push(row);
+    }
+
+    return { me, token_type: tokenType, pages: out, warnings };
+  }
+
+  /**
+   * Persists a new Account + OAuthToken + sync_jobs by delegating to
+   * AccountsService. Stores the page_id (for IG) inside metadata so the IG
+   * adapter can use the per-page rate bucket later.
+   */
+  async seedConnection(input: {
+    platform: Platform;
+    accessToken: string;
+    canonicalUserId: string;
+    handle?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{ account_id: string; sync_jobs_created: string[] }> {
+    return this.accountsService.seedAccount({
+      platform: input.platform,
+      accessToken: input.accessToken,
+      canonicalUserId: input.canonicalUserId,
+      handle: input.handle,
+      metadata: input.metadata,
+    });
+  }
+
+  private async graphGet<T>(
+    endpoint: string,
+    params: Record<string, string>,
+    accessToken: string,
+  ): Promise<T> {
+    const res = await axios.get<T>(`${GRAPH_BASE}${endpoint}`, {
+      params: { ...params, access_token: accessToken },
+      timeout: DISCOVER_TIMEOUT_MS,
+      validateStatus: () => true,
+    });
+    if (res.status < 200 || res.status >= 300) {
+      const err = new Error(`HTTP ${res.status}`) as Error & {
+        body?: unknown;
+        status?: number;
+      };
+      err.body = res.data;
+      err.status = res.status;
+      throw err;
+    }
+    return res.data;
+  }
+
+  private extractGraphErrorMessage(err: unknown): string {
+    if (axios.isAxiosError(err)) {
+      const data = (err as AxiosError<{ error?: { message?: string } }>).response
+        ?.data;
+      if (data?.error?.message) return data.error.message;
+      return err.message;
+    }
+    if (err && typeof err === 'object') {
+      const e = err as {
+        body?: { error?: { message?: string } };
+        message?: string;
+      };
+      if (e.body?.error?.message) return e.body.error.message;
+      if (e.message) return e.message;
+    }
+    return String(err);
   }
 }

@@ -46,6 +46,22 @@ const ThrottleReleaseSchema = z
   })
   .strict();
 
+const ConnectDiscoverSchema = z
+  .object({
+    access_token: z.string().min(20),
+  })
+  .strict();
+
+const ConnectSeedSchema = z
+  .object({
+    platform: z.enum(['instagram', 'facebook']),
+    access_token: z.string().min(20),
+    canonical_user_id: z.string().min(1),
+    handle: z.string().min(1).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .strict();
+
 const MINS_MIN = 1;
 const MINS_MAX = 1440;
 const DEFAULT_HISTORY_MINS = 60;
@@ -74,6 +90,16 @@ export class AdminController {
   @HttpCode(200)
   healthz(): { status: 'ok' } {
     return { status: 'ok' };
+  }
+
+  @Get('system/health')
+  async systemHealth(): Promise<unknown> {
+    return this.admin.systemHealth();
+  }
+
+  @Get('cadence-overrides')
+  async cadenceOverrides(): Promise<unknown> {
+    return this.admin.listCadenceOverrides();
   }
 
   // ─── Rate buckets ──────────────────────────────────────────────────────
@@ -345,6 +371,40 @@ export class AdminController {
   @Get('support-matrix')
   supportMatrix(): unknown {
     return this.admin.supportMatrix();
+  }
+
+  // ─── Connect new accounts ──────────────────────────────────────────────
+
+  @Post('connect/discover')
+  @HttpCode(200)
+  async connectDiscover(@Body() body: unknown): Promise<unknown> {
+    const parsed = ConnectDiscoverSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: 'Invalid discover payload',
+        issues: parsed.error.issues,
+      });
+    }
+    return this.admin.discoverConnections(parsed.data.access_token);
+  }
+
+  @Post('connect/seed')
+  @HttpCode(201)
+  async connectSeed(@Body() body: unknown): Promise<unknown> {
+    const parsed = ConnectSeedSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: 'Invalid seed payload',
+        issues: parsed.error.issues,
+      });
+    }
+    return this.admin.seedConnection({
+      platform: parsed.data.platform,
+      accessToken: parsed.data.access_token,
+      canonicalUserId: parsed.data.canonical_user_id,
+      handle: parsed.data.handle,
+      metadata: parsed.data.metadata,
+    });
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────

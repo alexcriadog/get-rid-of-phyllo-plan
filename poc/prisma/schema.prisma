@@ -111,6 +111,7 @@ model ApiCallLog {
   tokensAfter   Int?     @map("tokens_after")
   usageHeader   Json?    @map("usage_header")
   accountId     BigInt?  @map("account_id")
+  product       String?
   calledAt      DateTime @default(now()) @map("called_at")
 
   @@index([calledAt])

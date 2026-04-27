@@ -68,14 +68,18 @@ function getAesKey(): Buffer {
   return Buffer.from(hex, 'hex');
 }
 
-/** Encrypts plaintext -> `iv(12) || ciphertext || authTag(16)` as Bytes. */
+/**
+ * Encrypts plaintext -> `iv(12) || tag(16) || ciphertext` as Bytes.
+ * Must match the layout expected by `AesLocalService.decrypt()` in
+ * src/shared/crypto/aes-local.service.ts.
+ */
 function encryptToken(plaintext: string): Buffer {
   const key = getAesKey();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const enc = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, enc, tag]);
+  return Buffer.concat([iv, tag, enc]);
 }
 
 // ---------- Cadence defaults (IMPLEMENTATION.md §2.5) ----------
@@ -94,6 +98,8 @@ const CADENCE_DEFAULTS: CadenceRow[] = [
   { platform: 'facebook', product: 'identity', defaultIntervalSeconds: 21600 },
   { platform: 'facebook', product: 'audience', defaultIntervalSeconds: 86400 },
   { platform: 'facebook', product: 'engagement_new', defaultIntervalSeconds: 7200 },
+  // Page Stories API: stories expire 24h after publish, so cadence mirrors IG.
+  { platform: 'facebook', product: 'stories', defaultIntervalSeconds: 3600 },
 ];
 
 async function seedCadences(): Promise<number> {
@@ -211,7 +217,7 @@ async function seedAccount(input: SeedAccountInput): Promise<{
 // ---------- Env dispatch ----------
 
 const IG_PRODUCTS = ['identity', 'audience', 'engagement_new', 'stories'];
-const FB_PRODUCTS = ['identity', 'audience', 'engagement_new'];
+const FB_PRODUCTS = ['identity', 'audience', 'engagement_new', 'stories'];
 
 const IG_SCOPES = [
   'instagram_basic',
