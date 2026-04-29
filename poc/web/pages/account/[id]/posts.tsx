@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { useEffect, useRef, useState } from 'react';
 import type { GetServerSideProps } from 'next';
 import { getDb } from '../../../lib/mongo';
@@ -56,27 +57,93 @@ type Post = {
   created_at?: string;
 };
 
+type DateFilter = {
+  /** ISO YYYY-MM-DD or null. */
+  from: string | null;
+  /** ISO YYYY-MM-DD or null. */
+  to: string | null;
+};
+
 type PageProps = {
   id: string;
   posts: Post[];
+  totalAll: number;
+  totalMatching: number;
+  page: number;
+  pageSize: number;
+  filter: DateFilter;
 };
+
+const PAGE_SIZE = 60;
+
+function parseQueryString(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  // YYYY-MM-DD (10 chars). Defensive — anything else is rejected.
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+}
+
+function parsePage(raw: unknown): number {
+  if (typeof raw !== 'string') return 1;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+}
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
   const id = String(ctx.params?.id || '');
+  const from = parseQueryString(ctx.query.from);
+  const to = parseQueryString(ctx.query.to);
+  const page = parsePage(ctx.query.page);
+  const filter: DateFilter = { from, to };
+
   try {
     const db = await getDb();
-    const filters = [{ account_id: id }, { account_id: Number(id) || id }];
-    const raw = await db
-      .collection('posts')
-      .find({ $or: filters })
-      .sort({ 'data.publishedAt': -1, updated_at: -1 })
-      .limit(60)
-      .toArray();
-    return { props: { id, posts: raw.map((r) => toPlainJson(r) as Post) } };
+    const accountFilter = { $or: [{ account_id: id }, { account_id: Number(id) || id }] };
+
+    const dateFilter: Record<string, unknown> = {};
+    if (from) dateFilter.$gte = new Date(`${from}T00:00:00.000Z`);
+    if (to) dateFilter.$lte = new Date(`${to}T23:59:59.999Z`);
+    const query =
+      Object.keys(dateFilter).length > 0
+        ? { ...accountFilter, 'data.publishedAt': dateFilter }
+        : accountFilter;
+
+    const [raw, totalAll, totalMatching] = await Promise.all([
+      db
+        .collection('posts')
+        .find(query)
+        .sort({ 'data.publishedAt': -1, updated_at: -1 })
+        .skip((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .toArray(),
+      db.collection('posts').countDocuments(accountFilter),
+      db.collection('posts').countDocuments(query),
+    ]);
+
+    return {
+      props: {
+        id,
+        posts: raw.map((r) => toPlainJson(r) as Post),
+        totalAll,
+        totalMatching,
+        page,
+        pageSize: PAGE_SIZE,
+        filter,
+      },
+    };
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(err);
-    return { props: { id, posts: [] } };
+    return {
+      props: {
+        id,
+        posts: [],
+        totalAll: 0,
+        totalMatching: 0,
+        page,
+        pageSize: PAGE_SIZE,
+        filter,
+      },
+    };
   }
 };
 
@@ -97,8 +164,19 @@ function toPlainJson(value: unknown): unknown {
   return value;
 }
 
-export default function AccountPosts({ id, posts }: PageProps) {
+export default function AccountPosts({
+  id,
+  posts,
+  totalAll,
+  totalMatching,
+  page,
+  pageSize,
+  filter,
+}: PageProps) {
   const [selected, setSelected] = useState<Post | null>(null);
+  const totalPages = Math.max(1, Math.ceil(totalMatching / pageSize));
+  const firstIdx = totalMatching === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastIdx = Math.min(page * pageSize, totalMatching);
 
   useEffect(() => {
     if (!selected) return;
@@ -151,7 +229,7 @@ export default function AccountPosts({ id, posts }: PageProps) {
             display: 'flex',
             alignItems: 'center',
             gap: 16,
-            marginBottom: 32,
+            marginBottom: 24,
           }}
         >
           <Link
@@ -167,8 +245,23 @@ export default function AccountPosts({ id, posts }: PageProps) {
             ← Overview
           </Link>
           <div style={{ flex: 1 }} />
-          <span className="v-tag outline">{posts.length} posts</span>
+          <span className="v-tag outline">
+            {totalMatching === 0
+              ? '0 posts'
+              : `${firstIdx}–${lastIdx} of ${totalMatching}`}
+          </span>
+          {totalAll !== totalMatching && (
+            <span
+              className="v-meta"
+              style={{ color: 'var(--v-text-muted)' }}
+            >
+              {totalAll} total
+            </span>
+          )}
         </header>
+
+        {/* filter bar */}
+        <DateFilterBar id={id} filter={filter} />
 
         {/* hero title */}
         <div
@@ -252,6 +345,18 @@ export default function AccountPosts({ id, posts }: PageProps) {
                 />
               ))}
             </div>
+
+            {totalPages > 1 && (
+              <Pagination
+                id={id}
+                page={page}
+                totalPages={totalPages}
+                firstIdx={firstIdx}
+                lastIdx={lastIdx}
+                totalMatching={totalMatching}
+                filter={filter}
+              />
+            )}
           </>
         )}
 
@@ -1019,6 +1124,318 @@ function prettyMetricLabel(key: string): string {
   // snake_case → Title Case.
   label = label.replace(/_/g, ' ');
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
+ * Date-range filter for the posts grid. URL-driven (`?from=&to=`) so the
+ * state survives refresh, is shareable, and is rendered server-side
+ * (no flash of unfiltered content). Presets jump to N days back from today.
+ */
+function DateFilterBar({
+  id,
+  filter,
+}: {
+  id: string;
+  filter: DateFilter;
+}) {
+  const router = useRouter();
+  const [from, setFrom] = useState(filter.from ?? '');
+  const [to, setTo] = useState(filter.to ?? '');
+
+  // Keep local inputs in sync if the URL changes externally (back/forward).
+  useEffect(() => {
+    setFrom(filter.from ?? '');
+    setTo(filter.to ?? '');
+  }, [filter.from, filter.to]);
+
+  const apply = (nextFrom: string, nextTo: string) => {
+    // Always reset to page 1 when the filter changes — staying on page 5
+    // of a 2-page result would render an empty grid.
+    const query: Record<string, string> = {};
+    if (nextFrom) query.from = nextFrom;
+    if (nextTo) query.to = nextTo;
+    router.push({ pathname: `/account/${id}/posts`, query });
+  };
+
+  const setPreset = (days: number | 'all') => {
+    if (days === 'all') {
+      apply('', '');
+      return;
+    }
+    const today = new Date();
+    const start = new Date(today.getTime() - days * 86_400_000);
+    apply(toIsoDate(start), toIsoDate(today));
+  };
+
+  const isFiltered = filter.from !== null || filter.to !== null;
+  const isPreset = (days: number) => {
+    if (!isFiltered) return false;
+    const today = new Date();
+    const start = new Date(today.getTime() - days * 86_400_000);
+    return filter.from === toIsoDate(start) && filter.to === toIsoDate(today);
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 28,
+        padding: '14px 18px',
+        background: 'rgba(82, 0, 255, 0.06)',
+        border: '1px solid rgba(82, 0, 255, 0.35)',
+        borderRadius: 14,
+      }}
+    >
+      <span className="v-meta" style={{ color: 'var(--v-text-muted)' }}>
+        Filter
+      </span>
+
+      {/* Presets */}
+      {[
+        { label: '7d', days: 7 },
+        { label: '30d', days: 30 },
+        { label: '90d', days: 90 },
+      ].map((p) => (
+        <button
+          key={p.label}
+          type="button"
+          onClick={() => setPreset(p.days)}
+          className="v-tag"
+          style={{
+            cursor: 'pointer',
+            border: '1px solid #ffffff',
+            background: isPreset(p.days) ? 'var(--v-mint)' : 'transparent',
+            color: isPreset(p.days) ? '#000' : '#fff',
+          }}
+        >
+          Last {p.label}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => setPreset('all')}
+        className="v-tag"
+        style={{
+          cursor: 'pointer',
+          border: '1px solid #ffffff',
+          background: !isFiltered ? 'var(--v-mint)' : 'transparent',
+          color: !isFiltered ? '#000' : '#fff',
+        }}
+      >
+        All time
+      </button>
+
+      <div style={{ flex: 1 }} />
+
+      {/* Custom range inputs */}
+      <label
+        className="v-meta"
+        style={{ color: 'var(--v-text-muted)' }}
+      >
+        From
+      </label>
+      <input
+        type="date"
+        value={from}
+        onChange={(e) => setFrom(e.target.value)}
+        onBlur={() => apply(from, to)}
+        style={inputStyle}
+      />
+      <label
+        className="v-meta"
+        style={{ color: 'var(--v-text-muted)' }}
+      >
+        To
+      </label>
+      <input
+        type="date"
+        value={to}
+        onChange={(e) => setTo(e.target.value)}
+        onBlur={() => apply(from, to)}
+        style={inputStyle}
+      />
+
+    </div>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  background: '#0b0b0b',
+  border: '1px solid rgba(255,255,255,0.2)',
+  color: '#fff',
+  padding: '6px 10px',
+  borderRadius: 8,
+  fontFamily: 'var(--v-mono)',
+  fontSize: 12,
+  colorScheme: 'dark',
+};
+
+function toIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Pagination footer. Mirrors the convention of `Prev | 1 2 [3] 4 5 ... 12 | Next`.
+ * Compresses long page lists with ellipses to keep the row tight. URL-driven
+ * via `?page=N` so back/forward and direct linking work; existing `from`/`to`
+ * filter params are preserved.
+ */
+function Pagination({
+  id,
+  page,
+  totalPages,
+  firstIdx,
+  lastIdx,
+  totalMatching,
+  filter,
+}: {
+  id: string;
+  page: number;
+  totalPages: number;
+  firstIdx: number;
+  lastIdx: number;
+  totalMatching: number;
+  filter: DateFilter;
+}) {
+  const baseQuery: Record<string, string> = {};
+  if (filter.from) baseQuery.from = filter.from;
+  if (filter.to) baseQuery.to = filter.to;
+  const linkFor = (p: number) => ({
+    pathname: `/account/${id}/posts`,
+    query: { ...baseQuery, page: String(p) },
+  });
+
+  // Compress: always show 1, current-1, current, current+1, totalPages, with
+  // ellipses where there are gaps.
+  const pages = compactPageList(page, totalPages);
+
+  return (
+    <nav
+      aria-label="Posts pagination"
+      style={{
+        marginTop: 32,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        flexWrap: 'wrap',
+      }}
+    >
+      <span className="v-meta" style={{ color: 'var(--v-text-muted)' }}>
+        {firstIdx}–{lastIdx} of {totalMatching}
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <PageLink href={page > 1 ? linkFor(page - 1) : null} label="‹ Prev" />
+        {pages.map((p, i) =>
+          p === '…' ? (
+            <span
+              key={`ellipsis-${i}`}
+              className="v-meta"
+              style={{
+                color: 'var(--v-text-muted)',
+                padding: '6px 8px',
+              }}
+            >
+              …
+            </span>
+          ) : (
+            <PageLink
+              key={p}
+              href={linkFor(p)}
+              label={String(p)}
+              active={p === page}
+            />
+          ),
+        )}
+        <PageLink href={page < totalPages ? linkFor(page + 1) : null} label="Next ›" />
+      </div>
+    </nav>
+  );
+}
+
+function PageLink({
+  href,
+  label,
+  active,
+}: {
+  href: { pathname: string; query: Record<string, string> } | null;
+  label: string;
+  active?: boolean;
+}) {
+  const baseStyle: React.CSSProperties = {
+    fontFamily: 'var(--v-mono)',
+    fontSize: 11,
+    letterSpacing: '0.16em',
+    textTransform: 'uppercase',
+    padding: '6px 12px',
+    borderRadius: 8,
+    border: '1px solid',
+    cursor: href ? 'pointer' : 'not-allowed',
+    textDecoration: 'none',
+  };
+  if (active) {
+    return (
+      <span
+        aria-current="page"
+        style={{
+          ...baseStyle,
+          background: 'var(--v-mint)',
+          color: '#000',
+          borderColor: 'var(--v-mint)',
+        }}
+      >
+        {label}
+      </span>
+    );
+  }
+  if (!href) {
+    return (
+      <span
+        aria-disabled="true"
+        style={{
+          ...baseStyle,
+          background: 'transparent',
+          color: 'rgba(255,255,255,0.3)',
+          borderColor: 'rgba(255,255,255,0.15)',
+        }}
+      >
+        {label}
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      style={{
+        ...baseStyle,
+        background: 'transparent',
+        color: '#fff',
+        borderColor: '#ffffff',
+      }}
+    >
+      {label}
+    </Link>
+  );
+}
+
+function compactPageList(current: number, total: number): Array<number | '…'> {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const out: Array<number | '…'> = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) out.push('…');
+  for (let p = start; p <= end; p++) out.push(p);
+  if (end < total - 1) out.push('…');
+  out.push(total);
+  return out;
 }
 
 function isLikelyVideoUrl(url: string): boolean {

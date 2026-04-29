@@ -16,6 +16,9 @@ model Account {
   status               String   @default("ready")
   syncTier             String   @default("standard") @map("sync_tier")
   owningOrganizationId String   @default("demo") @map("owning_organization_id")
+  // Per-platform extension bag — `{ business_id?, page_id?, channel_id?, advertiser_id?, ... }`.
+  // Adapters read from here via their own context builders. Nullable for backwards-compat.
+  metadata             Json?
   connectedAt          DateTime @default(now()) @map("connected_at")
   disconnectedAt       DateTime? @map("disconnected_at")
   createdAt            DateTime @default(now()) @map("created_at")
@@ -30,14 +33,17 @@ model Account {
 }
 
 model OAuthToken {
-  id                    BigInt   @id @default(autoincrement())
-  accountId             BigInt   @unique @map("account_id")
-  accessTokenCiphertext Bytes    @map("access_token_ciphertext")
-  scopes                Json
-  expiresAt             DateTime? @map("expires_at")
-  lastRefreshedAt       DateTime? @map("last_refreshed_at")
-  createdAt             DateTime @default(now()) @map("created_at")
-  account               Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id                     BigInt   @id @default(autoincrement())
+  accountId              BigInt   @unique @map("account_id")
+  accessTokenCiphertext  Bytes    @map("access_token_ciphertext")
+  // TikTok and other rotating-refresh-token platforms keep their refresh secret here.
+  // Meta long-lived tokens leave it null.
+  refreshTokenCiphertext Bytes?   @map("refresh_token_ciphertext")
+  scopes                 Json
+  expiresAt              DateTime? @map("expires_at")
+  lastRefreshedAt        DateTime? @map("last_refreshed_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  account                Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@map("oauth_tokens")
 }

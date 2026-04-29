@@ -1,0 +1,165 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Instagram media mapper (pinning) extractMetrics like_count + comments_count present 1`] = `
+{
+  "comments": 4,
+  "likes": 50,
+}
+`;
+
+exports[`Instagram media mapper (pinning) extractMetrics only like_count 1`] = `
+{
+  "likes": 7,
+}
+`;
+
+exports[`Instagram media mapper (pinning) mediaToContent CAROUSEL_ALBUM with mixed children (image + video) 1`] = `
+{
+  "caption": "Trip",
+  "children": [
+    {
+      "id": "c1",
+      "mediaType": "image",
+      "mediaUrl": "https://scontent.cdninstagram.example/c1.jpg",
+      "permalink": "https://instagram.com/p/c1",
+      "thumbnailUrl": null,
+    },
+    {
+      "id": "c2",
+      "mediaType": "video",
+      "mediaUrl": "https://scontent.cdninstagram.example/c2.mp4",
+      "permalink": "https://instagram.com/p/c2",
+      "thumbnailUrl": "https://scontent.cdninstagram.example/c2-thumb.jpg",
+    },
+  ],
+  "contentType": "carousel",
+  "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "isSharedToFeed": null,
+  "mediaProductType": "FEED",
+  "mediaUrls": [
+    "https://scontent.cdninstagram.example/c1.jpg",
+    "https://scontent.cdninstagram.example/c2.mp4",
+  ],
+  "metrics": {
+    "comments": 17,
+    "likes": 320,
+  },
+  "ownerHandle": "creator_one",
+  "permalink": "https://instagram.com/p/car1",
+  "platformContentId": "ig-carousel-1",
+  "publishedAt": 2026-04-23T08:00:00.000Z,
+  "rawResponse": {
+    "collection": "raw_platform_responses",
+    "contentHash": "353a5d85c21314a3b4ea45ed512299ff1062f6cbf75e67b144213ebabe1add18",
+  },
+  "shortcode": "car1",
+  "thumbnailUrl": null,
+}
+`;
+
+exports[`Instagram media mapper (pinning) mediaToContent IMAGE post with all fields 1`] = `
+{
+  "caption": "Sunset",
+  "children": undefined,
+  "contentType": "image",
+  "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "isSharedToFeed": true,
+  "mediaProductType": "FEED",
+  "mediaUrls": [
+    "https://scontent.cdninstagram.example/img.jpg",
+  ],
+  "metrics": {
+    "comments": 14,
+    "likes": 230,
+  },
+  "ownerHandle": "creator_one",
+  "permalink": "https://instagram.com/p/abc123",
+  "platformContentId": "ig-img-1",
+  "publishedAt": 2026-04-20T19:00:00.000Z,
+  "rawResponse": {
+    "collection": "raw_platform_responses",
+    "contentHash": "5c9919b0754d53ee0e57bf7285ea6a7d9b015e418b577b893a8aee281ceed2b7",
+  },
+  "shortcode": "abc123",
+  "thumbnailUrl": null,
+}
+`;
+
+exports[`Instagram media mapper (pinning) mediaToContent REELS post 1`] = `
+{
+  "caption": "New trend",
+  "children": undefined,
+  "contentType": "video",
+  "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "isSharedToFeed": null,
+  "mediaProductType": "REELS",
+  "mediaUrls": [
+    "https://scontent.cdninstagram.example/r.mp4",
+  ],
+  "metrics": {
+    "comments": 210,
+    "likes": 5400,
+  },
+  "ownerHandle": "creator_one",
+  "permalink": "https://instagram.com/reel/r1",
+  "platformContentId": "ig-reel-1",
+  "publishedAt": 2026-04-22T09:00:00.000Z,
+  "rawResponse": {
+    "collection": "raw_platform_responses",
+    "contentHash": "8c8c4de446a65a0ea19610f4230f9ed6f2261b0f1b4ca21aad4544034f78f8d5",
+  },
+  "shortcode": "r1",
+  "thumbnailUrl": "https://scontent.cdninstagram.example/r-thumb.jpg",
+}
+`;
+
+exports[`Instagram media mapper (pinning) mediaToContent VIDEO post with thumbnail 1`] = `
+{
+  "caption": "Behind the scenes",
+  "children": undefined,
+  "contentType": "video",
+  "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "isSharedToFeed": null,
+  "mediaProductType": "FEED",
+  "mediaUrls": [
+    "https://scontent.cdninstagram.example/v.mp4",
+  ],
+  "metrics": {
+    "comments": 88,
+    "likes": 1100,
+  },
+  "ownerHandle": "creator_one",
+  "permalink": "https://instagram.com/p/vid1",
+  "platformContentId": "ig-vid-1",
+  "publishedAt": 2026-04-21T10:30:00.000Z,
+  "rawResponse": {
+    "collection": "raw_platform_responses",
+    "contentHash": "b5572082c486ccce9602310357efd976315aadb39b8810941c632a03a5951897",
+  },
+  "shortcode": "vid1",
+  "thumbnailUrl": "https://scontent.cdninstagram.example/v-thumb.jpg",
+}
+`;
+
+exports[`Instagram media mapper (pinning) mediaToContent media with unknown media_type falls through to "other" 1`] = `
+{
+  "caption": null,
+  "children": undefined,
+  "contentType": "other",
+  "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "isSharedToFeed": null,
+  "mediaProductType": null,
+  "mediaUrls": [],
+  "metrics": {},
+  "ownerHandle": null,
+  "permalink": "https://instagram.com/p/misc1",
+  "platformContentId": "ig-misc-1",
+  "publishedAt": 2026-04-24T07:00:00.000Z,
+  "rawResponse": {
+    "collection": "raw_platform_responses",
+    "contentHash": "d504e94237a4d8505bf00111469dcf9fda559dbc5443d9483c369b8e8b4a43a3",
+  },
+  "shortcode": null,
+  "thumbnailUrl": null,
+}
+`;

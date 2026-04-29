@@ -1,0 +1,117 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Instagram insights mapper (pinning) insightMetricsForMedia CAROUSEL_ALBUM 1`] = `
+[
+  "reach",
+  "saved",
+  "likes",
+  "comments",
+  "shares",
+  "total_interactions",
+  "follows",
+  "profile_visits",
+]
+`;
+
+exports[`Instagram insights mapper (pinning) insightMetricsForMedia IMAGE 1`] = `
+[
+  "reach",
+  "saved",
+  "likes",
+  "comments",
+  "shares",
+  "total_interactions",
+  "follows",
+  "profile_visits",
+]
+`;
+
+exports[`Instagram insights mapper (pinning) insightMetricsForMedia REELS 1`] = `
+[
+  "reach",
+  "saved",
+  "likes",
+  "comments",
+  "shares",
+  "total_interactions",
+  "views",
+]
+`;
+
+exports[`Instagram insights mapper (pinning) insightMetricsForMedia STORY (media_product_type=STORY) 1`] = `
+[
+  "reach",
+  "replies",
+  "shares",
+  "total_interactions",
+  "follows",
+  "profile_visits",
+]
+`;
+
+exports[`Instagram insights mapper (pinning) insightMetricsForMedia STORY (media_type=STORY only) 1`] = `
+[
+  "reach",
+  "replies",
+  "shares",
+  "total_interactions",
+  "follows",
+  "profile_visits",
+]
+`;
+
+exports[`Instagram insights mapper (pinning) insightMetricsForMedia feed VIDEO 1`] = `
+[
+  "reach",
+  "saved",
+  "likes",
+  "comments",
+  "shares",
+  "total_interactions",
+  "views",
+  "follows",
+  "profile_visits",
+]
+`;
+
+exports[`Instagram insights mapper (pinning) insightMetricsForMedia unknown media_type falls through to FEED-like default 1`] = `
+[
+  "reach",
+  "saved",
+  "likes",
+  "comments",
+  "shares",
+  "total_interactions",
+  "follows",
+  "profile_visits",
+]
+`;
+
+exports[`Instagram insights mapper (pinning) mapInsightsData canonical mappings (reach/saved/shares/views/impressions) 1`] = `
+{
+  "impressions": 30000,
+  "reach": 12000,
+  "saves": 45,
+  "shares": 17,
+  "views": 28000,
+}
+`;
+
+exports[`Instagram insights mapper (pinning) mapInsightsData non-numeric values are skipped (no extra entry) 1`] = `
+{
+  "extra": {
+    "follows": 4,
+  },
+}
+`;
+
+exports[`Instagram insights mapper (pinning) mapInsightsData unknown metrics flow into extra 1`] = `
+{
+  "extra": {
+    "follows": 9,
+    "profile_visits": 22,
+    "total_interactions": 130,
+  },
+  "reach": 100,
+}
+`;

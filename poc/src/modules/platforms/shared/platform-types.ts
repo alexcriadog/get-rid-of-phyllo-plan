@@ -152,6 +152,35 @@ export interface FetchOpts {
   limit?: number;
 }
 
+/**
+ * Canonical comment shape exposed by adapters. Matches the typical "thread"
+ * layout used across platforms: top-level comments + parentCommentId for
+ * nested replies. Non-thread platforms (early Meta APIs) leave parent null.
+ */
+export interface CommentData {
+  platformCommentId: string;
+  /** Which content (post/video) this comment belongs to. */
+  platformContentId: string;
+  /** When this is a reply, the parent comment id. */
+  parentCommentId?: string | null;
+  authorHandle: string | null;
+  authorDisplayName: string | null;
+  text: string;
+  publishedAt: Date | null;
+  fetchedAt: Date;
+  metrics: { likes?: number; replies?: number };
+  /** Pinned to the top of the thread by the content owner. */
+  pinned?: boolean;
+  /** Liked by the content owner / page admin (visible signal on TikTok / IG). */
+  likedByCreator?: boolean;
+  /** True when the comment is by the account owner replying to a fan. */
+  isOwnerReply?: boolean;
+  rawResponse: {
+    collection: string;
+    contentHash: string;
+  };
+}
+
 export type SupportState = 'supported' | 'empty_possible' | 'not_supported';
 
 /**

@@ -21,6 +21,7 @@ import {
 } from '@modules/platforms/platforms.module';
 import type {
   PlatformAdapter,
+  CommentData,
   ContentData,
   ProfileData,
   AudienceData,
@@ -43,13 +44,19 @@ const MAX_CONSECUTIVE_FAILURES = 5;
 const FAILURE_BACKOFF_BASE_MS = 60_000;
 const FAILURE_BACKOFF_MAX_MS = 60 * 60_000;
 
-type ProductType = 'identity' | 'audience' | 'engagement_new' | 'stories';
+type ProductType =
+  | 'identity'
+  | 'audience'
+  | 'engagement_new'
+  | 'stories'
+  | 'comments'
+  | 'mentions';
 
-type FetchResultKind = 'identity' | 'audience' | 'content';
+type FetchResultKind = 'identity' | 'audience' | 'content' | 'comments';
 
 interface FetchResult {
   kind: FetchResultKind;
-  data: ProfileData | AudienceData | ContentData[];
+  data: ProfileData | AudienceData | ContentData[] | CommentData[];
 }
 
 /**
@@ -203,7 +210,11 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
           ? (metadataCarrier.metadata as Record<string, unknown>)
           : {};
 
+      // Spread the full metadata bag first so platform-specific fields
+      // (business_id for TikTok, page_id for Meta, etc.) reach the adapter
+      // unchanged. Then layer the worker-derived fields on top.
       const context = {
+        ...metadata,
         tokenHash: sha256Hex(accessToken).slice(0, 16),
         pageId: typeof metadata.page_id === 'string' ? metadata.page_id : undefined,
         channelId: typeof metadata.channel_id === 'string' ? metadata.channel_id : undefined,
@@ -253,6 +264,17 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         this.metrics.incr('sync_worker_rate_limited', { product });
         const delay =
           Math.max(0, err.resetInMs) + Math.floor(Math.random() * MAX_RATE_LIMIT_JITTER_MS);
+        // Persist a durable record so the operational report can answer
+        // "how often did our local bucket vs Meta block us in the last N
+        // days" without relying on in-memory counters that reset on restart.
+        // `bucketKey` distinguishes local-denial (e.g. rate:fb:page:...)
+        // from a Meta-side 429 (the message includes "Platform 429").
+        await this.emitRawEvent(accountIdBig, product, 'rate.limited', {
+          reason: err.message,
+          bucket_key: err.bucketKey,
+          reset_in_ms: err.resetInMs,
+          source: /platform 429/i.test(err.message) ? 'meta' : 'local',
+        });
         await this.prisma.syncJob.update({
           where: { id: syncJobId },
           data: {
@@ -324,6 +346,26 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         const data = await adapter.fetchStories(accessToken, canonicalId, context);
         return { kind: 'content', data };
       }
+      case 'comments': {
+        if (!adapter.fetchComments) return null;
+        const data = await adapter.fetchComments(
+          accessToken,
+          canonicalId,
+          { limit: 50 },
+          context,
+        );
+        return { kind: 'comments', data };
+      }
+      case 'mentions': {
+        if (!adapter.fetchMentions) return null;
+        const data = await adapter.fetchMentions(
+          accessToken,
+          canonicalId,
+          { limit: 25 },
+          context,
+        );
+        return { kind: 'content', data };
+      }
       default: {
         this.logger.warn(`Unknown product: ${product}`);
         return null;
@@ -375,7 +417,33 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
       return;
     }
 
-    // content
+    if (result.kind === 'comments') {
+      const comments = result.data as CommentData[];
+      if (!Array.isArray(comments) || comments.length === 0) return;
+      const col = this.mongo.getCollection('comments');
+      for (const comment of comments) {
+        const cid = (comment as { platformCommentId?: string }).platformCommentId;
+        if (!cid) continue;
+        await col.updateOne(
+          { account_id: accountIdStr, platform_comment_id: cid },
+          {
+            $set: {
+              account_id: accountIdStr,
+              platform,
+              platform_content_id: comment.platformContentId,
+              platform_comment_id: cid,
+              data: comment,
+              updated_at: now,
+            },
+            $setOnInsert: { created_at: now },
+          },
+          { upsert: true },
+        );
+      }
+      return;
+    }
+
+    // content (engagement_new, stories, mentions)
     const posts = result.data as ContentData[];
     if (!Array.isArray(posts) || posts.length === 0) return;
     const col = this.mongo.getCollection('posts');
@@ -428,8 +496,10 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
   private eventTypeForResult(product: string, result: FetchResult): string {
     if (result.kind === 'identity') return 'profile.updated';
     if (result.kind === 'audience') return 'audience.updated';
+    if (result.kind === 'comments') return 'comment.added';
     // content
     if (product === 'stories') return 'story.added';
+    if (product === 'mentions') return 'mention.added';
     return 'content.added';
   }
 

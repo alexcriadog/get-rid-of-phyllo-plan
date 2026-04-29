@@ -1,0 +1,98 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Facebook story mapper (pinning) mapStoryInsights full 9-metric set 1`] = `
+{
+  "extra": {
+    "mystery_metric_x": 9,
+    "sticker_interactions": 21,
+    "story_replies": 12,
+    "total_interactions": 117,
+    "unique_media_views": 3100,
+  },
+  "impressions": 4400,
+  "likes": 88,
+  "reach": 3300,
+  "shares": 6,
+  "views": 4200,
+}
+`;
+
+exports[`Facebook story mapper (pinning) mapStoryInsights non-numeric values are skipped 1`] = `{}`;
+
+exports[`Facebook story mapper (pinning) mapStoryInsights partial set — missing metrics are absent from output 1`] = `
+{
+  "extra": {
+    "story_replies": 1,
+  },
+  "impressions": 100,
+}
+`;
+
+exports[`Facebook story mapper (pinning) parseCreationTime ISO 8601 1`] = `"2026-04-22T18:15:00.000Z"`;
+
+exports[`Facebook story mapper (pinning) parseCreationTime empty string 1`] = `null`;
+
+exports[`Facebook story mapper (pinning) parseCreationTime numeric seconds 1`] = `"2026-04-26T10:39:48.000Z"`;
+
+exports[`Facebook story mapper (pinning) parseCreationTime string of seconds 1`] = `"2026-04-26T10:39:48.000Z"`;
+
+exports[`Facebook story mapper (pinning) parseCreationTime undefined 1`] = `null`;
+
+exports[`Facebook story mapper (pinning) parseCreationTime unparseable string 1`] = `null`;
+
+exports[`Facebook story mapper (pinning) storyToContent missing creation_time leaves publishedAt null 1`] = `
+{
+  "caption": null,
+  "contentType": "story",
+  "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "mediaProductType": "STORY",
+  "mediaUrls": [],
+  "metrics": {},
+  "permalink": null,
+  "platformContentId": "12345_557",
+  "publishedAt": null,
+  "rawResponse": {
+    "collection": "raw_platform_responses",
+    "contentHash": "8c36cba3979b718120fce461748f8831444596674e3d3c92e26a687086d25d64",
+  },
+  "thumbnailUrl": null,
+}
+`;
+
+exports[`Facebook story mapper (pinning) storyToContent numeric creation_time, photo story 1`] = `
+{
+  "caption": null,
+  "contentType": "story",
+  "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "mediaProductType": "STORY",
+  "mediaUrls": [],
+  "metrics": {},
+  "permalink": "https://facebook.com/stories/556",
+  "platformContentId": "12345_556",
+  "publishedAt": 2026-04-26T10:40:00.000Z,
+  "rawResponse": {
+    "collection": "raw_platform_responses",
+    "contentHash": "e8500782621599aba302b6a8558426d7741d820192bf5890a81fe4fed4dabed5",
+  },
+  "thumbnailUrl": null,
+}
+`;
+
+exports[`Facebook story mapper (pinning) storyToContent numeric-string creation_time, video story 1`] = `
+{
+  "caption": null,
+  "contentType": "story",
+  "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "mediaProductType": "STORY",
+  "mediaUrls": [],
+  "metrics": {},
+  "permalink": "https://facebook.com/stories/555",
+  "platformContentId": "12345_555",
+  "publishedAt": 2026-04-26T10:39:48.000Z,
+  "rawResponse": {
+    "collection": "raw_platform_responses",
+    "contentHash": "2461276618e0e51e7dec1109d9d65bb493118d0f0717e2932ababd743f84ed83",
+  },
+  "thumbnailUrl": null,
+}
+`;

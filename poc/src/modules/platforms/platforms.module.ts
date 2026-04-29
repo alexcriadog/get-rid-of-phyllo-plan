@@ -3,6 +3,8 @@ import { FacebookAdapter } from './facebook/facebook.adapter';
 import { FacebookModule } from './facebook/facebook.module';
 import { InstagramAdapter } from './instagram/instagram.adapter';
 import { InstagramModule } from './instagram/instagram.module';
+import { TikTokAdapter } from './tiktok/tiktok.adapter';
+import { TikTokModule } from './tiktok/tiktok.module';
 import {
   ADAPTER_REGISTRY,
   AdapterRegistry,
@@ -21,20 +23,22 @@ export type { AdapterRegistry };
  * Nothing else in the worker, scheduler, admin, or UI needs to change.
  */
 @Module({
-  imports: [InstagramModule, FacebookModule],
+  imports: [InstagramModule, FacebookModule, TikTokModule],
   providers: [
     {
       provide: ADAPTER_REGISTRY,
       useFactory: (
         ig: InstagramAdapter,
         fb: FacebookAdapter,
+        tt: TikTokAdapter,
       ): AdapterRegistry => ({
         instagram: ig,
         facebook: fb,
+        tiktok: tt,
       }),
-      inject: [InstagramAdapter, FacebookAdapter],
+      inject: [InstagramAdapter, FacebookAdapter, TikTokAdapter],
     },
   ],
-  exports: [ADAPTER_REGISTRY, InstagramModule, FacebookModule],
+  exports: [ADAPTER_REGISTRY, InstagramModule, FacebookModule, TikTokModule],
 })
 export class PlatformsModule {}

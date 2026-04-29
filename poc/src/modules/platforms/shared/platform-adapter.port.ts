@@ -1,6 +1,7 @@
 import { RateLimitHint } from '@shared/redis/rate-bucket.service';
 import {
   AudienceData,
+  CommentData,
   ContentData,
   FetchOpts,
   ProfileData,
@@ -11,6 +12,7 @@ import {
 // or from the port (port = single public entrypoint).
 export type {
   AudienceData,
+  CommentData,
   ContentData,
   FetchOpts,
   ProfileData,
@@ -56,6 +58,32 @@ export interface PlatformAdapter {
   fetchStories?(
     accessToken: string,
     canonicalId: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<ContentData[]>;
+
+  /**
+   * Comments per content item. Optional because not every platform exposes
+   * a public comments API (only TikTok, IG, FB Pages do today). The worker
+   * iterates the most recent N posts and aggregates their comment threads.
+   * Implementations should cap the per-call work — typical implementation:
+   * accept opts.limit as max comments per video.
+   */
+  fetchComments?(
+    accessToken: string,
+    canonicalId: string,
+    opts: FetchOpts,
+    metadata?: Record<string, unknown>,
+  ): Promise<CommentData[]>;
+
+  /**
+   * Posts that mention this account (videos tagging the business account on
+   * TikTok, posts mentioning the IG handle, etc). Returns ContentData[] —
+   * a mention IS a content item, just from a different author.
+   */
+  fetchMentions?(
+    accessToken: string,
+    canonicalId: string,
+    opts: FetchOpts,
     metadata?: Record<string, unknown>,
   ): Promise<ContentData[]>;
 }

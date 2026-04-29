@@ -1,0 +1,54 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Facebook video mapper (pinning) extractVideoMetrics non-numeric values are filtered out 1`] = `{}`;
+
+exports[`Facebook video mapper (pinning) extractVideoMetrics total_video_views maps to views; rest go to extra 1`] = `
+{
+  "extra": {
+    "total_video_avg_time_watched": 7.5,
+  },
+  "views": 100,
+}
+`;
+
+exports[`Facebook video mapper (pinning) videoToContent typical video with description, source and insights 1`] = `
+{
+  "caption": "Highlight reel",
+  "contentType": "video",
+  "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "mediaUrls": [
+    "https://video.example/v.mp4",
+  ],
+  "metrics": {
+    "views": 9876,
+  },
+  "permalink": "https://facebook.com/videos/vid-1",
+  "platformContentId": "vid-1",
+  "publishedAt": 2026-04-15T12:00:00.000Z,
+  "rawResponse": {
+    "collection": "raw_platform_responses",
+    "contentHash": "375880d89eb333fa920709e7bee7a2f28d5c6c73a680d0ec7fbf3d5e1ab470db",
+  },
+  "thumbnailUrl": null,
+}
+`;
+
+exports[`Facebook video mapper (pinning) videoToContent video without description or insights 1`] = `
+{
+  "caption": null,
+  "contentType": "video",
+  "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "mediaUrls": [
+    "https://video.example/v2.mp4",
+  ],
+  "metrics": {},
+  "permalink": "https://facebook.com/videos/vid-2",
+  "platformContentId": "vid-2",
+  "publishedAt": 2026-04-16T15:00:00.000Z,
+  "rawResponse": {
+    "collection": "raw_platform_responses",
+    "contentHash": "40e133e5a3babcbc26681892d1cc63f665cd8f83da2251730be2ff42dc18cead",
+  },
+  "thumbnailUrl": null,
+}
+`;

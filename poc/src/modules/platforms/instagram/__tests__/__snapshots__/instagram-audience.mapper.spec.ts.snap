@@ -1,0 +1,108 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Instagram audience mapper (pinning) parseFollowerDemographics breakdown with empty dimension_values is skipped 1`] = `
+[
+  {
+    "label": "ES",
+    "unit": "count",
+    "value": 200,
+  },
+]
+`;
+
+exports[`Instagram audience mapper (pinning) parseFollowerDemographics breakdown with multi dimension keys (gender + age) 1`] = `
+[
+  {
+    "label": "F|18-24",
+    "unit": "count",
+    "value": 320,
+  },
+  {
+    "label": "M|18-24",
+    "unit": "count",
+    "value": 280,
+  },
+  {
+    "label": "F|25-34",
+    "unit": "count",
+    "value": 410,
+  },
+  {
+    "label": "U|65+",
+    "unit": "count",
+    "value": 4,
+  },
+]
+`;
+
+exports[`Instagram audience mapper (pinning) parseFollowerDemographics breakdown with single dimension key (country) 1`] = `
+[
+  {
+    "label": "ES",
+    "unit": "count",
+    "value": 1200,
+  },
+  {
+    "label": "US",
+    "unit": "count",
+    "value": 850,
+  },
+  {
+    "label": "MX",
+    "unit": "count",
+    "value": 410,
+  },
+]
+`;
+
+exports[`Instagram audience mapper (pinning) splitGenderAge label without dot falls into gender bucket as-is 1`] = `
+{
+  "age": [],
+  "gender": [
+    {
+      "label": "unsplittable",
+      "unit": "count",
+      "value": 7,
+    },
+  ],
+}
+`;
+
+exports[`Instagram audience mapper (pinning) splitGenderAge typical FB-style F.18-24 / M.25-34 entries 1`] = `
+{
+  "age": [
+    {
+      "label": "18-24",
+      "unit": "count",
+      "value": 180,
+    },
+    {
+      "label": "25-34",
+      "unit": "count",
+      "value": 240,
+    },
+    {
+      "label": "65+",
+      "unit": "count",
+      "value": 5,
+    },
+  ],
+  "gender": [
+    {
+      "label": "F",
+      "unit": "count",
+      "value": 230,
+    },
+    {
+      "label": "M",
+      "unit": "count",
+      "value": 190,
+    },
+    {
+      "label": "U",
+      "unit": "count",
+      "value": 5,
+    },
+  ],
+}
+`;
