@@ -33,7 +33,19 @@ import {
 
 const SYNC_QUEUE_NAME = 'sync';
 const DEFAULT_CONCURRENCY = 4;
-const MAX_RATE_LIMIT_JITTER_MS = 5_000;
+/**
+ * Rate-limit retry jitter is PROPORTIONAL to the platform's reset window.
+ * Why: with a fixed 5s jitter and N rate-limited accounts, all N converge in
+ * a 5-second window in the future — when the window opens, they hammer at
+ * once and the bucket re-empties immediately. Spreading the retry across
+ * the full reset window (capped at 30 min so we don't over-defer short
+ * resets) gives uniform pressure once the bucket starts refilling.
+ *
+ * Floor at 5s so even a 200 ms reset doesn't collapse to "everyone retries
+ * at the same millisecond".
+ */
+const RATE_LIMIT_JITTER_MIN_MS = 5_000;
+const RATE_LIMIT_JITTER_MAX_MS = 30 * 60_000;
 const THROTTLE_LOCK_TTL_SECONDS = 600;
 
 // Strict failure-budget controls (BullMQ attempts=1; no retry storm).
@@ -262,8 +274,16 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         // picks it up again once the window has elapsed. No worker-side
         // re-enqueue → no way for rate-limits to amplify call volume.
         this.metrics.incr('sync_worker_rate_limited', { product });
-        const delay =
-          Math.max(0, err.resetInMs) + Math.floor(Math.random() * MAX_RATE_LIMIT_JITTER_MS);
+        // Jitter spans up to the full reset window (capped at 30 min) so
+        // many rate-limited accounts spread across the recovery curve
+        // instead of slamming back the second the cap reopens.
+        const reset = Math.max(0, err.resetInMs);
+        const jitterCeiling = Math.min(reset, RATE_LIMIT_JITTER_MAX_MS);
+        const jitter = Math.max(
+          RATE_LIMIT_JITTER_MIN_MS,
+          Math.floor(Math.random() * jitterCeiling),
+        );
+        const delay = reset + jitter;
         // Persist a durable record so the operational report can answer
         // "how often did our local bucket vs Meta block us in the last N
         // days" without relying on in-memory counters that reset on restart.

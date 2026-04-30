@@ -3,13 +3,24 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 
-export type Platform = 'instagram' | 'facebook';
+export type Platform = 'instagram' | 'facebook' | 'tiktok';
 
 export interface SeedAccountInput {
   platform: Platform;
   accessToken: string;
+  /** TikTok issues rotating refresh tokens; persist when provided. */
+  refreshToken?: string;
+  /** Token expiry — TikTok defaults to ~24h; lets the refresh service know
+   * when to ask for a new pair before the next call. */
+  expiresAt?: Date;
   canonicalUserId: string;
   handle?: string;
+  /**
+   * Free-form per-platform context bag persisted to `account.metadata`.
+   *   - Meta: `{ page_id, ig_business_id }`
+   *   - TikTok: `{ business_id, open_id, advertiser_id?, scopes? }`
+   * Adapters read this via their own context builders.
+   */
   metadata?: Record<string, unknown>;
 }
 
@@ -26,6 +37,8 @@ const PRODUCTS_BY_PLATFORM: Record<Platform, ReadonlyArray<string>> = {
   instagram: ['identity', 'audience', 'engagement_new', 'stories'],
   // Page Stories API is GA in v22 — see FacebookAdapter.fetchStories.
   facebook: ['identity', 'audience', 'engagement_new', 'stories'],
+  // TikTok BC v1.3: stories don't exist; mentions probe pending.
+  tiktok: ['identity', 'audience', 'engagement_new', 'comments'],
 };
 
 @Injectable()
@@ -43,8 +56,17 @@ export class AccountsService {
       throw new Error(`Unsupported platform: ${input.platform}`);
     }
 
-    const ciphertext = this.aes.encrypt(input.accessToken);
+    const accessCipher = this.aes.encrypt(input.accessToken);
+    const refreshCipher = input.refreshToken
+      ? this.aes.encrypt(input.refreshToken)
+      : null;
     const now = new Date();
+    // Prisma doesn't accept `undefined` for nullable JSON columns when you
+    // want a SQL NULL; use the explicit JsonNull sentinel.
+    const metadataValue: Prisma.InputJsonValue | typeof Prisma.JsonNull =
+      input.metadata && Object.keys(input.metadata).length > 0
+        ? (input.metadata as Prisma.InputJsonValue)
+        : Prisma.JsonNull;
 
     return this.prisma.$transaction(async (tx) => {
       const account = await tx.account.upsert({
@@ -60,10 +82,16 @@ export class AccountsService {
           handle: input.handle ?? null,
           status: 'ready',
           syncTier: 'standard',
+          metadata: metadataValue,
         },
         update: {
           handle: input.handle ?? undefined,
           status: 'ready',
+          // Only overwrite metadata when the caller provided one — preserves
+          // existing keys (e.g. page_id) on a re-seed of the same account.
+          ...(input.metadata && Object.keys(input.metadata).length > 0
+            ? { metadata: metadataValue }
+            : {}),
         },
       });
 
@@ -71,11 +99,15 @@ export class AccountsService {
         where: { accountId: account.id },
         create: {
           accountId: account.id,
-          accessTokenCiphertext: ciphertext,
+          accessTokenCiphertext: accessCipher,
+          refreshTokenCiphertext: refreshCipher,
+          expiresAt: input.expiresAt ?? null,
           scopes: (input.metadata?.scopes as Prisma.InputJsonValue) ?? [],
         },
         update: {
-          accessTokenCiphertext: ciphertext,
+          accessTokenCiphertext: accessCipher,
+          refreshTokenCiphertext: refreshCipher ?? undefined,
+          expiresAt: input.expiresAt ?? undefined,
           lastRefreshedAt: now,
         },
       });

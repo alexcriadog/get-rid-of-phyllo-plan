@@ -30,6 +30,27 @@ type PostChild = {
   permalink?: string | null;
 };
 
+type DistributionBucket = {
+  label: string;
+  value: number;     // fraction 0..1 when unit='percent', absolute count otherwise
+  unit?: 'percent' | 'count';
+};
+
+type SecondPercentage = {
+  second: number;
+  percentage: number;  // fraction 0..1
+};
+
+type PostInsights = {
+  trafficSources?: DistributionBucket[];
+  retentionCurve?: SecondPercentage[];
+  likesTimeline?: SecondPercentage[];
+  audienceCountries?: DistributionBucket[];
+  audienceCities?: DistributionBucket[];
+  audienceGenders?: DistributionBucket[];
+  audienceTypes?: DistributionBucket[];
+};
+
 type PostData = {
   platformContentId?: string;
   contentType?: string;
@@ -37,7 +58,11 @@ type PostData = {
   permalink?: string | null;
   mediaUrls?: string[];
   thumbnailUrl?: string | null;
+  /** Platform-provided embeddable player URL (TikTok). */
+  embedUrl?: string | null;
   metrics?: PostMetrics;
+  /** Per-post breakdowns (TikTok). Optional. */
+  insights?: PostInsights;
   publishedAt?: string | null;
   fetchedAt?: string | null;
   rawResponse?: { collection?: string; contentHash?: string };
@@ -565,14 +590,18 @@ function PostCard({ post, onClick }: { post: Post; onClick: () => void }) {
   );
 }
 
+type DialogTab = 'stats' | 'insights' | 'comments' | 'raw';
+
 function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
   const d = post.data;
   const children = d?.children ?? [];
   const [slideIdx, setSlideIdx] = useState(0);
+  const [activeTab, setActiveTab] = useState<DialogTab>('stats');
 
   // Reset when a different post is opened.
   useEffect(() => {
     setSlideIdx(0);
+    setActiveTab('stats');
   }, [post.platform_content_id]);
 
   // Arrow-key navigation (dispatched from the parent's keydown listener).
@@ -670,7 +699,30 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
               position: 'relative',
             }}
           >
-            {active.mediaUrl ? (
+            {/*
+              TikTok BC v1.3 doesn't expose a downloadable MP4 — only an
+              official `embed_url` to their player. Prefer that iframe over
+              the thumbnail-only fallback so the video actually plays inline.
+            */}
+            {d?.embedUrl && activeIdx === 0 && (d?.contentType === 'video' || activeIsVideo) ? (
+              <iframe
+                key={`embed-${post.platform_content_id}`}
+                src={d.embedUrl}
+                title={`${post.platform} ${d.contentType ?? 'video'}`}
+                allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+                style={{
+                  border: 0,
+                  width: '100%',
+                  maxWidth: 420,
+                  aspectRatio: '9 / 16',
+                  height: 'auto',
+                  background: '#000',
+                  display: 'block',
+                }}
+              />
+            ) : active.mediaUrl ? (
               activeIsVideo ? (
                 <video
                   key={`slide-${activeIdx}`}
@@ -851,158 +903,65 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
 
           {d?.caption && <ExpandableCaption text={d.caption} />}
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-              gap: 10,
-            }}
-          >
-            {metricsList.length === 0 ? (
+          <TabStrip
+            active={activeTab}
+            onChange={setActiveTab}
+            insightsAvailable={Boolean(d?.insights && hasAnyInsight(d.insights))}
+            commentsCount={d?.metrics?.comments}
+          />
+
+          {activeTab === 'stats' && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                gap: 10,
+              }}
+            >
+              {metricsList.length === 0 ? (
+                <div
+                  className="v-body"
+                  style={{
+                    gridColumn: '1 / -1',
+                    color: 'var(--v-text-muted)',
+                    fontSize: 13,
+                  }}
+                >
+                  No metrics captured yet.
+                </div>
+              ) : (
+                metricsList.map(([label, value]) => (
+                  <MetricTile key={label} label={label} value={fmtNumber(value as number)} />
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'insights' && (
+            d?.insights && hasAnyInsight(d.insights) ? (
+              <InsightsBlock insights={d.insights} />
+            ) : (
               <div
                 className="v-body"
-                style={{
-                  gridColumn: '1 / -1',
-                  color: 'var(--v-text-muted)',
-                  fontSize: 13,
-                }}
+                style={{ color: 'var(--v-text-muted)', fontSize: 13 }}
               >
-                No metrics captured yet.
+                No per-post insights captured yet. TikTok exposes them; Meta
+                doesn&apos;t.
               </div>
-            ) : (
-              metricsList.map(([label, value]) => (
-                <MetricTile key={label} label={label} value={fmtNumber(value as number)} />
-              ))
-            )}
-          </div>
+            )
+          )}
 
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
-              borderTop: '1px solid #3d00bf',
-              paddingTop: 20,
-            }}
-          >
-            <DetailRow
-              label="Published"
-              value={
-                d?.publishedAt
-                  ? `${fmtDateTime(d.publishedAt)} · ${fmtRelative(d.publishedAt)}`
-                  : '—'
-              }
+          {activeTab === 'comments' && (
+            <CommentsTab
+              accountId={post.account_id}
+              contentId={post.platform_content_id}
+              expectedCount={d?.metrics?.comments ?? 0}
             />
-            <DetailRow
-              label="Synced"
-              value={
-                post.updated_at
-                  ? `${fmtDateTime(post.updated_at)} · ${fmtRelative(post.updated_at)}`
-                  : '—'
-              }
-            />
-            <DetailRow label="Platform id" value={post.platform_content_id} mono />
-            {d?.mediaProductType && (
-              <DetailRow label="Product type" value={d.mediaProductType} mono />
-            )}
-            {d?.shortcode && (
-              <DetailRow label="Shortcode" value={d.shortcode} mono />
-            )}
-            {d?.ownerHandle && (
-              <DetailRow label="Owner" value={`@${d.ownerHandle}`} mono />
-            )}
-            {d?.isSharedToFeed !== null && d?.isSharedToFeed !== undefined && (
-              <DetailRow
-                label="Shared to feed"
-                value={d.isSharedToFeed ? 'yes' : 'no'}
-              />
-            )}
-            {(d?.children?.length ?? 0) > 0 && (
-              <DetailRow
-                label="Carousel"
-                value={`${d?.children?.length} slides`}
-              />
-            )}
-            {d?.permalink && (
-              <DetailRow
-                label="Permalink"
-                value={
-                  <a
-                    href={d.permalink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: 'var(--v-mint)' }}
-                  >
-                    Open on {post.platform} ↗
-                  </a>
-                }
-              />
-            )}
-            {d?.mediaUrls && d.mediaUrls.length > 0 && (
-              <DetailRow
-                label="Media URLs"
-                value={
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {d.mediaUrls.map((u, i) => (
-                      <a
-                        key={i}
-                        href={u}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          color: 'var(--v-mint)',
-                          fontSize: 11,
-                          wordBreak: 'break-all',
-                          fontFamily: 'var(--v-mono)',
-                        }}
-                      >
-                        {truncate(u, 64)}
-                      </a>
-                    ))}
-                  </div>
-                }
-              />
-            )}
-            {d?.rawResponse?.contentHash && (
-              <DetailRow
-                label="Raw hash"
-                value={d.rawResponse.contentHash.slice(0, 16) + '…'}
-                mono
-              />
-            )}
-          </div>
+          )}
 
-          <details style={{ marginTop: 4 }}>
-            <summary
-              className="v-meta"
-              style={{
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-            >
-              Raw document JSON
-            </summary>
-            <pre
-              style={{
-                background: '#0b0b0b',
-                border: '1px solid rgba(255,255,255,0.08)',
-                padding: 16,
-                borderRadius: 10,
-                marginTop: 10,
-                fontSize: 11,
-                lineHeight: 1.55,
-                overflow: 'auto',
-                maxHeight: 420,
-                fontFamily: 'var(--v-mono)',
-                color: '#e9e9e9',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                tabSize: 2,
-              }}
-            >
-              {JSON.stringify(post, null, 2)}
-            </pre>
-          </details>
+          {activeTab === 'raw' && (
+            <RawDetailsBlock post={post} />
+          )}
         </div>
       </div>
     </div>
@@ -1445,6 +1404,719 @@ function isLikelyVideoUrl(url: string): boolean {
   } catch {
     return /\.mp4/i.test(url);
   }
+}
+
+function hasAnyInsight(i: PostInsights): boolean {
+  return Boolean(
+    (i.trafficSources && i.trafficSources.length > 0) ||
+    (i.retentionCurve && i.retentionCurve.length > 0) ||
+    (i.likesTimeline && i.likesTimeline.length > 0) ||
+    (i.audienceCountries && i.audienceCountries.length > 0) ||
+    (i.audienceCities && i.audienceCities.length > 0) ||
+    (i.audienceGenders && i.audienceGenders.length > 0) ||
+    (i.audienceTypes && i.audienceTypes.length > 0),
+  );
+}
+
+function fmtPercent(fraction: number): string {
+  // Inputs are 0..1 fractions (TikTok convention); render as 0%..100%.
+  const v = fraction * 100;
+  return v >= 10 ? `${v.toFixed(0)}%` : `${v.toFixed(1)}%`;
+}
+
+/**
+ * Per-post insights — surfaced under the post dialog. TikTok ships every
+ * field documented here; for platforms that don't, the `hasAnyInsight`
+ * gate above keeps the block hidden so it doesn't render an empty section.
+ */
+function InsightsBlock({ insights }: { insights: PostInsights }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 18,
+        marginTop: 4,
+        paddingTop: 18,
+        borderTop: '1px solid #3d00bf',
+      }}
+    >
+      <div className="v-kicker mint" style={{ letterSpacing: '0.16em' }}>
+        Per-post insights
+      </div>
+
+      {insights.retentionCurve && insights.retentionCurve.length > 0 && (
+        <div>
+          <div
+            className="v-meta"
+            style={{ color: 'var(--v-text-muted)', marginBottom: 6 }}
+          >
+            Retention curve · what % of viewers were still watching at each second
+          </div>
+          <RetentionSparkline points={insights.retentionCurve} accent="#3cffd0" />
+        </div>
+      )}
+
+      {insights.likesTimeline && insights.likesTimeline.some((p) => p.percentage > 0) && (
+        <div>
+          <div
+            className="v-meta"
+            style={{ color: 'var(--v-text-muted)', marginBottom: 6 }}
+          >
+            Likes timeline · % of total likes given at each second
+          </div>
+          <RetentionSparkline points={insights.likesTimeline} accent="#ff5cd2" />
+        </div>
+      )}
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: 16,
+        }}
+      >
+        {insights.trafficSources && insights.trafficSources.length > 0 && (
+          <BucketBars title="Traffic source" buckets={insights.trafficSources} />
+        )}
+        {insights.audienceTypes && insights.audienceTypes.length > 0 && (
+          <BucketBars title="Audience type" buckets={insights.audienceTypes} />
+        )}
+        {insights.audienceCountries && insights.audienceCountries.length > 0 && (
+          <BucketBars
+            title="Top countries"
+            buckets={insights.audienceCountries}
+            limit={6}
+          />
+        )}
+        {insights.audienceCities && insights.audienceCities.length > 0 && (
+          <BucketBars title="Top cities" buckets={insights.audienceCities} limit={6} />
+        )}
+        {insights.audienceGenders && insights.audienceGenders.length > 0 && (
+          <BucketBars title="Gender split" buckets={insights.audienceGenders} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BucketBars({
+  title,
+  buckets,
+  limit,
+}: {
+  title: string;
+  buckets: DistributionBucket[];
+  limit?: number;
+}) {
+  // Sort by value descending so the dominant slice is on top.
+  const ordered = [...buckets].sort((a, b) => b.value - a.value);
+  const visible = limit ? ordered.slice(0, limit) : ordered;
+
+  return (
+    <div
+      style={{
+        background: '#0b0b0b',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 14,
+        padding: 14,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}
+    >
+      <div className="v-meta" style={{ fontSize: 10, color: 'var(--v-text-muted)' }}>
+        {title}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {visible.map((b) => {
+          const pct = b.unit === 'count' ? b.value : Math.max(0, Math.min(1, b.value)) * 100;
+          const display = b.unit === 'count' ? fmtNumber(b.value) : fmtPercent(b.value);
+          return (
+            <div key={b.label} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontFamily: 'var(--v-mono)',
+                  fontSize: 11,
+                  color: '#fff',
+                }}
+              >
+                <span>{b.label}</span>
+                <span style={{ color: 'var(--v-text-muted)' }}>{display}</span>
+              </div>
+              {b.unit !== 'count' && (
+                <div
+                  style={{
+                    height: 4,
+                    background: 'rgba(255,255,255,0.08)',
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${pct}%`,
+                      height: '100%',
+                      background: 'var(--v-mint)',
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RetentionSparkline({
+  points,
+  accent,
+}: {
+  points: SecondPercentage[];
+  accent: string;
+}) {
+  if (points.length === 0) return null;
+  // Sort defensively (mapper sorts already, but a UI render is too cheap a
+  // place to trust upstream).
+  const sorted = [...points].sort((a, b) => a.second - b.second);
+  const width = 600;
+  const height = 90;
+  const padX = 4;
+  const padY = 6;
+  const maxSecond = sorted[sorted.length - 1].second || 1;
+  const innerW = width - padX * 2;
+  const innerH = height - padY * 2;
+  const pathD = sorted
+    .map((p, i) => {
+      const x = padX + (p.second / maxSecond) * innerW;
+      const y = padY + (1 - Math.max(0, Math.min(1, p.percentage))) * innerH;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  // Closed area path for fill below the line.
+  const areaD = `${pathD} L${padX + innerW},${padY + innerH} L${padX},${padY + innerH} Z`;
+
+  return (
+    <svg
+      width="100%"
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="Retention curve"
+      style={{
+        display: 'block',
+        background: '#0b0b0b',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 10,
+      }}
+    >
+      <path d={areaD} fill={accent} fillOpacity={0.18} />
+      <path d={pathD} stroke={accent} strokeWidth={1.5} fill="none" />
+      <text
+        x={padX}
+        y={height - 2}
+        fontFamily="var(--v-mono)"
+        fontSize={9}
+        fill="rgba(255,255,255,0.4)"
+      >
+        0s
+      </text>
+      <text
+        x={width - padX}
+        y={height - 2}
+        textAnchor="end"
+        fontFamily="var(--v-mono)"
+        fontSize={9}
+        fill="rgba(255,255,255,0.4)"
+      >
+        {maxSecond}s
+      </text>
+    </svg>
+  );
+}
+
+type TabDef = { id: DialogTab; label: string; badge?: string | number; dim?: boolean };
+
+function TabStrip({
+  active,
+  onChange,
+  insightsAvailable,
+  commentsCount,
+}: {
+  active: DialogTab;
+  onChange: (t: DialogTab) => void;
+  insightsAvailable: boolean;
+  commentsCount?: number;
+}) {
+  const tabs: TabDef[] = [
+    { id: 'stats', label: 'Stats' },
+    { id: 'insights', label: 'Insights', dim: !insightsAvailable },
+    {
+      id: 'comments',
+      label: 'Comments',
+      badge: typeof commentsCount === 'number' && commentsCount > 0 ? commentsCount : undefined,
+    },
+    { id: 'raw', label: 'Raw' },
+  ];
+
+  return (
+    <div
+      role="tablist"
+      style={{
+        display: 'flex',
+        gap: 4,
+        padding: 4,
+        background: '#0b0b0b',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 12,
+        marginTop: 4,
+      }}
+    >
+      {tabs.map((t) => {
+        const isActive = active === t.id;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onChange(t.id)}
+            style={{
+              all: 'unset',
+              cursor: 'pointer',
+              flex: 1,
+              padding: '8px 12px',
+              borderRadius: 8,
+              fontFamily: 'var(--v-mono)',
+              fontSize: 11,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              textAlign: 'center',
+              background: isActive ? 'var(--v-mint)' : 'transparent',
+              color: isActive
+                ? '#000'
+                : t.dim
+                ? 'rgba(255,255,255,0.35)'
+                : '#fff',
+              transition: 'background 120ms ease, color 120ms ease',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            <span>{t.label}</span>
+            {t.badge !== undefined && (
+              <span
+                style={{
+                  fontSize: 10,
+                  padding: '1px 6px',
+                  borderRadius: 999,
+                  background: isActive ? '#000' : 'rgba(255,255,255,0.12)',
+                  color: isActive ? 'var(--v-mint)' : '#fff',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                {t.badge}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface ApiCommentDoc {
+  platformCommentId: string;
+  platformContentId: string;
+  parentCommentId?: string | null;
+  authorHandle: string | null;
+  authorDisplayName: string | null;
+  text: string;
+  publishedAt: string | null;
+  fetchedAt: string | null;
+  metrics: { likes?: number; replies?: number };
+  pinned?: boolean;
+  likedByCreator?: boolean;
+  isOwnerReply?: boolean;
+}
+
+interface CommentsApiResponse {
+  contentId: string;
+  total: number;
+  comments: ApiCommentDoc[];
+  error?: string;
+}
+
+/**
+ * Lazy-loads /api/comments?accountId=X&contentId=Y when the tab activates.
+ * One fetch per (accountId, contentId) — re-renders on the same dialog reuse
+ * the cached array. Renders top-level comments + indented replies.
+ */
+function CommentsTab({
+  accountId,
+  contentId,
+  expectedCount,
+}: {
+  accountId: string;
+  contentId: string;
+  expectedCount: number;
+}) {
+  const [data, setData] = useState<ApiCommentDoc[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetch(`/api/comments?accountId=${encodeURIComponent(accountId)}&contentId=${encodeURIComponent(contentId)}`)
+      .then(async (r) => {
+        const body = (await r.json()) as CommentsApiResponse;
+        if (cancelled) return;
+        if (!r.ok || body.error) {
+          setError(body.error || `HTTP ${r.status}`);
+          setData([]);
+        } else {
+          setData(body.comments);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setData([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, contentId]);
+
+  if (loading) {
+    return (
+      <div className="v-body" style={{ color: 'var(--v-text-muted)', fontSize: 13 }}>
+        Loading comments…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="v-body" style={{ color: '#ff7777', fontSize: 13 }}>
+        Failed to load comments: {error}
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div
+        className="v-body"
+        style={{ color: 'var(--v-text-muted)', fontSize: 13, lineHeight: 1.6 }}
+      >
+        No comments synced for this post yet.
+        {expectedCount > 0 && (
+          <>
+            {' '}
+            <span style={{ color: '#fff' }}>
+              The post counter shows {fmtNumber(expectedCount)} on the platform —
+              run a comments sync to capture them.
+            </span>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div
+        className="v-meta"
+        style={{ color: 'var(--v-text-muted)' }}
+      >
+        {data.length} comment{data.length === 1 ? '' : 's'} synced
+        {expectedCount > 0 && expectedCount !== data.length && (
+          <span style={{ marginLeft: 6, color: 'rgba(255,255,255,0.5)' }}>
+            · platform counter says {fmtNumber(expectedCount)}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {data.map((c) => (
+          <CommentRow key={c.platformCommentId} comment={c} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CommentRow({ comment }: { comment: ApiCommentDoc }) {
+  const isReply = !!comment.parentCommentId;
+  const initials = (comment.authorDisplayName || comment.authorHandle || '?')
+    .trim()
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <div
+      style={{
+        marginLeft: isReply ? 32 : 0,
+        padding: 12,
+        background: '#0b0b0b',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderLeft: comment.pinned
+          ? '3px solid var(--v-mint)'
+          : isReply
+          ? '3px solid rgba(255,255,255,0.18)'
+          : '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 10,
+        display: 'flex',
+        gap: 12,
+      }}
+    >
+      <div
+        aria-hidden="true"
+        style={{
+          width: 32,
+          height: 32,
+          flexShrink: 0,
+          borderRadius: '50%',
+          background: '#2d2d2d',
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: 'var(--v-mono)',
+          fontSize: 11,
+          letterSpacing: '0.05em',
+        }}
+      >
+        {initials}
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            fontFamily: 'var(--v-mono)',
+            fontSize: 11,
+          }}
+        >
+          <span style={{ color: '#fff' }}>
+            {comment.authorDisplayName ||
+              (comment.authorHandle ? `@${comment.authorHandle}` : 'Unknown')}
+          </span>
+          {comment.authorHandle && comment.authorDisplayName && (
+            <span style={{ color: 'rgba(255,255,255,0.5)' }}>
+              @{comment.authorHandle}
+            </span>
+          )}
+          {comment.pinned && <span className="v-tag mint">📌 pinned</span>}
+          {comment.likedByCreator && (
+            <span className="v-tag outline">❤ creator</span>
+          )}
+          {comment.isOwnerReply && (
+            <span className="v-tag outline">🪪 owner</span>
+          )}
+          <div style={{ flex: 1 }} />
+          <span className="v-meta" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            <RelativeTime value={comment.publishedAt} />
+          </span>
+        </div>
+        <p
+          className="v-body"
+          style={{
+            margin: 0,
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: '#fff',
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          {comment.text || (
+            <span style={{ color: 'rgba(255,255,255,0.4)' }}>(no text)</span>
+          )}
+        </p>
+        {(comment.metrics?.likes || comment.metrics?.replies) && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              fontFamily: 'var(--v-mono)',
+              fontSize: 11,
+              color: 'rgba(255,255,255,0.55)',
+              marginTop: 2,
+            }}
+          >
+            {!!comment.metrics?.likes && <span>♥ {fmtNumber(comment.metrics.likes)}</span>}
+            {!!comment.metrics?.replies && (
+              <span>↩ {fmtNumber(comment.metrics.replies)} replies</span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RawDetailsBlock({ post }: { post: Post }) {
+  const d = post.data;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 18,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
+        <DetailRow
+          label="Published"
+          value={
+            d?.publishedAt
+              ? `${fmtDateTime(d.publishedAt)} · ${fmtRelative(d.publishedAt)}`
+              : '—'
+          }
+        />
+        <DetailRow
+          label="Synced"
+          value={
+            post.updated_at
+              ? `${fmtDateTime(post.updated_at)} · ${fmtRelative(post.updated_at)}`
+              : '—'
+          }
+        />
+        <DetailRow label="Platform id" value={post.platform_content_id} mono />
+        {d?.mediaProductType && (
+          <DetailRow label="Product type" value={d.mediaProductType} mono />
+        )}
+        {d?.shortcode && <DetailRow label="Shortcode" value={d.shortcode} mono />}
+        {d?.ownerHandle && (
+          <DetailRow label="Owner" value={`@${d.ownerHandle}`} mono />
+        )}
+        {d?.isSharedToFeed !== null && d?.isSharedToFeed !== undefined && (
+          <DetailRow
+            label="Shared to feed"
+            value={d.isSharedToFeed ? 'yes' : 'no'}
+          />
+        )}
+        {(d?.children?.length ?? 0) > 0 && (
+          <DetailRow label="Carousel" value={`${d?.children?.length} slides`} />
+        )}
+        {d?.embedUrl && (
+          <DetailRow
+            label="Embed URL"
+            value={
+              <a
+                href={d.embedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: 'var(--v-mint)',
+                  fontSize: 11,
+                  fontFamily: 'var(--v-mono)',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {truncate(d.embedUrl, 64)}
+              </a>
+            }
+          />
+        )}
+        {d?.permalink && (
+          <DetailRow
+            label="Permalink"
+            value={
+              <a
+                href={d.permalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--v-mint)' }}
+              >
+                Open on {post.platform} ↗
+              </a>
+            }
+          />
+        )}
+        {d?.mediaUrls && d.mediaUrls.length > 0 && (
+          <DetailRow
+            label="Media URLs"
+            value={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {d.mediaUrls.map((u, i) => (
+                  <a
+                    key={i}
+                    href={u}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: 'var(--v-mint)',
+                      fontSize: 11,
+                      wordBreak: 'break-all',
+                      fontFamily: 'var(--v-mono)',
+                    }}
+                  >
+                    {truncate(u, 64)}
+                  </a>
+                ))}
+              </div>
+            }
+          />
+        )}
+        {d?.rawResponse?.contentHash && (
+          <DetailRow
+            label="Raw hash"
+            value={d.rawResponse.contentHash.slice(0, 16) + '…'}
+            mono
+          />
+        )}
+      </div>
+
+      <details>
+        <summary
+          className="v-meta"
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+        >
+          Raw document JSON
+        </summary>
+        <pre
+          style={{
+            background: '#0b0b0b',
+            border: '1px solid rgba(255,255,255,0.08)',
+            padding: 16,
+            borderRadius: 10,
+            marginTop: 10,
+            fontSize: 11,
+            lineHeight: 1.55,
+            overflow: 'auto',
+            maxHeight: 420,
+            fontFamily: 'var(--v-mono)',
+            color: '#e9e9e9',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            tabSize: 2,
+          }}
+        >
+          {JSON.stringify(post, null, 2)}
+        </pre>
+      </details>
+    </div>
+  );
 }
 
 function MetricTile({ label, value }: { label: string; value: string }) {

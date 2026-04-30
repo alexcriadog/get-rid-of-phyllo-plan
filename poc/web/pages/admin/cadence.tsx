@@ -137,7 +137,7 @@ export default function CadencePage() {
         <TabsContent value="schedule">
           <Section
             title="Upcoming sync schedule · next 24h"
-            description="Each cell counts how many syncs are scheduled for that (account · product) in that hour."
+            description="One row per cuenta · one cell per hour. The number is total syncs (across all products) that account fires that hour. Brighter = busier."
           >
             {heatmap.rows.length === 0 ? (
               <Empty message="No upcoming syncs in the next 24h." />
@@ -146,7 +146,7 @@ export default function CadencePage() {
                 rows={heatmap.rows}
                 cols={heatmap.cols}
                 cells={heatmap.cells}
-                cellSize={20}
+                cellSize={14}
                 unitLabel="syncs"
               />
             )}
@@ -363,11 +363,17 @@ function normalizeProducts(
 
 function buildScheduleHeatmap(runs: NextRun[]) {
   const now = new Date();
+  // 24-column horizon, one column per hour. Within a 24h window each hour
+  // string appears at most once so a plain `HH` is unambiguous.
   const cols = Array.from({ length: 24 }, (_, i) => {
     const d = new Date(now.getTime() + i * 3600_000);
     return pad2(d.getHours());
   });
 
+  // Aggregate BY ACCOUNT (not by account+product). Cell value = total syncs
+  // this account fires in that hour, summed over all products. With 5
+  // cuentas × 4 productos = 20 syncs/24h, you now see 5 rows densely
+  // populated instead of 20 rows almost empty.
   const rowSet = new Set<string>();
   const cellMap = new Map<string, number>();
   const start = now.getTime();
@@ -380,7 +386,7 @@ function buildScheduleHeatmap(runs: NextRun[]) {
     const offsetH = Math.floor((t - start) / 3600_000);
     if (offsetH < 0 || offsetH >= 24) continue;
     const colHour = cols[offsetH];
-    const rowLabel = `${r.accountHandle ?? `#${r.accountId}`} · ${r.product}`;
+    const rowLabel = `${r.accountHandle ?? `#${r.accountId}`} (${r.platform})`;
     rowSet.add(rowLabel);
     const k = `${rowLabel}::${colHour}`;
     cellMap.set(k, (cellMap.get(k) ?? 0) + 1);

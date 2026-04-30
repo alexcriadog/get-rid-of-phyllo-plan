@@ -23,6 +23,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+type BucketAccount = {
+  id: string;
+  platform: string;
+  handle: string | null;
+  display_name: string | null;
+};
+
 type Bucket = {
   key: string;
   platform: string;
@@ -31,6 +38,7 @@ type Bucket = {
   capacity: number;
   hits?: number;
   denies?: number;
+  account?: BucketAccount | null;
 };
 
 type BucketHistory = {
@@ -69,7 +77,7 @@ export default function RateLimitsPage() {
         .sort((a, b) => (b.denies ?? 0) - (a.denies ?? 0))
         .slice(0, 8)
         .map((b) => ({
-          label: shortKey(b),
+          label: rankingLabel(b),
           value: b.denies ?? 0,
           color: STATUS_COLORS.warn,
         })),
@@ -193,7 +201,29 @@ function BucketCard({
       <div className="text-center">
         <div className="mb-1 flex items-center justify-center gap-2 font-mono text-xs">
           <Badge variant="outline">{bucket.platform}</Badge>
-          <span>{shortKey(bucket)}</span>
+          <span className="text-muted-foreground/70">{scopeLabel(bucket)}</span>
+        </div>
+        <div className="mb-1 min-h-[18px]">
+          {bucket.account ? (
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="font-mono text-[12px] font-semibold text-foreground">
+                {bucket.account.handle ?? bucket.account.display_name ?? `account #${bucket.account.id}`}
+              </span>
+              {bucket.account.display_name && bucket.account.handle && (
+                <span className="font-mono text-[10px] text-muted-foreground/70">
+                  {bucket.account.display_name}
+                </span>
+              )}
+            </div>
+          ) : isAppWide(bucket) ? (
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              app-wide · all accounts
+            </span>
+          ) : (
+            <span className="font-mono text-[10px] text-muted-foreground/70" title={bucket.key}>
+              {idHashTail(bucket)}
+            </span>
+          )}
         </div>
         <div className="font-mono text-[10px] text-muted-foreground">
           hits {compactNumber(bucket.hits ?? 0)} · denies{' '}
@@ -247,6 +277,37 @@ function UnmeteredDisplay({ tokens }: { tokens: number }) {
 function shortKey(b: Bucket): string {
   if (b.scope) return b.scope;
   return b.key.split(':').slice(-2).join(':');
+}
+
+/** Label for the deny-ranking bar chart — prefer account handle over bucket key. */
+function rankingLabel(b: Bucket): string {
+  if (b.account?.handle) return `${b.account.handle} · ${scopeLabel(b)}`;
+  if (b.account?.display_name) return `${b.account.display_name} · ${scopeLabel(b)}`;
+  if (isAppWide(b)) return `${b.platform} · app-wide`;
+  return shortKey(b);
+}
+
+/** Human-readable label for the bucket's scope segment ('app', 'user_token', 'page', etc.). */
+function scopeLabel(b: Bucket): string {
+  if (b.scope) return b.scope.replace(/_/g, ' ');
+  // Fallback: parse from key. Strip the namespace + 'rate' + platform prefix
+  // and take the next segment, which is the scope.
+  const parts = b.key.split(':');
+  const rateIdx = parts.indexOf('rate');
+  return rateIdx >= 0 && parts[rateIdx + 2] ? parts[rateIdx + 2].replace(/_/g, ' ') : 'bucket';
+}
+
+function isAppWide(b: Bucket): boolean {
+  // app-level buckets have no per-account suffix — keys end at the scope segment.
+  // e.g. `connector-poc:rate:fb:app`, `connector-poc:rate:tt:qps_app`
+  return /:(?:app|qps_app)$/.test(b.key);
+}
+
+/** Last few chars of the id hash for keys that have one but no account match. */
+function idHashTail(b: Bucket): string {
+  const parts = b.key.split(':');
+  const tail = parts[parts.length - 1] ?? '';
+  return tail.length > 12 ? `…${tail.slice(-8)}` : tail;
 }
 
 function useBucketHistory(key: string) {

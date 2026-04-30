@@ -1,9 +1,14 @@
 // TikTok content (videos) fetcher. v1.3.
 //
-// /business/video/list/ returns the basic counters (views/likes/comments/
-// shares/duration). Per-video deep insights endpoints (/business/video/get/,
-// /business/video/insights/) DO NOT EXIST in v1.3 with our current scopes
-// — verified live 2026-04-29. So we ship just the list response.
+// /business/video/list/ exposes a much wider field set than the public docs
+// suggest — verified live 2026-04-29. We pull the full premium set in a
+// single call: basic counters, deep insights (reach, watch time, completion
+// rate), traffic sources, retention curve, per-post audience demographics,
+// CTAs, and the official embed_url for in-UI playback.
+//
+// /business/video/get/ and /business/video/insights/ DO NOT EXIST for our
+// BC organic token — but it doesn't matter, all those metrics are right
+// here on the list endpoint.
 
 import { Inject, Injectable } from '@nestjs/common';
 import type { ContentData, FetchOpts } from '../../shared/platform-types';
@@ -15,16 +20,45 @@ import { buildTikTokContext } from '../tiktok.context';
 import { TIKTOK_API_CLIENT } from '../tiktok.tokens';
 
 const LIST_FIELDS = [
+  // Core
   'item_id',
   'caption',
   'create_time',
   'thumbnail_url',
   'share_url',
+  'embed_url',
+  'media_type',
+  'is_ad',
+  'video_duration',
+  // Basic counters
   'video_views',
   'likes',
   'comments',
   'shares',
-  'video_duration',
+  'favorites',
+  // Deep insights
+  'reach',
+  'total_time_watched',
+  'average_time_watched',
+  'full_video_watched_rate',
+  'impression_sources',
+  'video_view_retention',
+  'engagement_likes',
+  // Per-post audience
+  'audience_countries',
+  'audience_cities',
+  'audience_genders',
+  'audience_types',
+  // Profile lift
+  'profile_views',
+  'new_followers',
+  // CTAs
+  'website_clicks',
+  'email_clicks',
+  'phone_number_clicks',
+  'address_clicks',
+  'app_download_clicks',
+  'lead_submissions',
 ];
 
 interface VideoListData {

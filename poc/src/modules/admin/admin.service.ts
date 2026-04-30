@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   Inject,
@@ -11,6 +12,7 @@ import { PrismaService } from '@shared/database/prisma.service';
 import { MongoService } from '@shared/database/mongo.service';
 import { RedisService } from '@shared/redis/redis.service';
 import { RateBucketService } from '@shared/redis/rate-bucket.service';
+import { AesLocalService } from '@shared/crypto/aes-local.service';
 import {
   BullmqService,
   JobPriority,
@@ -71,6 +73,20 @@ export interface CadenceOverrideInput {
   expiresAt?: Date;
 }
 
+interface AccountSummary {
+  id: string;
+  platform: string;
+  handle: string | null;
+  display_name: string | null;
+}
+
+interface AccountIndex {
+  byTokenHash: Map<string, AccountSummary>;
+  byPageId: Map<string, AccountSummary>;
+  byBusinessId: Map<string, AccountSummary>;
+  byChannelId: Map<string, AccountSummary>;
+}
+
 /**
  * Admin stats aggregation + mutation service. Keeps AdminController thin and
  * provides a single seam for serialising BigInt/Date values into JSON-safe
@@ -91,6 +107,7 @@ export class AdminService {
     private readonly cadence: CadenceService,
     private readonly throttle: ThrottleLockService,
     private readonly accountsService: AccountsService,
+    private readonly aes: AesLocalService,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
 
@@ -194,10 +211,14 @@ export class AdminService {
   // ──────────────────────────────────────────────────────────────────────────
 
   async listRateBuckets(): Promise<Record<string, unknown>> {
-    const states = await this.rateBucket.listAllBuckets();
+    const [states, accountIndex] = await Promise.all([
+      this.rateBucket.listAllBuckets(),
+      this.buildAccountIndex(),
+    ]);
     const buckets = states.map((s) => {
       const decomposed = this.decomposeBucketKey(s.bucketKey);
       const usageRatio = s.capacity > 0 ? 1 - s.tokens / s.capacity : 0;
+      const account = this.lookupBucketAccount(decomposed, accountIndex);
       return {
         key: s.bucketKey,
         platform: decomposed.platform,
@@ -210,9 +231,80 @@ export class AdminService {
         hits: s.hits,
         denies: s.denies,
         usage_ratio: Math.round(usageRatio * 10000) / 10000,
+        account,
       };
     });
     return { buckets };
+  }
+
+  /**
+   * Resolve which account a bucket belongs to. Returns null for app-wide
+   * buckets (`rate:fb:app`, `rate:tt:qps_app`) and for buckets whose id
+   * suffix doesn't match any current account (e.g. a stale page id from a
+   * disconnected account that still has a live bucket).
+   */
+  private lookupBucketAccount(
+    decomposed: { platform: string; idHash: string | null },
+    index: AccountIndex,
+  ): AccountSummary | null {
+    if (!decomposed.idHash) return null;
+    const id = decomposed.idHash;
+    // Some keys append `:date` (TikTok daily buckets). Try both forms.
+    const idNoDate = id.includes(':') ? id.split(':')[0] : id;
+    return (
+      index.byTokenHash.get(id) ??
+      index.byTokenHash.get(idNoDate) ??
+      index.byPageId.get(id) ??
+      index.byPageId.get(idNoDate) ??
+      index.byBusinessId.get(id) ??
+      index.byBusinessId.get(idNoDate) ??
+      index.byChannelId.get(id) ??
+      index.byChannelId.get(idNoDate) ??
+      null
+    );
+  }
+
+  /**
+   * Build a one-shot index from each Account's identifying secrets to a
+   * compact AccountSummary. Costs O(N) AES decrypts (one per account) per
+   * call — acceptable for the admin endpoint cadence (~every 2.5s) at PoC
+   * scale. Caching could be added if it ever shows up on profiling.
+   */
+  private async buildAccountIndex(): Promise<AccountIndex> {
+    const accounts = await this.prisma.account.findMany({
+      include: { tokens: true },
+    });
+    const byTokenHash = new Map<string, AccountSummary>();
+    const byPageId = new Map<string, AccountSummary>();
+    const byBusinessId = new Map<string, AccountSummary>();
+    const byChannelId = new Map<string, AccountSummary>();
+
+    for (const a of accounts) {
+      const summary: AccountSummary = {
+        id: a.id.toString(),
+        platform: a.platform,
+        handle: a.handle ?? null,
+        display_name: a.displayName ?? null,
+      };
+      const token = a.tokens[0];
+      if (token) {
+        try {
+          const plain = this.aes.decrypt(Buffer.from(token.accessTokenCiphertext));
+          const hash = createHash('sha256').update(plain, 'utf8').digest('hex').slice(0, 16);
+          byTokenHash.set(hash, summary);
+        } catch (err) {
+          this.logger.warn(
+            `Failed to derive token hash for account ${a.id.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+      const md = (a.metadata ?? {}) as Record<string, unknown>;
+      if (typeof md.page_id === 'string') byPageId.set(md.page_id, summary);
+      if (typeof md.business_id === 'string') byBusinessId.set(md.business_id, summary);
+      if (typeof md.open_id === 'string') byBusinessId.set(md.open_id, summary);
+      if (typeof md.channel_id === 'string') byChannelId.set(md.channel_id, summary);
+    }
+    return { byTokenHash, byPageId, byBusinessId, byChannelId };
   }
 
   async bucketHistory(key: string, mins: number): Promise<Record<string, unknown>> {
@@ -352,6 +444,225 @@ export class AdminService {
     return { ok: true, id: updated.id.toString() };
   }
 
+  /**
+   * Pre-flight risk analysis for a manual "Run now" enqueue. Returns a
+   * structured report the UI can render — each signal carries a severity
+   * (`ok` / `warn` / `block`). The overall severity is the worst of all
+   * signals.
+   *
+   *   block → button disabled in the UI; we refuse to enqueue.
+   *   warn  → user must explicitly confirm before we enqueue.
+   *   ok    → safe to enqueue without further confirmation.
+   */
+  async riskCheckSyncJob(id: bigint): Promise<{
+    sync_job: {
+      id: string;
+      account_id: string;
+      account_handle: string | null;
+      platform: string;
+      product: string;
+      status: string;
+      next_run_at: string | null;
+      last_success_at: string | null;
+      failure_count: number;
+    };
+    severity: 'ok' | 'warn' | 'block';
+    signals: Array<{
+      key: string;
+      severity: 'ok' | 'warn' | 'block';
+      message: string;
+      value?: string | number;
+    }>;
+  }> {
+    const job = await this.prisma.syncJob.findUniqueOrThrow({
+      where: { id },
+      include: {
+        account: {
+          select: {
+            id: true,
+            platform: true,
+            handle: true,
+            syncTier: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    const signals: Array<{
+      key: string;
+      severity: 'ok' | 'warn' | 'block';
+      message: string;
+      value?: string | number;
+    }> = [];
+
+    // — Account state —
+    if (job.account.syncTier === 'paused') {
+      signals.push({
+        key: 'account_paused',
+        severity: 'block',
+        message:
+          'Account is paused — the worker will skip this job immediately. Unpause first.',
+      });
+    }
+    if (job.account.status === 'needs_reauth') {
+      signals.push({
+        key: 'needs_reauth',
+        severity: 'block',
+        message:
+          'Account is in needs_reauth — the OAuth token is dead. Reconnect from /admin/connect first.',
+      });
+    }
+
+    // — In-flight protection —
+    if (job.status === 'queued') {
+      signals.push({
+        key: 'already_queued',
+        severity: 'block',
+        message: `This sync_job is already 'queued' — wait for the worker to pick it up.`,
+      });
+    }
+
+    // — Rate buckets —
+    const bucketKey = (() => {
+      switch (job.account.platform) {
+        case 'facebook':
+          return 'rate:fb:app';
+        case 'instagram':
+          return 'rate:ig:app';
+        case 'tiktok':
+          return 'rate:tt:qps_app';
+        default:
+          return null;
+      }
+    })();
+    if (bucketKey) {
+      try {
+        const state = await this.rateBucket.getState(this.redis.key(bucketKey));
+        if (state && state.capacity > 0) {
+          const ratio = state.tokens / state.capacity;
+          if (ratio < 0.05) {
+            signals.push({
+              key: 'bucket_critical',
+              severity: 'block',
+              message: `App bucket ${bucketKey} is critically low (${state.tokens.toFixed(0)}/${state.capacity}). The call will be denied.`,
+              value: state.tokens,
+            });
+          } else if (ratio < 0.3) {
+            signals.push({
+              key: 'bucket_low',
+              severity: 'warn',
+              message: `App bucket ${bucketKey} is below 30% (${state.tokens.toFixed(0)}/${state.capacity}). The job may rate-limit and retry.`,
+              value: state.tokens,
+            });
+          }
+        }
+      } catch {
+        // soft-fail; the worker has its own bucket check.
+      }
+    }
+
+    // — BullMQ pressure —
+    try {
+      const queue = this.bullmq.getQueue(SYNC_QUEUE_NAME);
+      const waiting = await queue.getWaitingCount();
+      if (waiting >= 1900) {
+        signals.push({
+          key: 'queue_full',
+          severity: 'block',
+          message: `Sync queue is at the backpressure ceiling (${waiting} waiting). Try again once it drains.`,
+          value: waiting,
+        });
+      } else if (waiting >= 1000) {
+        signals.push({
+          key: 'queue_pressure',
+          severity: 'warn',
+          message: `Sync queue is busy (${waiting} waiting). Your manual run may take a few minutes to start.`,
+          value: waiting,
+        });
+      }
+    } catch {
+      // soft-fail
+    }
+
+    // — Throttle lock —
+    try {
+      const held = await this.throttle.isHeld(job.accountId, job.product);
+      if (held) {
+        signals.push({
+          key: 'throttle_active',
+          severity: 'warn',
+          message:
+            'Post-success throttle lock is held (10 min cooldown). The job will run but immediately no-op.',
+        });
+      }
+    } catch {
+      // soft-fail
+    }
+
+    // — Recent failures —
+    if (job.failureCount >= 5) {
+      signals.push({
+        key: 'failures_critical',
+        severity: 'block',
+        message: `${job.failureCount} consecutive failures — the circuit breaker is about to pause this account. Investigate before manual retry.`,
+        value: job.failureCount,
+      });
+    } else if (job.failureCount >= 2) {
+      signals.push({
+        key: 'recent_failures',
+        severity: 'warn',
+        message: `${job.failureCount} consecutive failures. Last error: ${job.lastError ?? '(none)'}`,
+        value: job.failureCount,
+      });
+    }
+
+    // — Imminent auto-run —
+    const now = Date.now();
+    if (job.nextRunAt && job.nextRunAt.getTime() <= now + 5 * 60_000 && job.nextRunAt.getTime() > now) {
+      const minutes = Math.max(
+        1,
+        Math.round((job.nextRunAt.getTime() - now) / 60_000),
+      );
+      signals.push({
+        key: 'imminent_auto_run',
+        severity: 'warn',
+        message: `An automatic run is already scheduled in ~${minutes} min. Manual enqueue duplicates the work.`,
+        value: minutes,
+      });
+    }
+
+    if (signals.length === 0) {
+      signals.push({
+        key: 'all_clear',
+        severity: 'ok',
+        message: 'All checks passed — safe to run now.',
+      });
+    }
+
+    const overall: 'ok' | 'warn' | 'block' = signals.some((s) => s.severity === 'block')
+      ? 'block'
+      : signals.some((s) => s.severity === 'warn')
+        ? 'warn'
+        : 'ok';
+
+    return {
+      sync_job: {
+        id: job.id.toString(),
+        account_id: job.accountId.toString(),
+        account_handle: job.account.handle ?? null,
+        platform: job.account.platform,
+        product: job.product,
+        status: job.status,
+        next_run_at: job.nextRunAt?.toISOString() ?? null,
+        last_success_at: job.lastSuccessAt?.toISOString() ?? null,
+        failure_count: job.failureCount,
+      },
+      severity: overall,
+      signals,
+    };
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // Next runs timeline
   // ──────────────────────────────────────────────────────────────────────────
@@ -384,11 +695,15 @@ export class AdminService {
           : null;
 
         return {
+          id: r.id.toString(),
           accountId: r.accountId.toString(),
           accountHandle: r.account?.handle ?? null,
           platform: r.account?.platform ?? null,
           product: r.product,
+          status: r.status,
           next_run_at: r.nextRunAt?.toISOString() ?? null,
+          last_success_at: r.lastSuccessAt?.toISOString() ?? null,
+          failure_count: r.failureCount,
           priority: r.priority,
           effective_cadence_seconds: effectiveCadenceSeconds,
         };
@@ -1224,9 +1539,13 @@ export class AdminService {
    *
    * No data is persisted by this call — it's purely a probe.
    */
-  async discoverConnections(accessToken: string): Promise<{
+  async discoverConnections(
+    accessToken: string,
+    platform: 'facebook' | 'tiktok' = 'facebook',
+    openId?: string,
+  ): Promise<{
     me: { id: string | null; name: string | null };
-    token_type: 'user' | 'page' | 'unknown';
+    token_type: 'user' | 'page' | 'unknown' | 'tiktok-business';
     pages: Array<{
       page_id: string;
       page_name: string;
@@ -1241,8 +1560,23 @@ export class AdminService {
         already_connected: boolean;
       };
     }>;
+    tiktok_account?: {
+      open_id: string;
+      username: string | null;
+      display_name: string | null;
+      profile_image: string | null;
+      followers_count: number | null;
+      following_count: number | null;
+      videos_count: number | null;
+      total_likes: number | null;
+      is_verified: boolean | null;
+      already_connected: boolean;
+    };
     warnings: string[];
   }> {
+    if (platform === 'tiktok') {
+      return this.discoverTikTokConnection(accessToken, openId);
+    }
     const warnings: string[] = [];
 
     // 1. /me with the SAFE field set (id+name only — both User and Page
@@ -1421,9 +1755,126 @@ export class AdminService {
    * AccountsService. Stores the page_id (for IG) inside metadata so the IG
    * adapter can use the per-page rate bucket later.
    */
+  /**
+   * Probe a TikTok Business Center token by hitting `/business/get/` with
+   * the user-supplied open_id (== business_id in BC). Returns null if the
+   * caller didn't pass an open_id; otherwise validates the token against
+   * the live API and returns the basic profile snapshot.
+   *
+   * No data is persisted by this call — it's purely a probe.
+   */
+  private async discoverTikTokConnection(
+    accessToken: string,
+    openId?: string,
+  ): Promise<Awaited<ReturnType<AdminService['discoverConnections']>>> {
+    const warnings: string[] = [];
+    const empty = {
+      me: { id: openId ?? null, name: null },
+      token_type: 'tiktok-business' as const,
+      pages: [] as Awaited<
+        ReturnType<AdminService['discoverConnections']>
+      >['pages'],
+      warnings,
+    };
+    if (!openId) {
+      warnings.push(
+        "Missing 'open_id'. The TikTok BC OAuth callback returns it alongside the access_token — paste it in the form so we can call /business/get/.",
+      );
+      return empty;
+    }
+    type TtAccount = {
+      display_name?: string;
+      username?: string;
+      profile_image?: string;
+      is_verified?: boolean;
+      followers_count?: number;
+      following_count?: number;
+      videos_count?: number;
+      total_likes?: number;
+      bio_description?: string;
+    };
+    type TtEnvelope = { code: number; message: string; data: TtAccount };
+    let body: TtEnvelope;
+    try {
+      const res = await axios.get<TtEnvelope>(
+        'https://business-api.tiktok.com/open_api/v1.3/business/get/',
+        {
+          params: {
+            business_id: openId,
+            fields: JSON.stringify([
+              'display_name',
+              'username',
+              'profile_image',
+              'is_verified',
+              'followers_count',
+              'following_count',
+              'videos_count',
+              'total_likes',
+              'bio_description',
+            ]),
+          },
+          headers: {
+            'Access-Token': accessToken,
+            'Content-Type': 'application/json',
+          },
+          timeout: DISCOVER_TIMEOUT_MS,
+          validateStatus: () => true,
+        },
+      );
+      body = res.data;
+      if (res.status < 200 || res.status >= 300) {
+        throw new BadRequestException({
+          message: `TikTok HTTP ${res.status}`,
+          tiktok_error: body,
+        });
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException({
+        message:
+          'Token rejected by TikTok on /business/get/. Check the access_token + open_id pair from your BC OAuth callback.',
+        tiktok_error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    if (body?.code !== 0) {
+      throw new BadRequestException({
+        message: `TikTok refused: code=${body?.code} ${body?.message ?? ''}`.trim(),
+        tiktok_error: body,
+      });
+    }
+    const acc = body.data ?? {};
+    const username = acc.username ?? null;
+    const existing = username
+      ? await this.prisma.account.findFirst({
+          where: { platform: 'tiktok', canonicalUserId: openId },
+          select: { id: true },
+        })
+      : null;
+    return {
+      me: { id: openId, name: acc.display_name ?? null },
+      token_type: 'tiktok-business',
+      pages: [],
+      tiktok_account: {
+        open_id: openId,
+        username,
+        display_name: acc.display_name ?? null,
+        profile_image: acc.profile_image ?? null,
+        followers_count: acc.followers_count ?? null,
+        following_count: acc.following_count ?? null,
+        videos_count: acc.videos_count ?? null,
+        total_likes: acc.total_likes ?? null,
+        is_verified: acc.is_verified ?? null,
+        already_connected: existing != null,
+      },
+      warnings,
+    };
+  }
+
   async seedConnection(input: {
     platform: Platform;
     accessToken: string;
+    refreshToken?: string;
+    expiresAt?: Date;
     canonicalUserId: string;
     handle?: string;
     metadata?: Record<string, unknown>;
@@ -1431,6 +1882,8 @@ export class AdminService {
     return this.accountsService.seedAccount({
       platform: input.platform,
       accessToken: input.accessToken,
+      refreshToken: input.refreshToken,
+      expiresAt: input.expiresAt,
       canonicalUserId: input.canonicalUserId,
       handle: input.handle,
       metadata: input.metadata,

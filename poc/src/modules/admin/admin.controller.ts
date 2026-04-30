@@ -48,14 +48,20 @@ const ThrottleReleaseSchema = z
 
 const ConnectDiscoverSchema = z
   .object({
+    platform: z.enum(['facebook', 'tiktok']).optional().default('facebook'),
     access_token: z.string().min(20),
+    /** TikTok business id (== open_id from BC OAuth callback). Required when
+     * platform=tiktok; ignored otherwise. */
+    open_id: z.string().min(8).optional(),
   })
   .strict();
 
 const ConnectSeedSchema = z
   .object({
-    platform: z.enum(['instagram', 'facebook']),
+    platform: z.enum(['instagram', 'facebook', 'tiktok']),
     access_token: z.string().min(20),
+    refresh_token: z.string().min(20).optional(),
+    expires_at: z.string().datetime({ offset: true }).optional(),
     canonical_user_id: z.string().min(1),
     handle: z.string().min(1).optional(),
     metadata: z.record(z.unknown()).optional(),
@@ -158,6 +164,11 @@ export class AdminController {
   @HttpCode(200)
   async reenqueueSyncJob(@Param('id') rawId: string): Promise<unknown> {
     return this.admin.reenqueueSyncJob(this.parseBigInt(rawId));
+  }
+
+  @Get('sync-jobs/:id/risk-check')
+  async riskCheckSyncJob(@Param('id') rawId: string): Promise<unknown> {
+    return this.admin.riskCheckSyncJob(this.parseBigInt(rawId));
   }
 
   // ─── Next runs ─────────────────────────────────────────────────────────
@@ -385,7 +396,11 @@ export class AdminController {
         issues: parsed.error.issues,
       });
     }
-    return this.admin.discoverConnections(parsed.data.access_token);
+    return this.admin.discoverConnections(
+      parsed.data.access_token,
+      parsed.data.platform,
+      parsed.data.open_id,
+    );
   }
 
   @Post('connect/seed')
@@ -401,6 +416,10 @@ export class AdminController {
     return this.admin.seedConnection({
       platform: parsed.data.platform,
       accessToken: parsed.data.access_token,
+      refreshToken: parsed.data.refresh_token,
+      expiresAt: parsed.data.expires_at
+        ? new Date(parsed.data.expires_at)
+        : undefined,
       canonicalUserId: parsed.data.canonical_user_id,
       handle: parsed.data.handle,
       metadata: parsed.data.metadata,

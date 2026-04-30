@@ -17,6 +17,16 @@ const MIN_INTERVAL_SECONDS = 60;
 const MAX_INTERVAL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 const DEFAULT_FALLBACK_SECONDS = 24 * 60 * 60; // 24h — used if no cadences row exists
 
+/**
+ * ±10% jitter applied to every scheduled interval so that accounts whose
+ * `nextRunAt` would otherwise land at the same wall-clock second (e.g.
+ * after a long downtime where every catch-up gets `now + cadence`) fan out
+ * uniformly. Reduces thundering-herd pressure on the rate bucket and
+ * downstream APIs without distorting the long-run sync rate (mean of the
+ * jitter is 0).
+ */
+const JITTER_FRACTION = 0.1;
+
 function clampInterval(seconds: number): number {
   if (!Number.isFinite(seconds) || seconds <= 0) {
     return MIN_INTERVAL_SECONDS;
@@ -24,6 +34,12 @@ function clampInterval(seconds: number): number {
   if (seconds < MIN_INTERVAL_SECONDS) return MIN_INTERVAL_SECONDS;
   if (seconds > MAX_INTERVAL_SECONDS) return MAX_INTERVAL_SECONDS;
   return Math.round(seconds);
+}
+
+/** Returns `seconds` scaled by a uniform random factor in [1 - f, 1 + f]. */
+function applyJitter(seconds: number, fraction: number = JITTER_FRACTION): number {
+  const factor = 1 + (Math.random() * 2 - 1) * fraction;
+  return seconds * factor;
 }
 
 @Injectable()
@@ -66,7 +82,8 @@ export class CadenceService {
     });
 
     if (override && (!override.expiresAt || override.expiresAt > now)) {
-      return new Date(now.getTime() + clampInterval(override.overrideIntervalSeconds) * 1000);
+      const jittered = clampInterval(applyJitter(override.overrideIntervalSeconds));
+      return new Date(now.getTime() + jittered * 1000);
     }
 
     const defaultRow = await this.prisma.cadence.findUnique({
@@ -75,7 +92,7 @@ export class CadenceService {
 
     const baseSeconds = defaultRow?.defaultIntervalSeconds ?? DEFAULT_FALLBACK_SECONDS;
     const multiplier = TIER_MULTIPLIERS[account.syncTier] ?? 1;
-    const effective = clampInterval(baseSeconds * multiplier);
+    const effective = clampInterval(applyJitter(baseSeconds * multiplier));
 
     return new Date(now.getTime() + effective * 1000);
   }

@@ -46,6 +46,18 @@ export interface DemographicDistributions {
   errors?: DemographicBreakdownError[];
 }
 
+/** Common shape of `(date, value)` daily series. */
+export interface DailySeriesPoint {
+  endTime: string;       // YYYY-MM-DD or ISO timestamp; adapter-controlled
+  value: number;
+}
+
+/** 24-bucket heatmap of when the audience is active each day. */
+export interface AudienceActivityBucket {
+  hour: number;          // 0..23
+  count: number;
+}
+
 /** Daily totals + time-series captured at the account level. */
 export interface AccountInsightsData {
   periodDays?: number;
@@ -66,8 +78,32 @@ export interface AccountInsightsData {
   phoneCallClicks?: number;
   textMessageClicks?: number;
   getDirectionsClicks?: number;
+  // Lifetime / aggregate-of-account scalars.
+  lifetimeLikes?: number;          // total likes received across the account's lifetime
+  videosCount?: number;            // total videos published lifetime
   // Daily time series (one entry per day).
-  followerCountSeries?: Array<{ endTime: string; value: number }>;
+  followerCountSeries?: DailySeriesPoint[];
+  newFollowersSeries?: DailySeriesPoint[];
+  lostFollowersSeries?: DailySeriesPoint[];
+  videoViewsSeries?: DailySeriesPoint[];
+  uniqueVideoViewsSeries?: DailySeriesPoint[];   // daily account-level reach
+  profileViewsSeries?: DailySeriesPoint[];
+  likesSeries?: DailySeriesPoint[];
+  commentsSeries?: DailySeriesPoint[];
+  sharesSeries?: DailySeriesPoint[];
+  engagedAudienceSeries?: DailySeriesPoint[];
+  // CTAs daily (sum these client-side if you want a period total).
+  bioLinkClicksSeries?: DailySeriesPoint[];
+  emailClicksSeries?: DailySeriesPoint[];
+  phoneNumberClicksSeries?: DailySeriesPoint[];
+  addressClicksSeries?: DailySeriesPoint[];
+  appDownloadClicksSeries?: DailySeriesPoint[];
+  leadSubmissionsSeries?: DailySeriesPoint[];
+  /**
+   * 24-hour activity heatmap aggregated across the period (sum per hour).
+   * Useful for "best time to post" insights.
+   */
+  audienceActivity?: AudienceActivityBucket[];
   // Platform-specific overflow.
   extra?: Record<string, number>;
 }
@@ -107,6 +143,32 @@ export interface ContentMetrics {
   extra?: Record<string, number>;
 }
 
+/** A `(second, percentage)` data point for retention / engagement curves. */
+export interface SecondPercentage {
+  second: number;        // 0..N seconds offset from start
+  percentage: number;    // 0..1
+}
+
+/**
+ * Per-post insight breakdowns. All fields are optional and platform-specific
+ * — adapters populate only the buckets they actually have. Lives inside
+ * ContentData (and therefore inside the `posts.data` doc in Mongo).
+ */
+export interface ContentInsights {
+  /** Traffic-source distribution: For You, Search, Personal Profile, Sound, etc. */
+  trafficSources?: DistributionBucket[];
+  /** Retention curve — what % of viewers were still watching at each second. */
+  retentionCurve?: SecondPercentage[];
+  /** When viewers liked the video, by second offset. */
+  likesTimeline?: SecondPercentage[];
+  /** Per-post audience demographics — distinct from account-level audience. */
+  audienceCountries?: DistributionBucket[];
+  audienceCities?: DistributionBucket[];
+  audienceGenders?: DistributionBucket[];
+  /** Viewer types — NEW_VIEWER / RETURN_VIEWER / FOLLOWER / NON_FOLLOWER. */
+  audienceTypes?: DistributionBucket[];
+}
+
 export interface ContentChild {
   id: string;
   mediaType: ContentType;
@@ -122,7 +184,15 @@ export interface ContentData {
   permalink: string | null;
   mediaUrls: string[];
   thumbnailUrl?: string | null;
+  /**
+   * Platform-provided embeddable player URL. Used by the UI when the
+   * platform doesn't expose a downloadable mediaUrl (TikTok BC v1.3 case)
+   * — the dialog renders `<iframe src={embedUrl}>` instead of `<video>`.
+   */
+  embedUrl?: string | null;
   metrics: ContentMetrics;
+  /** Per-post insight breakdowns when the platform exposes them. */
+  insights?: ContentInsights;
   publishedAt: Date | null;
   fetchedAt: Date;
   /** Carousel children (present when contentType === 'carousel'). */

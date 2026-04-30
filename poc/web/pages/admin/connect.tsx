@@ -40,10 +40,24 @@ type DiscoveredPage = {
   };
 };
 
+type TikTokDiscoveredAccount = {
+  open_id: string;
+  username: string | null;
+  display_name: string | null;
+  profile_image: string | null;
+  followers_count: number | null;
+  following_count: number | null;
+  videos_count: number | null;
+  total_likes: number | null;
+  is_verified: boolean | null;
+  already_connected: boolean;
+};
+
 type DiscoverResponse = {
   me: { id: string | null; name: string | null };
-  token_type: 'user' | 'page' | 'unknown';
+  token_type: 'user' | 'page' | 'unknown' | 'tiktok-business';
   pages: DiscoveredPage[];
+  tiktok_account?: TikTokDiscoveredAccount;
   warnings: string[];
 };
 
@@ -55,15 +69,23 @@ type SeedResponse = {
 type ConnectKey = string; // `${platform}:${id}`
 
 type SeedBody = {
-  platform: 'instagram' | 'facebook';
+  platform: 'instagram' | 'facebook' | 'tiktok';
   access_token: string;
+  refresh_token?: string;
+  expires_at?: string; // ISO 8601 with offset
   canonical_user_id: string;
   handle?: string;
   metadata?: Record<string, unknown>;
 };
 
+type DiscoverPlatform = 'facebook' | 'tiktok';
+
 export default function ConnectPage() {
+  const [platform, setPlatform] = useState<DiscoverPlatform>('facebook');
   const [token, setToken] = useState('');
+  const [openId, setOpenId] = useState('');
+  const [refreshToken, setRefreshToken] = useState('');
+  const [expiresInS, setExpiresInS] = useState('');
   const [discovering, setDiscovering] = useState(false);
   const [discovery, setDiscovery] = useState<DiscoverResponse | null>(null);
   const [discoverErr, setDiscoverErr] = useState<string | null>(null);
@@ -73,13 +95,23 @@ export default function ConnectPage() {
 
   const onDiscover = async () => {
     if (!token.trim()) return;
+    if (platform === 'tiktok' && !openId.trim()) {
+      setDiscoverErr(
+        "TikTok needs the 'open_id' returned by the BC OAuth callback alongside the access_token.",
+      );
+      return;
+    }
     setDiscovering(true);
     setDiscoverErr(null);
     setDiscovery(null);
     setResults({});
     try {
       const res = await adminPost<DiscoverResponse>('/admin/connect/discover', {
+        platform,
         access_token: token.trim(),
+        ...(platform === 'tiktok' && openId.trim()
+          ? { open_id: openId.trim() }
+          : {}),
       });
       setDiscovery(res);
     } catch (e) {
@@ -106,30 +138,110 @@ export default function ConnectPage() {
       <Section
         title="1. Discover"
         description={
-          <>
-            Paste a Meta <strong>User</strong> or <strong>Page</strong> access
-            token. We&apos;ll enumerate Pages this token can manage and (when
-            present) the Instagram Business account linked to each Page.
-          </>
+          platform === 'tiktok' ? (
+            <>
+              Paste a TikTok <strong>Business Center</strong> access token plus
+              the <code>open_id</code> returned by the BC OAuth callback.
+              We&apos;ll call <code>/business/get/</code> to validate and fetch
+              the basic profile.
+            </>
+          ) : (
+            <>
+              Paste a Meta <strong>User</strong> or <strong>Page</strong>{' '}
+              access token. We&apos;ll enumerate Pages this token can manage
+              and (when present) the Instagram Business account linked to each
+              Page.
+            </>
+          )
         }
       >
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            Platform
+          </span>
+          <Select
+            value={platform}
+            onValueChange={(v) => {
+              setPlatform(v as DiscoverPlatform);
+              setDiscovery(null);
+              setDiscoverErr(null);
+            }}
+          >
+            <SelectTrigger className="w-[180px] font-mono text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="facebook" className="font-mono text-xs">
+                Meta (FB + IG)
+              </SelectItem>
+              <SelectItem value="tiktok" className="font-mono text-xs">
+                TikTok
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
           <textarea
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="EAAxxxxxxxx…"
+            placeholder={platform === 'tiktok' ? 'act.zI317…' : 'EAAxxxxxxxx…'}
             spellCheck={false}
             rows={3}
             className="flex-1 resize-y rounded-md border border-input bg-card px-3 py-2 font-mono text-xs text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
           <Button
             onClick={onDiscover}
-            disabled={discovering || !token.trim()}
+            disabled={
+              discovering ||
+              !token.trim() ||
+              (platform === 'tiktok' && !openId.trim())
+            }
             className="min-w-[140px] sm:self-stretch"
           >
             {discovering ? 'Discovering…' : 'Discover'}
           </Button>
         </div>
+        {platform === 'tiktok' && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <label className="flex flex-col gap-1">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                open_id (required)
+              </span>
+              <Input
+                value={openId}
+                onChange={(e) => setOpenId(e.target.value)}
+                placeholder="-000ZwowuI7N…"
+                className="font-mono text-xs"
+                spellCheck={false}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                refresh_token (recommended)
+              </span>
+              <Input
+                value={refreshToken}
+                onChange={(e) => setRefreshToken(e.target.value)}
+                placeholder="rft.6KRK…"
+                className="font-mono text-xs"
+                spellCheck={false}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                expires_in seconds (optional)
+              </span>
+              <Input
+                value={expiresInS}
+                onChange={(e) => setExpiresInS(e.target.value)}
+                placeholder="86400"
+                inputMode="numeric"
+                className="font-mono text-xs"
+                spellCheck={false}
+              />
+            </label>
+          </div>
+        )}
         {discoverErr && (
           <div className="mt-3 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
             {discoverErr}
@@ -177,26 +289,66 @@ export default function ConnectPage() {
             )}
           </Section>
 
-          <Section
-            title={`2. Pages found (${discovery.pages.length})`}
-            description="Each Page can be connected as Facebook, and (when present) as the linked Instagram Business account."
-          >
-            {discovery.pages.length === 0 ? (
-              <Empty message="No pages returned. The token may lack pages_show_list or no Pages are managed by this user." />
-            ) : (
-              <div className="flex flex-col gap-3">
-                {discovery.pages.map((p) => (
-                  <PageCard
-                    key={p.page_id}
-                    page={p}
-                    busy={busy}
-                    results={results}
-                    onConnect={connect}
-                  />
-                ))}
-              </div>
-            )}
-          </Section>
+          {discovery.token_type !== 'tiktok-business' && (
+            <Section
+              title={`2. Pages found (${discovery.pages.length})`}
+              description="Each Page can be connected as Facebook, and (when present) as the linked Instagram Business account."
+            >
+              {discovery.pages.length === 0 ? (
+                <Empty message="No pages returned. The token may lack pages_show_list or no Pages are managed by this user." />
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {discovery.pages.map((p) => (
+                    <PageCard
+                      key={p.page_id}
+                      page={p}
+                      busy={busy}
+                      results={results}
+                      onConnect={connect}
+                    />
+                  ))}
+                </div>
+              )}
+            </Section>
+          )}
+
+          {discovery.tiktok_account && (
+            <Section
+              title="2. TikTok account"
+              description="Verified by /business/get/. Click Connect to seed it with the access + refresh tokens you provided above."
+            >
+              <TikTokAccountCard
+                account={discovery.tiktok_account}
+                busy={busy === `tiktok:${discovery.tiktok_account.open_id}`}
+                result={
+                  results[`tiktok:${discovery.tiktok_account.open_id}`]
+                }
+                onConnect={() => {
+                  const acc = discovery.tiktok_account;
+                  if (!acc) return;
+                  const expiresAt = (() => {
+                    const n = Number(expiresInS);
+                    if (!Number.isFinite(n) || n <= 0) return undefined;
+                    return new Date(Date.now() + n * 1000).toISOString();
+                  })();
+                  return connect(`tiktok:${acc.open_id}`, {
+                    platform: 'tiktok',
+                    access_token: token.trim(),
+                    refresh_token: refreshToken.trim() || undefined,
+                    expires_at: expiresAt,
+                    canonical_user_id: acc.open_id,
+                    handle: acc.username
+                      ? `@${acc.username}`
+                      : acc.display_name ?? undefined,
+                    metadata: {
+                      business_id: acc.open_id,
+                      open_id: acc.open_id,
+                    },
+                  });
+                }}
+              />
+            </Section>
+          )}
         </>
       )}
 
@@ -211,6 +363,83 @@ export default function ConnectPage() {
         </details>
       </Card>
     </AdminLayout>
+  );
+}
+
+function TikTokAccountCard({
+  account,
+  busy,
+  result,
+  onConnect,
+}: {
+  account: TikTokDiscoveredAccount;
+  busy: boolean;
+  result?: SeedResponse | string;
+  onConnect: () => Promise<void> | void;
+}) {
+  const handle = account.username ? `@${account.username}` : account.display_name ?? '—';
+  const ok =
+    result && typeof result === 'object' && 'account_id' in result
+      ? result
+      : null;
+  const errMsg = result && typeof result === 'string' ? result : null;
+
+  return (
+    <Card className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
+      <div className="flex items-center gap-4">
+        {account.profile_image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={account.profile_image}
+            alt={`${handle} avatar`}
+            referrerPolicy="no-referrer"
+            className="h-14 w-14 rounded-full border border-border object-cover"
+          />
+        ) : (
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-muted font-mono text-sm text-muted-foreground">
+            tt
+          </div>
+        )}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm font-semibold">{handle}</span>
+            {account.is_verified && <Badge variant="primary">verified</Badge>}
+            {account.already_connected && (
+              <Badge variant="ok">already connected</Badge>
+            )}
+          </div>
+          <div className="font-mono text-[11px] text-muted-foreground">
+            {account.display_name && account.username
+              ? `${account.display_name} · `
+              : ''}
+            {fmtNumber(account.followers_count ?? 0)} followers
+            {account.videos_count != null && (
+              <> · {fmtNumber(account.videos_count)} videos</>
+            )}
+            {account.total_likes != null && (
+              <> · {fmtNumber(account.total_likes)} ♥ lifetime</>
+            )}
+          </div>
+          <div className="font-mono text-[10px] text-muted-foreground/70">
+            open_id {account.open_id.slice(0, 14)}…
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-2">
+        <Button onClick={onConnect} disabled={busy}>
+          {busy ? 'Connecting…' : ok ? 'Reseed' : 'Connect'}
+          {!busy && !ok && <ArrowRight className="ml-1 h-3.5 w-3.5" />}
+        </Button>
+        {ok && (
+          <span className="font-mono text-[10px] text-ok">
+            ✓ acc #{ok.account_id} · {ok.sync_jobs_created.length} sync_jobs
+          </span>
+        )}
+        {errMsg && (
+          <span className="font-mono text-[10px] text-danger">{errMsg}</span>
+        )}
+      </div>
+    </Card>
   );
 }
 

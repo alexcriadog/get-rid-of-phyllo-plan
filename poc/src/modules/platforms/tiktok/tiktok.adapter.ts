@@ -23,6 +23,7 @@ import type {
   SupportMatrix,
 } from '../shared/platform-types';
 import type { BoundTikTokClient } from '../shared/tiktok-api';
+import { TikTokTokenRefreshService } from '../shared/tiktok-api';
 import { TikTokRateLimitStrategy } from './tiktok.rate-limit.strategy';
 import { TIKTOK_SUPPORT_MATRIX } from './tiktok.support-matrix';
 import { TIKTOK_API_CLIENT } from './tiktok.tokens';
@@ -40,6 +41,7 @@ export class TikTokAdapter implements PlatformAdapter {
     @Inject(TIKTOK_API_CLIENT)
     private readonly apiClient: BoundTikTokClient,
     private readonly strategy: TikTokRateLimitStrategy,
+    private readonly tokenRefresh: TikTokTokenRefreshService,
     private readonly profileFetcher: TikTokProfileFetcher,
     private readonly audienceFetcher: TikTokAudienceFetcher,
     private readonly contentFetcher: TikTokContentFetcher,
@@ -57,46 +59,67 @@ export class TikTokAdapter implements PlatformAdapter {
     return TIKTOK_SUPPORT_MATRIX;
   }
 
-  fetchProfile(
+  /**
+   * Resolves a guaranteed-fresh access token. The worker injects `accountId`
+   * (bigint) into `metadata`; if for some reason it's not there (ad-hoc
+   * admin call, future code path), we fall back to the original token —
+   * the adapter still works, it just won't auto-refresh.
+   */
+  private async freshToken(
+    metadata: Record<string, unknown> | undefined,
+    accessToken: string,
+  ): Promise<string> {
+    const accountId =
+      typeof metadata?.accountId === 'bigint' ? metadata.accountId : null;
+    if (accountId == null) return accessToken;
+    return this.tokenRefresh.ensureFresh(accountId, accessToken);
+  }
+
+  async fetchProfile(
     accessToken: string,
     canonicalId: string,
     metadata?: Record<string, unknown>,
   ): Promise<ProfileData> {
-    return this.profileFetcher.fetch(accessToken, canonicalId, metadata);
+    const token = await this.freshToken(metadata, accessToken);
+    return this.profileFetcher.fetch(token, canonicalId, metadata);
   }
 
-  fetchAudience(
+  async fetchAudience(
     accessToken: string,
     canonicalId: string,
     metadata?: Record<string, unknown>,
   ): Promise<AudienceData> {
-    return this.audienceFetcher.fetch(accessToken, canonicalId, metadata);
+    const token = await this.freshToken(metadata, accessToken);
+    return this.audienceFetcher.fetch(token, canonicalId, metadata);
   }
 
-  fetchContents(
+  async fetchContents(
     accessToken: string,
     canonicalId: string,
     opts: FetchOpts,
     metadata?: Record<string, unknown>,
   ): Promise<ContentData[]> {
-    return this.contentFetcher.fetch(accessToken, canonicalId, opts, metadata);
+    const token = await this.freshToken(metadata, accessToken);
+    return this.contentFetcher.fetch(token, canonicalId, opts, metadata);
   }
 
-  fetchComments(
+  async fetchComments(
     accessToken: string,
     canonicalId: string,
     opts: FetchOpts,
     metadata?: Record<string, unknown>,
   ): Promise<CommentData[]> {
-    return this.commentsFetcher.fetch(accessToken, canonicalId, opts, metadata);
+    const token = await this.freshToken(metadata, accessToken);
+    return this.commentsFetcher.fetch(token, canonicalId, opts, metadata);
   }
 
-  fetchMentions(
+  async fetchMentions(
     accessToken: string,
     canonicalId: string,
     opts: FetchOpts,
     metadata?: Record<string, unknown>,
   ): Promise<ContentData[]> {
-    return this.mentionsFetcher.fetch(accessToken, canonicalId, opts, metadata);
+    const token = await this.freshToken(metadata, accessToken);
+    return this.mentionsFetcher.fetch(token, canonicalId, opts, metadata);
   }
 }
