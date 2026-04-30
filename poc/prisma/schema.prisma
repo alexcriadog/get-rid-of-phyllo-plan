@@ -59,6 +59,12 @@ model SyncJob {
   lastAttemptAt DateTime? @map("last_attempt_at")
   lastError     String?  @db.Text @map("last_error")
   failureCount  Int      @default(0) @map("failure_count")
+  // Per-(account, product) settings bag — admin-editable knobs that the
+  // worker merges over env-vars and built-in defaults. Examples:
+  //   engagement_new -> { lookbackDays: 60, maxPostsPerSync: 200 }
+  //   comments       -> { videoLookback: 100, perVideo: 30 }
+  // null means "use defaults".
+  settings      Json?
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
   account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)

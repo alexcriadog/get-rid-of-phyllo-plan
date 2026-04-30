@@ -25,7 +25,11 @@ export class FacebookProfileFetcher {
     const body = await this.client.call<Record<string, unknown>>({
       endpoint: `/${canonicalId}`,
       params: {
-        fields: 'name,about,category,picture,fan_count,followers_count,link',
+        // `picture` alone returns the 50x50 thumbnail. The UI renders the
+        // avatar at 140px so it ends up 2.8x scaled and visibly blurry.
+        // `.width(720).height(720)` asks Meta for a higher-res variant.
+        fields:
+          'name,about,category,picture.width(720).height(720),fan_count,followers_count,link',
       },
       accessToken,
       context: buildFacebookContext(accessToken, canonicalId, metadata),

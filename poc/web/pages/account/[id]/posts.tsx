@@ -1827,8 +1827,8 @@ function CommentsTab({
           <>
             {' '}
             <span style={{ color: '#fff' }}>
-              The post counter shows {fmtNumber(expectedCount)} on the platform —
-              run a comments sync to capture them.
+              The post&apos;s aggregate counter shows {fmtNumber(expectedCount)}{' '}
+              — run a comments sync to fetch them.
             </span>
           </>
         )}
@@ -1836,6 +1836,13 @@ function CommentsTab({
     );
   }
 
+  // TikTok's `/business/video/list/.comments` (and Meta's analogue) are
+  // cached aggregate counters. They drift from the live thread fetched via
+  // `/business/comment/list/` — caches lag, hidden/banned comments may
+  // still count, etc. So mismatches are EXPECTED and the truth is whatever
+  // the comment-list endpoint just returned.
+  const counterMismatch =
+    expectedCount > 0 && expectedCount !== data.length;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div
@@ -1843,9 +1850,12 @@ function CommentsTab({
         style={{ color: 'var(--v-text-muted)' }}
       >
         {data.length} comment{data.length === 1 ? '' : 's'} synced
-        {expectedCount > 0 && expectedCount !== data.length && (
-          <span style={{ marginLeft: 6, color: 'rgba(255,255,255,0.5)' }}>
-            · platform counter says {fmtNumber(expectedCount)}
+        {counterMismatch && (
+          <span
+            style={{ marginLeft: 6, color: 'rgba(255,255,255,0.5)' }}
+            title={`Aggregate counter on the post is ${fmtNumber(expectedCount)} but the comments endpoint returned ${data.length}. The aggregate is platform-cached and frequently drifts.`}
+          >
+            · post counter says {fmtNumber(expectedCount)} (stale, ignore)
           </span>
         )}
       </div>

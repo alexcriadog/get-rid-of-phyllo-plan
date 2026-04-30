@@ -210,6 +210,11 @@ export default function AccountDetailPage() {
                 {account.status === 'paused' ? 'Unpause' : 'Pause'}
               </Button>
               <Button asChild variant="outline" size="sm">
+                <Link href={`/admin/accounts/${id}/sync-settings`}>
+                  Sync settings
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
                 <Link href={`/account/${id}`}>
                   Public view
                   <ExternalLink className="h-3.5 w-3.5" />

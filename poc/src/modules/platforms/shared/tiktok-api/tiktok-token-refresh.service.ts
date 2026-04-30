@@ -74,13 +74,27 @@ export class TikTokTokenRefreshService {
     if (!row || !row.refreshTokenCiphertext) {
       return currentAccessToken;
     }
-    if (
-      row.expiresAt &&
-      row.expiresAt.getTime() - Date.now() > REFRESH_LEAD_TIME_MS
-    ) {
+    // Without expiresAt we have no signal that the token is expiring soon —
+    // assume it's fine and avoid burning a refresh call (and a potential
+    // failure if TIKTOK_CLIENT_* aren't configured). A reactive 40100/40104
+    // path can still trigger refresh() explicitly when needed.
+    if (!row.expiresAt) {
       return currentAccessToken;
     }
-    return this.refresh(accountId, Buffer.from(row.refreshTokenCiphertext));
+    if (row.expiresAt.getTime() - Date.now() > REFRESH_LEAD_TIME_MS) {
+      return currentAccessToken;
+    }
+    // Proactive refresh requested. Soft-fail if creds aren't configured —
+    // the worker should sync with the current (still-valid) token rather
+    // than fail the whole job. The reactive 401 path remains strict.
+    try {
+      return await this.refresh(accountId, Buffer.from(row.refreshTokenCiphertext));
+    } catch (err) {
+      this.logger.warn(
+        `ensureFresh fell back to current token for account ${accountId.toString()}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return currentAccessToken;
+    }
   }
 
   /**

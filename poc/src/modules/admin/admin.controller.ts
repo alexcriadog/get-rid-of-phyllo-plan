@@ -56,6 +56,17 @@ const ConnectDiscoverSchema = z
   })
   .strict();
 
+const SyncJobSettingsPatchSchema = z
+  .object({
+    // null clears all overrides; the worker falls back to env / defaults.
+    settings: z
+      .union([
+        z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])),
+        z.null(),
+      ]),
+  })
+  .strict();
+
 const ConnectSeedSchema = z
   .object({
     platform: z.enum(['instagram', 'facebook', 'tiktok']),
@@ -169,6 +180,29 @@ export class AdminController {
   @Get('sync-jobs/:id/risk-check')
   async riskCheckSyncJob(@Param('id') rawId: string): Promise<unknown> {
     return this.admin.riskCheckSyncJob(this.parseBigInt(rawId));
+  }
+
+  @Get('sync-jobs/:id')
+  async getSyncJob(@Param('id') rawId: string): Promise<unknown> {
+    return this.admin.getSyncJob(this.parseBigInt(rawId));
+  }
+
+  @Patch('sync-jobs/:id/settings')
+  async updateSyncJobSettings(
+    @Param('id') rawId: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    const parsed = SyncJobSettingsPatchSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: 'Invalid settings payload',
+        issues: parsed.error.issues,
+      });
+    }
+    return this.admin.updateSyncJobSettings(
+      this.parseBigInt(rawId),
+      parsed.data.settings,
+    );
   }
 
   // ─── Next runs ─────────────────────────────────────────────────────────

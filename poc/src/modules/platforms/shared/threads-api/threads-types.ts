@@ -1,0 +1,122 @@
+// Threads API JSON shapes (graph.threads.net v1.0).
+// Reference: https://developers.facebook.com/docs/threads/threads-objects
+
+/**
+ * Profile fields exposed by `GET /me` (and `/{user_id}`). The exact subset
+ * we request is configured in the profile fetcher's `fields=` query param.
+ */
+export interface ThreadsUser {
+  id: string;
+  username?: string;
+  name?: string;
+  threads_profile_picture_url?: string;
+  threads_biography?: string;
+  is_verified?: boolean;
+  // Account-level metric returned via /threads_insights — surfaced on the
+  // profile object too in some shapes.
+  followers_count?: number;
+}
+
+export type ThreadsMediaType =
+  | 'TEXT_POST'
+  | 'IMAGE'
+  | 'VIDEO'
+  | 'CAROUSEL_ALBUM'
+  | 'REPOST_FACADE'
+  | 'AUDIO';
+
+/**
+ * One post returned by `GET /me/threads` or `GET /{thread_id}`.
+ */
+export interface ThreadsPost {
+  id: string;
+  media_product_type?: 'THREADS';
+  media_type?: ThreadsMediaType;
+  text?: string;
+  permalink?: string;
+  timestamp?: string; // ISO 8601 UTC
+  shortcode?: string;
+  thumbnail_url?: string;
+  media_url?: string;
+  owner?: { id: string };
+  username?: string;
+  is_quote_post?: boolean;
+  has_replies?: boolean;
+  reply_audience?: 'EVERYONE' | 'ACCOUNTS_YOU_FOLLOW' | 'MENTIONED_ONLY';
+  alt_text?: string;
+  /** Carousel children. */
+  children?: { data: ThreadsPost[] };
+  /** Numerator for views/likes/etc. when expanded inline. */
+  views?: number;
+  likes?: number;
+  replies?: number;
+  reposts?: number;
+  quotes?: number;
+}
+
+/**
+ * Reply object from `GET /{thread_id}/replies`. Same shape as a post plus a
+ * couple of reply-specific fields.
+ */
+export interface ThreadsReply extends ThreadsPost {
+  root_post?: { id: string };
+  replied_to?: { id: string };
+  hide_status?:
+    | 'NOT_HUSHED'
+    | 'UNHUSHED'
+    | 'HIDDEN'
+    | 'COVERED'
+    | 'BLOCKED'
+    | 'RESTRICTED';
+  /** True when the reply is by the post owner replying to a fan. */
+  is_reply_owned_by_me?: boolean;
+}
+
+/**
+ * One row of an insight call. Per-post insights and account insights both
+ * use this envelope; the worker reads either `total_value.value` or the
+ * time series under `values[]`.
+ */
+export interface ThreadsInsight {
+  name: string;
+  period?: 'lifetime' | 'day';
+  title?: string;
+  description?: string;
+  total_value?: { value: number };
+  values?: Array<{ value: number; end_time?: string }>;
+}
+
+export interface ThreadsApiPaging {
+  cursors?: { before?: string; after?: string };
+  next?: string;
+  previous?: string;
+}
+
+/**
+ * Generic envelope. Some endpoints return `{data: T}` (single object), some
+ * return `{data: T[], paging}`. We type both via call-site overloads.
+ */
+export interface ThreadsApiResponse<T> {
+  data: T;
+  paging?: ThreadsApiPaging;
+}
+
+/**
+ * Graph-style error body. Threads uses the same shape as Facebook Graph,
+ * so we can reuse the AdapterFetchError mapping logic.
+ */
+export interface ThreadsApiError {
+  message?: string;
+  type?: string;
+  code?: number;
+  error_subcode?: number;
+  fbtrace_id?: string;
+}
+
+/**
+ * Mention object from `GET /me/mentioned_threads`.
+ */
+export interface ThreadsMention extends ThreadsPost {
+  /** The thread author who mentioned us. */
+  from?: { id: string; username?: string };
+}

@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import axios, { AxiosError } from 'axios';
 import { PrismaService } from '@shared/database/prisma.service';
 import { MongoService } from '@shared/database/mongo.service';
@@ -433,6 +433,91 @@ export class AdminService {
       })),
       total,
     };
+  }
+
+  /**
+   * Single sync_job + computed effective settings.
+   *
+   * `settings` on the row are sparse — only what the admin has overridden.
+   * `effective_settings` is what the worker would actually use this run,
+   * after merging defaults / env vars on top.
+   */
+  async getSyncJob(id: bigint): Promise<Record<string, unknown>> {
+    const job = await this.prisma.syncJob.findUniqueOrThrow({
+      where: { id },
+      include: {
+        account: { select: { platform: true, handle: true } },
+      },
+    });
+    return {
+      id: job.id.toString(),
+      account_id: job.accountId.toString(),
+      account_handle: job.account.handle ?? null,
+      platform: job.account.platform,
+      product: job.product,
+      status: job.status,
+      priority: job.priority,
+      next_run_at: job.nextRunAt?.toISOString() ?? null,
+      last_success_at: job.lastSuccessAt?.toISOString() ?? null,
+      last_attempt_at: job.lastAttemptAt?.toISOString() ?? null,
+      last_error: job.lastError,
+      failure_count: job.failureCount,
+      settings: job.settings ?? null,
+      effective_settings: this.computeEffectiveSettings(
+        job.product,
+        job.settings as Record<string, unknown> | null,
+      ),
+    };
+  }
+
+  async updateSyncJobSettings(
+    id: bigint,
+    settings: Record<string, unknown> | null,
+  ): Promise<Record<string, unknown>> {
+    // null clears the override (DB value -> SQL NULL). Empty object also
+    // means "no overrides", but we keep the value as-is so the operator
+    // can tell the difference between "never touched" and "intentionally
+    // empty" if they look at the raw row.
+    const data: Prisma.SyncJobUpdateInput =
+      settings === null
+        ? { settings: Prisma.JsonNull }
+        : { settings: settings as Prisma.InputJsonValue };
+    const updated = await this.prisma.syncJob.update({
+      where: { id },
+      data,
+    });
+    return {
+      ok: true,
+      id: updated.id.toString(),
+      settings: updated.settings ?? null,
+    };
+  }
+
+  /**
+   * Compute the settings the worker would actually use, given the row's
+   * sparse override + env vars + built-in defaults. UI uses this so the
+   * operator sees the resolved values without having to know the
+   * precedence rules.
+   */
+  private computeEffectiveSettings(
+    product: string,
+    settings: Record<string, unknown> | null,
+  ): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (product === 'engagement_new') {
+      const fromSettings = Number(settings?.lookbackDays);
+      const fromEnv = Number(process.env.ENGAGEMENT_LOOKBACK_DAYS);
+      out.lookbackDays =
+        Number.isFinite(fromSettings) && fromSettings > 0
+          ? Math.floor(fromSettings)
+          : Number.isFinite(fromEnv) && fromEnv > 0
+            ? Math.floor(fromEnv)
+            : 30;
+      const fromMax = Number(settings?.maxPostsPerSync);
+      out.maxPostsPerSync =
+        Number.isFinite(fromMax) && fromMax > 0 ? Math.floor(fromMax) : 500;
+    }
+    return out;
   }
 
   async reenqueueSyncJob(id: bigint): Promise<Record<string, unknown>> {

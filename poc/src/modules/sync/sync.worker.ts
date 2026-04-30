@@ -56,6 +56,36 @@ const MAX_CONSECUTIVE_FAILURES = 5;
 const FAILURE_BACKOFF_BASE_MS = 60_000;
 const FAILURE_BACKOFF_MAX_MS = 60 * 60_000;
 
+/**
+ * Engagement window. The worker passes `since` to adapter.fetchContents()
+ * so each sync only paginates as far back as needed.
+ *
+ * - First sync (lastSuccessAt is null) → since = now - LOOKBACK_DAYS.
+ *   Backfills the requested historical window in one go. Up to MAX_POSTS
+ *   defensive cap so a runaway account doesn't crash a worker slot.
+ * - Incremental sync (lastSuccessAt set) → since = lastSuccessAt - OVERLAP.
+ *   Only walks the new posts published since last success, plus a small
+ *   overlap to catch late-indexed content.
+ *
+ * Override LOOKBACK via `ENGAGEMENT_LOOKBACK_DAYS` (default 30 for the PoC;
+ * production should set 90).
+ */
+const ENGAGEMENT_LOOKBACK_DAYS_DEFAULT = 30;
+const ENGAGEMENT_MAX_POSTS_PER_SYNC = 500;
+const INCREMENTAL_OVERLAP_MS = 30 * 60_000;
+
+/** Coerce an unknown into a positive finite number, else fall back. */
+function pickPositiveNumber(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return fallback;
+}
+
 type ProductType =
   | 'identity'
   | 'audience'
@@ -157,10 +187,18 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
 
     this.metrics.incr('sync_worker_job_started', { product });
 
-    const account = await this.prisma.account.findUnique({
-      where: { id: accountIdBig },
-      include: { tokens: true },
-    });
+    const [account, syncJobRow] = await Promise.all([
+      this.prisma.account.findUnique({
+        where: { id: accountIdBig },
+        include: { tokens: true },
+      }),
+      // Pull lastSuccessAt + settings for the incremental-window
+      // calculation and per-(account, product) overrides. Cheap (PK lookup).
+      this.prisma.syncJob.findUnique({
+        where: { id: syncJobId },
+        select: { lastSuccessAt: true, settings: true },
+      }),
+    ]);
 
     if (!account || account.syncTier === 'paused') {
       await this.markJobSkipped(syncJobId, now, account ? 'paused' : 'missing_account');
@@ -225,12 +263,18 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
       // Spread the full metadata bag first so platform-specific fields
       // (business_id for TikTok, page_id for Meta, etc.) reach the adapter
       // unchanged. Then layer the worker-derived fields on top.
+      const settings =
+        syncJobRow?.settings && typeof syncJobRow.settings === 'object'
+          ? (syncJobRow.settings as Record<string, unknown>)
+          : null;
       const context = {
         ...metadata,
         tokenHash: sha256Hex(accessToken).slice(0, 16),
         pageId: typeof metadata.page_id === 'string' ? metadata.page_id : undefined,
         channelId: typeof metadata.channel_id === 'string' ? metadata.channel_id : undefined,
         accountId: accountIdBig,
+        lastSuccessAt: syncJobRow?.lastSuccessAt ?? null,
+        settings,
       };
 
       // Wrap dispatch in an AsyncLocalStorage context so every downstream
@@ -341,6 +385,8 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
       pageId?: string;
       channelId?: string;
       accountId: bigint;
+      lastSuccessAt?: Date | null;
+      settings?: Record<string, unknown> | null;
     },
   ): Promise<FetchResult | null> {
     switch (product) {
@@ -353,10 +399,18 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         return { kind: 'audience', data };
       }
       case 'engagement_new': {
+        const since = this.computeEngagementSince(
+          context.lastSuccessAt ?? null,
+          context.settings ?? null,
+        );
+        const limit = pickPositiveNumber(
+          context.settings?.maxPostsPerSync,
+          ENGAGEMENT_MAX_POSTS_PER_SYNC,
+        );
         const data = await adapter.fetchContents(
           accessToken,
           canonicalId,
-          { limit: 25 },
+          { since, limit },
           context,
         );
         return { kind: 'content', data };
@@ -637,6 +691,42 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
       });
       this.metrics.incr('sync_worker_circuit_break', {});
     }
+  }
+
+  /**
+   * Window start for an engagement_new fetch. Returns the more-recent of:
+   *   (a) `lastSuccessAt - INCREMENTAL_OVERLAP_MS` (incremental — usually
+   *       captures only the past 2h plus 30 min overlap so we can't lose a
+   *       post that was published just before the previous sync but
+   *       indexed after it).
+   *   (b) `now - LOOKBACK_DAYS` (cap — first run, or runs after a long
+   *       outage, never reach further back than this).
+   *
+   * LOOKBACK precedence: per-job settings.lookbackDays > env > default.
+   */
+  private computeEngagementSince(
+    lastSuccessAt: Date | null,
+    settings: Record<string, unknown> | null,
+  ): Date {
+    const lookbackDays = this.resolveEngagementLookbackDays(settings);
+    const lookbackStart = new Date(Date.now() - lookbackDays * 86_400_000);
+    if (!lastSuccessAt) return lookbackStart;
+    const incrementalStart = new Date(lastSuccessAt.getTime() - INCREMENTAL_OVERLAP_MS);
+    return incrementalStart > lookbackStart ? incrementalStart : lookbackStart;
+  }
+
+  private resolveEngagementLookbackDays(
+    settings: Record<string, unknown> | null,
+  ): number {
+    const fromSettings = pickPositiveNumber(settings?.lookbackDays, NaN);
+    if (Number.isFinite(fromSettings) && fromSettings > 0) {
+      return Math.floor(fromSettings);
+    }
+    const raw = process.env.ENGAGEMENT_LOOKBACK_DAYS;
+    if (!raw) return ENGAGEMENT_LOOKBACK_DAYS_DEFAULT;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return ENGAGEMENT_LOOKBACK_DAYS_DEFAULT;
+    return Math.floor(n);
   }
 
   private async updateJobStatusIdle(syncJobId: bigint): Promise<void> {

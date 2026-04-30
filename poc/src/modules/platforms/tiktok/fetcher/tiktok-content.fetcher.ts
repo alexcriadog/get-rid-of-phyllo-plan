@@ -85,7 +85,12 @@ export class TikTokContentFetcher {
     const collected: ContentData[] = [];
     let cursor: number | undefined;
 
-    while (collected.length < limit) {
+    // /business/video/list/ returns videos by create_time DESCENDING. So
+    // once a single post falls below `opts.since`, every following post is
+    // older too — we can stop paginating instead of walking the entire
+    // history. Saves N pages × 1 call each on incremental syncs.
+    let stopOnAge = false;
+    while (collected.length < limit && !stopOnAge) {
       const data = await this.client.call<VideoListData>({
         endpoint: '/business/video/list/',
         method: 'GET',
@@ -102,7 +107,10 @@ export class TikTokContentFetcher {
       for (const v of data.videos ?? []) {
         const tsRaw = v.create_time;
         const ts = tsRaw ? new Date(Number(tsRaw) * 1000) : null;
-        if (opts.since && ts && ts < opts.since) continue;
+        if (opts.since && ts && ts < opts.since) {
+          stopOnAge = true;
+          break;
+        }
         if (opts.until && ts && ts > opts.until) continue;
         collected.push(videoToContent(v));
         if (collected.length >= limit) break;
