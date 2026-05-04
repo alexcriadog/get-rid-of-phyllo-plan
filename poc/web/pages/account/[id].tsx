@@ -62,6 +62,10 @@ type AccountInsights = {
   textMessageClicks?: number;
   getDirectionsClicks?: number;
   followerCountSeries?: Array<{ endTime: string; value: number }>;
+  /** 24-bucket "when followers are online" / "when audience engages" curve. */
+  audienceActivity?: Array<{ hour: number; count: number }>;
+  /** 7×24 weekly heatmap: dayOfWeek 0..6 (0=Sun) × hour 0..23. */
+  audienceActivityWeekly?: Array<{ dayOfWeek: number; hour: number; count: number }>;
   extra?: Record<string, number>;
 };
 
@@ -102,6 +106,12 @@ type PageProps = {
   audience: AudienceSnapshot | null;
   posts: Post[];
 };
+
+// Platforms whose adapters implement `fetchMentions` and surface mentions
+// in the canonical `posts` collection (with `data.ownerHandle` !== self).
+// Mirrors the support matrix at /admin/support-matrix; keep in sync if a
+// platform gains/loses the product.
+const PLATFORMS_WITH_MENTIONS = new Set<string>(['tiktok', 'threads']);
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
   const id = String(ctx.params?.id || '');
@@ -202,6 +212,11 @@ export default function AccountDetail({ id, identity, audience, posts }: PagePro
           <Link href={`/account/${id}/posts`} className="v-pill-outline-mint">
             All posts ({posts.length > 0 ? '…' : '0'})
           </Link>
+          {PLATFORMS_WITH_MENTIONS.has(identity?.platform ?? '') && (
+            <Link href={`/account/${id}/mentions`} className="v-pill-outline-mint">
+              Mentions
+            </Link>
+          )}
           <button className="v-pill-primary" onClick={onRefresh} disabled={refreshing}>
             {refreshing ? 'Refreshing…' : 'Refresh now'}
           </button>
@@ -252,10 +267,19 @@ export default function AccountDetail({ id, identity, audience, posts }: PagePro
           </div>
         ) : (
           <>
-            <ProfileHero identity={identity} />
+            <ProfileHero identity={identity} audience={audience} />
 
             {aud?.accountInsights && (
-              <PanelAccountInsights insights={aud.accountInsights} />
+              <PanelAccountInsights
+                insights={aud.accountInsights}
+                followersCount={
+                  typeof identity.data?.followersCount === 'number'
+                    ? identity.data.followersCount
+                    : typeof aud.accountInsights.extra?.followers_count_current === 'number'
+                      ? (aud.accountInsights.extra.followers_count_current as number)
+                      : undefined
+                }
+              />
             )}
 
             <PanelDemographics aud={aud ?? null} platform={identity.platform} />
@@ -307,8 +331,25 @@ export default function AccountDetail({ id, identity, audience, posts }: PagePro
   );
 }
 
-function ProfileHero({ identity }: { identity: IdentitySnapshot }) {
+function ProfileHero({
+  identity,
+  audience,
+}: {
+  identity: IdentitySnapshot;
+  audience: AudienceSnapshot | null;
+}) {
   const d = identity.data ?? {};
+  // Threads exposes followers via /me/threads_insights, not on the user
+  // object — fall back to the audience snapshot when the profile leaves
+  // the count null.
+  const audienceFollowers =
+    audience?.data?.accountInsights?.extra?.followers_count_current;
+  const followersCount =
+    typeof d.followersCount === 'number'
+      ? d.followersCount
+      : typeof audienceFollowers === 'number'
+        ? audienceFollowers
+        : undefined;
   return (
     <div
       style={{
@@ -382,7 +423,7 @@ function ProfileHero({ identity }: { identity: IdentitySnapshot }) {
             borderTop: '1px solid #3d00bf',
           }}
         >
-          <HeroStat label="Followers" value={fmtNumber(d.followersCount)} />
+          <HeroStat label="Followers" value={fmtNumber(followersCount)} />
           <HeroStat label="Following" value={fmtNumber(d.followingCount)} />
           <HeroStat label="Posts" value={fmtNumber(d.postsCount)} />
         </div>
@@ -450,7 +491,13 @@ function HeroStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PanelAccountInsights({ insights }: { insights: AccountInsights }) {
+function PanelAccountInsights({
+  insights,
+  followersCount,
+}: {
+  insights: AccountInsights;
+  followersCount?: number;
+}) {
   const tiles: Array<{ label: string; value: number | undefined }> = [
     { label: 'Reach', value: insights.reach },
     { label: 'Impressions', value: insights.impressions },
@@ -519,11 +566,27 @@ function PanelAccountInsights({ insights }: { insights: AccountInsights }) {
       {insights.followerCountSeries && insights.followerCountSeries.length > 0 && (
         <div style={{ marginTop: 24 }}>
           <div className="v-kicker" style={{ marginBottom: 8 }}>
-            Followers · daily snapshot
+            Followers · daily net change
           </div>
-          <FollowerSparkline series={insights.followerCountSeries} />
+          <FollowerSparkline
+            series={insights.followerCountSeries}
+            currentTotal={followersCount}
+          />
         </div>
       )}
+
+      {(insights.audienceActivityWeekly?.length ?? 0) > 0 ||
+      (insights.audienceActivity?.length ?? 0) > 0 ? (
+        <div style={{ marginTop: 24 }}>
+          <div className="v-kicker" style={{ marginBottom: 8 }}>
+            Best time to post · audience by weekday × hour (Europe/Madrid)
+          </div>
+          <BestTimeToPost
+            buckets={insights.audienceActivity ?? []}
+            weekly={insights.audienceActivityWeekly}
+          />
+        </div>
+      ) : null}
 
       {insights.extra && Object.keys(insights.extra).length > 0 && (
         <div style={{ marginTop: 20 }}>
@@ -584,8 +647,10 @@ function AccountKpi({
 
 function FollowerSparkline({
   series,
+  currentTotal,
 }: {
   series: Array<{ endTime: string; value: number }>;
+  currentTotal?: number;
 }) {
   const sorted = useMemo(
     () => [...series].sort((a, b) => a.endTime.localeCompare(b.endTime)),
@@ -593,6 +658,22 @@ function FollowerSparkline({
   );
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+
+  // Cumulative line: derive `total followers at end of each day` by walking
+  // back from today's known total minus the trailing daily deltas. Only
+  // computed when the parent supplies `currentTotal` (from /me?fields=
+  // followers_count or audienceSnapshot.extra.followers_count_current).
+  const cumulative = useMemo(() => {
+    if (typeof currentTotal !== 'number' || sorted.length === 0) return null;
+    const out: number[] = new Array(sorted.length).fill(0);
+    out[sorted.length - 1] = currentTotal;
+    for (let i = sorted.length - 2; i >= 0; i--) {
+      // sorted[i+1].value is the delta GAINED on day i+1, so the count at
+      // end of day i is "tomorrow's count minus tomorrow's gain".
+      out[i] = out[i + 1] - sorted[i + 1].value;
+    }
+    return out;
+  }, [sorted, currentTotal]);
 
   if (sorted.length === 0) return null;
 
@@ -611,15 +692,34 @@ function FollowerSparkline({
   const pointX = (i: number) => padX + i * stepX;
   const pointY = (v: number) => padTop + plotH - ((v - min) / range) * plotH;
 
+  // Cumulative line uses its own Y-axis (different scale: total followers)
+  const cumMin = cumulative ? Math.min(...cumulative) : 0;
+  const cumMax = cumulative ? Math.max(...cumulative) : 1;
+  const cumRange = Math.max(cumMax - cumMin, 1);
+  const cumPointY = (v: number) =>
+    padTop + plotH - ((v - cumMin) / cumRange) * plotH;
+
   const pts = sorted.map((s, i) => `${pointX(i).toFixed(1)},${pointY(s.value).toFixed(1)}`);
+  // Solid path through every point except the last segment, which is
+  // rendered separately as dashed to signal the "today" partial-day value
+  // (Meta closes the day at 07:00 UTC the next morning, so today is
+  // always preliminary until tomorrow morning).
+  const pathSolid =
+    pts.length >= 2 ? `M${pts.slice(0, -1).join(' L')}` : `M${pts.join(' L')}`;
+  const pathDashedTail =
+    pts.length >= 2 ? `M${pts[pts.length - 2]} L${pts[pts.length - 1]}` : '';
   const path = `M${pts.join(' L')}`;
   const area = `${path} L${pointX(sorted.length - 1).toFixed(1)},${(padTop + plotH).toFixed(1)} L${padX.toFixed(1)},${(padTop + plotH).toFixed(1)} Z`;
+  const cumPath = cumulative
+    ? `M${cumulative.map((v, i) => `${pointX(i).toFixed(1)},${cumPointY(v).toFixed(1)}`).join(' L')}`
+    : '';
 
-  // The series values are cumulative follower counts (snapshots at end of
-  // each day), NOT daily deltas. Net change in the window is just
-  // last - first; summing the snapshots produces a meaningless number.
-  const netDelta =
-    sorted.length >= 2 ? sorted[sorted.length - 1].value - sorted[0].value : 0;
+  // The series values are daily deltas (followers gained or lost on each
+  // day) returned by Meta's `follower_count` insight with `period=day` —
+  // NOT cumulative snapshots. Net change in the window is the sum of all
+  // values; doing `last - first` would be nonsense (it produced a bogus
+  // negative number even when the account grew net-positive in the window).
+  const netDelta = sorted.reduce((acc, p) => acc + p.value, 0);
   const toneClass = netDelta >= 0 ? '#3cffd0' : '#ef4444';
 
   const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -679,7 +779,26 @@ function FollowerSparkline({
           />
         ))}
         <path d={area} fill="url(#sparkFill)" />
-        <path d={path} fill="none" stroke={toneClass} strokeWidth={1.5} />
+        <path d={pathSolid} fill="none" stroke={toneClass} strokeWidth={1.5} />
+        {pathDashedTail && (
+          <path
+            d={pathDashedTail}
+            fill="none"
+            stroke={toneClass}
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+            opacity={0.6}
+          />
+        )}
+        {cumPath && (
+          <path
+            d={cumPath}
+            fill="none"
+            stroke="#7d6cff"
+            strokeWidth={1.2}
+            opacity={0.55}
+          />
+        )}
 
         {hoverIdx !== null && hovered && (
           <>
@@ -741,8 +860,34 @@ function FollowerSparkline({
             {hovered.endTime.slice(0, 10)}
           </div>
           <div style={{ fontSize: 14, fontFamily: 'var(--v-display)' }}>
-            {fmtNumber(hovered.value)} followers
+            {hovered.value >= 0 ? '+' : ''}
+            {fmtNumber(hovered.value)} that day
           </div>
+          {cumulative && (
+            <div
+              style={{
+                fontSize: 11,
+                fontFamily: 'var(--v-mono)',
+                color: '#a89aff',
+                marginTop: 2,
+              }}
+            >
+              total {fmtNumber(cumulative[hoverIdx!])}
+            </div>
+          )}
+          {hoverIdx === sorted.length - 1 && (
+            <div
+              style={{
+                fontSize: 9,
+                fontFamily: 'var(--v-mono)',
+                color: 'var(--v-text-muted)',
+                marginTop: 2,
+                letterSpacing: '0.08em',
+              }}
+            >
+              partial — final value tomorrow
+            </div>
+          )}
         </div>
       )}
 
@@ -765,6 +910,20 @@ function FollowerSparkline({
         </span>
         <span>{sorted[sorted.length - 1]?.endTime.slice(0, 10)}</span>
       </div>
+
+      <div
+        style={{
+          fontFamily: 'var(--v-mono)',
+          fontSize: 9,
+          letterSpacing: '0.10em',
+          color: 'var(--v-text-muted)',
+          marginTop: 6,
+          opacity: 0.7,
+        }}
+      >
+        today's value lands tomorrow — Meta closes daily insights at end of
+        day UTC (09:00 Madrid){cumulative && ' · purple line: cumulative total followers'}
+      </div>
     </div>
   );
 }
@@ -778,11 +937,16 @@ function DemographicsUnavailableNote({
   scope,
   errors,
 }: {
-  scope: 'reached' | 'engaged';
+  scope: 'reached' | 'engaged' | 'followers';
   errors: DemographicBreakdownError[] | undefined;
 }) {
   if (!errors || errors.length === 0) return null;
-  const scopeLabel = scope === 'reached' ? 'Reached-audience' : 'Engaged-audience';
+  const scopeLabel =
+    scope === 'reached'
+      ? 'Reached-audience'
+      : scope === 'engaged'
+        ? 'Engaged-audience'
+        : 'Followers';
   const grouped = new Map<string, DemographicBreakdownError[]>();
   for (const e of errors) {
     const key = e.message || 'Unknown error';
@@ -949,6 +1113,18 @@ function PanelDemographics({
     scope === 'reached' && !hasDistribution(aud.reachedDemographics) && !!reachedErrors?.length;
   const showEngagedError =
     scope === 'engaged' && !hasDistribution(aud.engagedDemographics) && !!engagedErrors?.length;
+  // Threads packs the per-breakdown errors (e.g. "needs 100 followers") into
+  // `reachedDemographics.errors` because there's no native "followers errors"
+  // slot on AudienceData. Surface them under the Followers scope when no
+  // distribution arrived.
+  const followersOwn: DemographicGroup = {
+    genderDistribution: aud.genderDistribution,
+    ageDistribution: aud.ageDistribution,
+    countryDistribution: aud.countryDistribution,
+    cityDistribution: aud.cityDistribution,
+  };
+  const showFollowersError =
+    scope === 'followers' && !hasDistribution(followersOwn) && !!reachedErrors?.length;
 
   return (
     <div
@@ -1035,6 +1211,9 @@ function PanelDemographics({
         </div>
       </div>
 
+      {showFollowersError && (
+        <DemographicsUnavailableNote scope="followers" errors={reachedErrors} />
+      )}
       {showReachedError && (
         <DemographicsUnavailableNote scope="reached" errors={reachedErrors} />
       )}
@@ -1559,6 +1738,7 @@ function PostStrip({ posts, id }: { posts: Post[]; id: string }) {
         const likes = d?.metrics?.likes ?? 0;
         const comments = d?.metrics?.comments ?? 0;
         const type = d?.contentType || 'post';
+        const isTextOnly = !thumb && !!d?.caption;
         return (
           <Link
             key={p.platform_content_id}
@@ -1593,6 +1773,37 @@ function PostStrip({ posts, id }: { posts: Post[]; id: string }) {
                 loading="lazy"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
+            ) : isTextOnly ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  padding: 16,
+                  paddingBottom: 48,
+                  background:
+                    'radial-gradient(120% 80% at 0% 0%, rgba(60,255,208,0.10) 0%, rgba(19,19,19,0) 55%), linear-gradient(180deg, #161616 0%, #0e0e0e 100%)',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: 'var(--v-sans)',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    lineHeight: 1.34,
+                    color: '#ffffff',
+                    whiteSpace: 'pre-wrap',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 6,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {d?.caption}
+                </div>
+              </div>
             ) : null}
             <span
               className="v-tag mint"
@@ -1633,4 +1844,286 @@ function PostStrip({ posts, id }: { posts: Post[]; id: string }) {
 function sum(d?: Distribution): number {
   if (!d) return 0;
   return d.reduce((a, b) => a + b.value, 0);
+}
+
+/**
+ * Hour offset to add to a Pacific-Time wall clock to get the same wall
+ * clock in Europe/Madrid. DST-aware: usually +9 (PDT/CEST or PST/CET) but
+ * +8 during the two short transition windows where the two zones aren't
+ * aligned (8-Mar→last-Sun-Mar and last-Sun-Oct→1-Nov each year).
+ */
+function ptToMadridOffsetHours(now: Date = new Date()): number {
+  const pt = new Date(
+    now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }),
+  );
+  const md = new Date(
+    now.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }),
+  );
+  return Math.round((md.getTime() - pt.getTime()) / 3_600_000);
+}
+
+/**
+ * Shift a (dayOfWeek, hour) bucket by `offset` hours, wrapping the day of
+ * week as the hour overflows past 23 or below 0.
+ */
+function shiftBucket(
+  b: { dayOfWeek: number; hour: number; count: number },
+  offset: number,
+): { dayOfWeek: number; hour: number; count: number } {
+  const total = b.hour + offset;
+  const newHour = ((total % 24) + 24) % 24;
+  const dayShift = Math.floor(total / 24);
+  const newDow = (((b.dayOfWeek + dayShift) % 7) + 7) % 7;
+  return { dayOfWeek: newDow, hour: newHour, count: b.count };
+}
+
+/**
+ * "Best time to post" panel. Renders:
+ *   - a 7×24 weekday × hour heatmap when weekly buckets are present
+ *     (mint intensity scaled to the period max, top peaks marked).
+ *   - a flat 24-bar sparkline as fallback (legacy adapters).
+ */
+function BestTimeToPost({
+  buckets,
+  weekly,
+}: {
+  buckets: Array<{ hour: number; count: number }>;
+  weekly?: Array<{ dayOfWeek: number; hour: number; count: number }>;
+}) {
+  if (weekly && weekly.length > 0) {
+    return <WeeklyHeatmap buckets={weekly} />;
+  }
+  return <HourlyBars buckets={buckets} />;
+}
+
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function WeeklyHeatmap({
+  buckets,
+}: {
+  buckets: Array<{ dayOfWeek: number; hour: number; count: number }>;
+}) {
+  // Meta returns the online_followers buckets in Pacific Time (the API's
+  // "day" runs 00:00 PT → 24:00 PT). We reproject to Europe/Madrid so the
+  // user reads peaks in their own clock. Offset is DST-aware: typically +9h
+  // in summer (PDT/CEST), +8h in the two short transition windows where
+  // Europe and US DST aren't aligned.
+  const offset = ptToMadridOffsetHours();
+  const shifted = buckets.map((b) => shiftBucket(b, offset));
+
+  const grid: number[][] = Array.from({ length: 7 }, () =>
+    new Array<number>(24).fill(0),
+  );
+  let maxVal = 0;
+  let total = 0;
+  for (const b of shifted) {
+    if (b.dayOfWeek < 0 || b.dayOfWeek > 6) continue;
+    if (b.hour < 0 || b.hour > 23) continue;
+    grid[b.dayOfWeek][b.hour] += b.count;
+    if (grid[b.dayOfWeek][b.hour] > maxVal) maxVal = grid[b.dayOfWeek][b.hour];
+    total += b.count;
+  }
+  // Top 3 (dow, hour) pairs
+  const flat: Array<{ dow: number; hour: number; count: number }> = [];
+  for (let dow = 0; dow < 7; dow++)
+    for (let hour = 0; hour < 24; hour++)
+      flat.push({ dow, hour, count: grid[dow][hour] });
+  const peaks = flat
+    .filter((c) => c.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+  const peakSet = new Set(peaks.map((p) => `${p.dow}-${p.hour}`));
+
+  return (
+    <div>
+      {/* Hour scale on top */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '52px repeat(24, 1fr)',
+          gap: 2,
+          marginBottom: 4,
+          fontFamily: 'var(--v-mono)',
+          fontSize: 9,
+          letterSpacing: '0.04em',
+          color: 'var(--v-text-muted)',
+        }}
+      >
+        <span />
+        {Array.from({ length: 24 }, (_, h) => (
+          <span key={h} style={{ textAlign: 'center' }}>
+            {h % 3 === 0 ? String(h).padStart(2, '0') : ''}
+          </span>
+        ))}
+      </div>
+      {/* Mon..Sun rows. We iterate Monday→Sunday (1..6, then 0) so the grid
+           reads left-to-right, top-to-bottom in calendar order. */}
+      {[1, 2, 3, 4, 5, 6, 0].map((dow) => (
+        <div
+          key={dow}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '52px repeat(24, 1fr)',
+            gap: 2,
+            marginBottom: 2,
+            alignItems: 'center',
+          }}
+        >
+          <span
+            style={{
+              fontFamily: 'var(--v-mono)',
+              fontSize: 10,
+              letterSpacing: '0.06em',
+              color: 'var(--v-text-muted)',
+              textAlign: 'right',
+              paddingRight: 4,
+            }}
+          >
+            {DAY_LABELS[dow]}
+          </span>
+          {Array.from({ length: 24 }, (_, hour) => {
+            const count = grid[dow][hour];
+            const intensity = maxVal > 0 ? count / maxVal : 0;
+            const isPeak = peakSet.has(`${dow}-${hour}`);
+            const bg = isPeak
+              ? '#3cffd0'
+              : intensity > 0
+                ? `rgba(60,255,208,${(0.12 + intensity * 0.6).toFixed(2)})`
+                : 'rgba(255,255,255,0.05)';
+            return (
+              <div
+                key={hour}
+                title={`${DAY_LABELS[dow]} ${String(hour).padStart(2, '0')}:00 — ${count.toLocaleString()}`}
+                style={{
+                  height: 18,
+                  background: bg,
+                  borderRadius: 3,
+                  transition: 'background 200ms ease',
+                }}
+              />
+            );
+          })}
+        </div>
+      ))}
+      {peaks.length > 0 && (
+        <div
+          className="v-meta"
+          style={{ marginTop: 12, color: 'var(--v-text-muted)' }}
+        >
+          Peak slots:{' '}
+          <span style={{ color: '#3cffd0' }}>
+            {peaks
+              .map(
+                (p) =>
+                  `${DAY_LABELS[p.dow]} ${String(p.hour).padStart(2, '0')}:00`,
+              )
+              .join(' · ')}
+          </span>
+          {' — '}
+          {fmtNumber(total)} interactions across the period
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HourlyBars({
+  buckets,
+}: {
+  buckets: Array<{ hour: number; count: number }>;
+}) {
+  const padded: number[] = new Array<number>(24).fill(0);
+  for (const b of buckets) {
+    if (b.hour >= 0 && b.hour <= 23) padded[b.hour] = b.count;
+  }
+  const maxVal = Math.max(...padded, 1);
+  const total = padded.reduce((a, b) => a + b, 0);
+  // Pick the top 3 distinct hours by count for the highlight band.
+  const ranked = padded
+    .map((count, hour) => ({ hour, count }))
+    .sort((a, b) => b.count - a.count);
+  const topSet = new Set(
+    ranked
+      .filter((r) => r.count > 0)
+      .slice(0, 3)
+      .map((r) => r.hour),
+  );
+
+  return (
+    <div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(24, 1fr)',
+          gap: 4,
+          alignItems: 'end',
+          height: 96,
+          padding: '0 2px',
+        }}
+      >
+        {padded.map((count, hour) => {
+          const pct = (count / maxVal) * 100;
+          const isPeak = topSet.has(hour);
+          return (
+            <div
+              key={hour}
+              title={`${String(hour).padStart(2, '0')}:00 — ${count.toLocaleString()}`}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                height: '100%',
+              }}
+            >
+              <div
+                style={{
+                  width: '100%',
+                  height: `${Math.max(pct, count > 0 ? 4 : 0)}%`,
+                  background: isPeak ? '#3cffd0' : 'rgba(255,255,255,0.18)',
+                  borderRadius: 3,
+                  transition: 'background 200ms ease',
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(24, 1fr)',
+          gap: 4,
+          marginTop: 6,
+          fontFamily: 'var(--v-mono)',
+          fontSize: 9,
+          letterSpacing: '0.05em',
+          color: 'var(--v-text-muted)',
+          textAlign: 'center',
+        }}
+      >
+        {Array.from({ length: 24 }, (_, h) => (
+          <span key={h}>
+            {h % 3 === 0 ? String(h).padStart(2, '0') : ''}
+          </span>
+        ))}
+      </div>
+      {topSet.size > 0 && (
+        <div
+          className="v-meta"
+          style={{ marginTop: 10, color: 'var(--v-text-muted)' }}
+        >
+          Peak hours:{' '}
+          <span style={{ color: '#3cffd0' }}>
+            {Array.from(topSet)
+              .sort((a, b) => a - b)
+              .map((h) => `${String(h).padStart(2, '0')}:00`)
+              .join(' · ')}
+          </span>
+          {' — '}
+          {fmtNumber(total)} interactions across the period
+        </div>
+      )}
+    </div>
+  );
 }

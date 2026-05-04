@@ -19,24 +19,41 @@ export function fmtRelative(v: string | number | Date | null | undefined): strin
   return diffMs < 0 ? `in ${days}d` : `${days}d ago`;
 }
 
+// All wall-clock dates in the UI are projected to Europe/Madrid so the
+// product reads consistently whether you open it in Spain, on a server in
+// US-East, or with the browser locale set to en-US. The Date object stays
+// the same instant — only the formatting locks to Madrid.
+const UI_TIMEZONE = 'Europe/Madrid';
+const UI_LOCALE = 'es-ES';
+
 export function fmtTime(v: string | number | Date | null | undefined): string {
   const d = toDate(v);
   if (!d) return '—';
-  return d.toLocaleTimeString(undefined, {
+  return d.toLocaleTimeString(UI_LOCALE, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
+    timeZone: UI_TIMEZONE,
   });
 }
 
 export function fmtDateTime(v: string | number | Date | null | undefined): string {
   const d = toDate(v);
   if (!d) return '—';
-  return `${d.toLocaleDateString()} ${d.toLocaleTimeString(undefined, {
+  return `${d.toLocaleDateString(UI_LOCALE, {
+    timeZone: UI_TIMEZONE,
+  })} ${d.toLocaleTimeString(UI_LOCALE, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
+    timeZone: UI_TIMEZONE,
   })}`;
+}
+
+export function fmtDate(v: string | number | Date | null | undefined): string {
+  const d = toDate(v);
+  if (!d) return '—';
+  return d.toLocaleDateString(UI_LOCALE, { timeZone: UI_TIMEZONE });
 }
 
 export function fmtMs(ms: number | null | undefined): string {

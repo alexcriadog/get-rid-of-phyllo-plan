@@ -23,6 +23,12 @@ export interface PlatformAdapterContext {
   tokenHash?: string;
   pageId?: string;
   channelId?: string;
+  /**
+   * IG Business Account id when the call is operating against an IG asset.
+   * Used by RateLimitStrategy.bucKeys to build the `asset:{id}` Redis key
+   * the BUC mirror checks before admitting the call.
+   */
+  igAccountId?: string;
 }
 
 /**

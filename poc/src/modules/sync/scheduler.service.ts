@@ -9,6 +9,7 @@ import { BullMqService, SyncJobPayload } from '@shared/redis/bullmq.service';
 import { MetricsService } from '@shared/metrics/metrics.service';
 import { RateBucketService } from '@shared/redis/rate-bucket.service';
 import { RedisService } from '@shared/redis/redis.service';
+import { BucTelemetryService } from '@modules/platforms/shared/meta-graph/buc-telemetry.service';
 
 const DEFAULT_TICK_MS = 30_000;
 const MAX_ROWS_PER_TICK = 500;
@@ -39,19 +40,19 @@ const SWEEP_EVERY_N_TICKS = 20;
 const ORPHAN_QUEUED_AGE_MS = 30 * 60_000;
 
 /**
- * App-level rate buckets the scheduler peeks before encolar Meta jobs. If
- * any of these are below `PREFLIGHT_FLOOR_FRACTION` of capacity, the
- * platform's jobs are deferred to a future tick — the worker would just
+ * App-level preflight ceiling. When the BUC mirror reports the Meta App
+ * `call_count` percentage at or above this value, the scheduler defers
+ * every Meta-family job for this tick — the worker would just
  * RateLimitedError them anyway, costing a Mongo write + Prisma update for
- * nothing. TikTok's QPS bucket refills 10/s so it's never a concern at the
- * scheduler level; per-business daily buckets are account-scoped, so the
- * worker's own bucket check is the right place for those.
+ * nothing. The check applies to the single `app:{appId}` bucket
+ * BucTelemetryService maintains from `X-App-Usage`. TikTok and Threads
+ * keep using the worker-side check.
+ *
+ * 90% leaves a 15-point margin above the worker-side gate threshold (75%)
+ * so the scheduler stops piling on jobs *before* the gate starts denying.
  */
-const PREFLIGHT_BUCKETS_BY_PLATFORM: Readonly<Record<string, string[]>> = {
-  facebook: ['rate:fb:app'],
-  instagram: ['rate:ig:app'],
-};
-const PREFLIGHT_FLOOR_FRACTION = 0.1;       // 10% — leave headroom for inflight
+const PREFLIGHT_APP_PCT_CEIL = 90;
+const PREFLIGHT_META_PLATFORMS = ['facebook', 'instagram'] as const;
 
 type JobPriority = 'HIGH' | 'NORMAL' | 'BACKFILL';
 
@@ -78,6 +79,7 @@ export class SchedulerService
     private readonly metrics: MetricsService,
     private readonly rateBucket: RateBucketService,
     private readonly redis: RedisService,
+    private readonly bucTelemetry: BucTelemetryService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -197,7 +199,7 @@ export class SchedulerService
     });
     if (deferred > 0) {
       this.logger.debug(
-        `Scheduler tick: deferred ${deferred} jobs for platforms [${[...blockedPlatforms].join(', ')}] (bucket below ${Math.round(PREFLIGHT_FLOOR_FRACTION * 100)}%)`,
+        `Scheduler tick: deferred ${deferred} jobs for platforms [${[...blockedPlatforms].join(', ')}] (BUC mirror app-level >= ${PREFLIGHT_APP_PCT_CEIL}% or in retry-after)`,
       );
     }
     if (rows.length === 0) {
@@ -254,24 +256,20 @@ export class SchedulerService
    */
   private async preflightCheck(): Promise<Set<string>> {
     const blocked = new Set<string>();
-    const probes = Object.entries(PREFLIGHT_BUCKETS_BY_PLATFORM).flatMap(
-      ([platform, suffixes]) =>
-        suffixes.map(async (suffix) => {
-          try {
-            const state = await this.rateBucket.getState(this.redis.key(suffix));
-            if (!state) return;
-            const floor = state.capacity * PREFLIGHT_FLOOR_FRACTION;
-            if (state.tokens < floor) {
-              blocked.add(platform);
-            }
-          } catch (err) {
-            this.logger.warn(
-              `Preflight peek failed for ${suffix}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-        }),
-    );
-    await Promise.all(probes);
+    const appKey = this.bucTelemetry.appKey();
+    if (!appKey) return blocked; // No META_APP_ID configured → fail-open
+    const stripped = appKey.replace(/^app:/, '');
+    const state = await this.bucTelemetry.getBucketPct(`app:${stripped}`);
+    if (!state) return blocked; // Cold cache → optimistic
+    const ttgRemaining =
+      state.retryAfterMs > 0
+        ? Math.max(0, state.retryAfterMs - (Date.now() - state.lastSeenAt))
+        : 0;
+    if (state.callCountPct >= PREFLIGHT_APP_PCT_CEIL || ttgRemaining > 0) {
+      for (const platform of PREFLIGHT_META_PLATFORMS) {
+        blocked.add(platform);
+      }
+    }
     return blocked;
   }
 

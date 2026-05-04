@@ -52,6 +52,32 @@ export function looksLikeInsightsScopeError(err: unknown): boolean {
   );
 }
 
+/**
+ * Recognise Meta's "token is dead" envelope. Graph returns these as a 400
+ * (not 401), so HTTP-status-only classification misses them and the worker
+ * treats an expired token as a generic failure — five of those auto-pause
+ * the account. Documented OAuthException codes/subcodes:
+ *   - code 190: invalid/expired access token (umbrella case)
+ *   - subcode 458: user has not authorized application
+ *   - subcode 459: user has been checkpointed
+ *   - subcode 460: password changed
+ *   - subcode 463: token expired
+ *   - subcode 464: user not confirmed
+ *   - subcode 467: token invalid
+ */
+export function isTokenDeadGraphBody(body: unknown): boolean {
+  const e = graphErrorFromBody(body);
+  if (!e) return false;
+  if (e.code === 190) return true;
+  if (
+    e.subcode !== undefined &&
+    [458, 459, 460, 463, 464, 467].includes(e.subcode)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function graphErrorFromBody(body: unknown): GraphError | null {
   if (!body || typeof body !== 'object') return null;
   const errObj = (body as { error?: unknown }).error;

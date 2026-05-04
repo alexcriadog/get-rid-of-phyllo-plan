@@ -36,7 +36,7 @@ export class InstagramAudienceFetcher {
     canonicalId: string,
     metadata?: Record<string, unknown>,
   ): Promise<AudienceData> {
-    const ctx = buildInstagramContext(accessToken, metadata);
+    const ctx = buildInstagramContext(accessToken, canonicalId, metadata);
     const accountId = extractAccountId(metadata);
 
     // 1. Follower demographics (4 per-breakdown calls).
@@ -289,6 +289,130 @@ export class InstagramAudienceFetcher {
         `follower_count series failed: ${
           err instanceof Error ? err.message : String(err)
         }`,
+      );
+    }
+
+    // online_followers — when followers are online, by hour. Drives the
+    // "best time to post" heatmap on the dashboard. Returns a values[]
+    // entry per day where `value` is a `{ "0": n, "1": n, ..., "23": n }`
+    // map. We aggregate (sum) across all days so the period total drops
+    // into a 24-bucket array.
+    try {
+      const body = await this.client.call<{
+        data?: Array<{
+          name: string;
+          values?: Array<{ value: unknown }>;
+        }>;
+      }>({
+        endpoint: `/${canonicalId}/insights`,
+        params: {
+          metric: 'online_followers',
+          period: 'lifetime',
+          since,
+          until,
+        },
+        accessToken,
+        context,
+        accountId,
+      });
+      const entry = (body.data ?? []).find((d) => d.name === 'online_followers');
+      if (entry) {
+        // Two parallel accumulators: a flat 24-bucket total (legacy) and a
+        // 7×24 grid keyed by JS `Date.getUTCDay()` (0=Sunday … 6=Saturday).
+        // The end_time on each value entry tells us which weekday that day's
+        // map belongs to, so we can split a Tuesday peak from a Sunday peak.
+        const totals = new Array<number>(24).fill(0);
+        const weekly: number[][] = Array.from({ length: 7 }, () =>
+          new Array<number>(24).fill(0),
+        );
+        for (const v of (entry.values ?? []) as Array<{
+          value?: unknown;
+          end_time?: string;
+        }>) {
+          if (!v.value || typeof v.value !== 'object') continue;
+          const dow =
+            typeof v.end_time === 'string'
+              ? new Date(v.end_time).getUTCDay()
+              : NaN;
+          for (const [hourStr, raw] of Object.entries(
+            v.value as Record<string, unknown>,
+          )) {
+            const hour = Number(hourStr);
+            if (!Number.isFinite(hour) || hour < 0 || hour > 23) continue;
+            if (typeof raw !== 'number') continue;
+            totals[hour] += raw;
+            if (Number.isFinite(dow) && dow >= 0 && dow <= 6) {
+              weekly[dow][hour] += raw;
+            }
+          }
+        }
+        if (totals.some((n) => n > 0)) {
+          out.audienceActivity = totals.map((count, hour) => ({ hour, count }));
+        }
+        const weeklyFlat: Array<{ dayOfWeek: number; hour: number; count: number }> = [];
+        for (let dow = 0; dow < 7; dow++) {
+          for (let hour = 0; hour < 24; hour++) {
+            const c = weekly[dow][hour];
+            if (c > 0) weeklyFlat.push({ dayOfWeek: dow, hour, count: c });
+          }
+        }
+        if (weeklyFlat.length > 0) out.audienceActivityWeekly = weeklyFlat;
+      }
+    } catch (err) {
+      this.logger.debug(
+        `online_followers failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    // profile_links_taps — clicks on the contact buttons on the IG profile,
+    // broken down by which button (CALL / TEXT / EMAIL / DIRECTIONS / WEBSITE).
+    // Replaces the old per-button scalar metrics that v22 removed.
+    try {
+      const body = await this.client.call<{
+        data?: Array<{
+          name: string;
+          total_value?: {
+            value?: number;
+            breakdowns?: Array<{
+              results?: Array<{
+                dimension_values?: string[];
+                value?: number;
+              }>;
+            }>;
+          };
+        }>;
+      }>({
+        endpoint: `/${canonicalId}/insights`,
+        params: {
+          metric: 'profile_links_taps',
+          period: 'day',
+          metric_type: 'total_value',
+          breakdown: 'contact_button_type',
+          since,
+          until,
+        },
+        accessToken,
+        context,
+        accountId,
+      });
+      const entry = (body.data ?? []).find(
+        (d) => d.name === 'profile_links_taps',
+      );
+      const tv = entry?.total_value;
+      if (typeof tv?.value === 'number') {
+        extra.profile_links_taps_total = tv.value;
+      }
+      for (const bd of tv?.breakdowns ?? []) {
+        for (const row of bd.results ?? []) {
+          const button = row.dimension_values?.[0];
+          if (!button || typeof row.value !== 'number') continue;
+          // e.g. profile_links_taps_call, ..._email, ..._directions
+          extra[`profile_links_taps_${button.toLowerCase()}`] = row.value;
+        }
+      }
+    } catch (err) {
+      this.logger.debug(
+        `profile_links_taps failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 

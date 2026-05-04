@@ -1,10 +1,12 @@
 # Facebook (Pages)
 
 **Status:** Stable reference
-**Last updated:** 2026-04-23
+**Last updated:** 2026-05-04
 **Platform API:** Facebook Graph API (Meta Business Platform)
 
 Shares most infrastructure with Instagram — same Meta app, same App Review process, same BUC rate-limit model. Connector operates on **Pages only**, never personal profiles.
+
+> **2026-05-04 invariants:** the only access-token type persisted for FB Pages is the **Page access token** sourced from `/me/accounts`. `AccountsService.seedAccount()` normalises any incoming User token before encryption — see [ADR 0015](../adr/0015-token-type-normalization.md). Rate limiting follows Meta's `X-Business-Use-Case-Usage` per `(App, Page)` plus the global `X-App-Usage` (`200 × DAU/h`); the synthetic 200/h local cap has been retired — see [ADR 0014](../adr/0014-meta-rate-limit-mirror.md). Note: empirically `/{page_id}/insights` and `/{page_id}/stories` calls *do* return `X-App-Usage` even with a Page token — the BUC mirror handles this correctly because it follows the headers, not the public docs ([open question in TODO.md](../TODO.md#f-open-questions)). The `engagement_new` job re-fetches insights for the last 90 days of posts on every run (`refresh-cadence.md` §0).
 
 ---
 

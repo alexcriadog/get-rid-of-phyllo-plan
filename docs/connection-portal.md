@@ -1,10 +1,27 @@
 # Connection Portal
 
 **Status:** Stable reference
-**Last updated:** 2026-04-23
+**Last updated:** 2026-05-04
 **Answers question:** Q5 — Where does the Connect UI live? Separate project? Monorepo?
 
 A "connection portal" is whatever the creator interacts with to connect their platform account. Today Phyllo's Connect SDK was an embedded React widget in `frontend-app`. The replacement must serve the same purpose without becoming a new standalone deployable or forcing a monorepo on a 3-person team.
+
+---
+
+## 0. Token normalisation invariant (since 2026-05-04)
+
+Regardless of which path the operator uses to seed an account — the structured discovery UI, the "Manual connect" form, the public `POST /accounts/seed`, or any helper script — the connector now guarantees that **only Page (or System User) access tokens land in `oauth_tokens`** for the Meta family.
+
+Why it matters: Meta's app-level rate limit (`200 × Daily Active Users` per hour) only counts calls made with User access tokens. Page tokens for FB and IG_User/Page tokens for IG are exempt. Persisting a User token by accident burns the global app-level cap on every call. Pre-2026-05 there were three seed paths in the codebase (UI, controller, scripts) and each had its own validation; the manual form in particular passed whatever the operator typed straight to the AES vault.
+
+The invariant lives in `AccountsService.seedAccount()` (`poc/src/modules/accounts/accounts.service.ts`):
+
+1. If `platform ∈ {facebook, instagram}`, call `GET /me/accounts?fields=id,access_token,instagram_business_account{id}` with the supplied token.
+2. If the response is a list of pages → it's a User token. Find the page that matches `canonical_user_id` (page id for FB, `instagram_business_account.id` for IG) and replace the token with that page's `access_token`.
+3. If the response is `(#100) nonexisting field (accounts)` → the token is already a Page token. Probe `GET /{canonical_user_id}?fields=id` to verify it actually accesses the requested resource, then accept it as-is.
+4. Anything else → throw `BadRequestException` with the upstream Meta error. No silent persistence.
+
+For Threads the analogous invariant is the long-lived exchange in `seedConnection` (admin.service.ts): `ThreadsTokenRefreshService.exchangeShortLived()` is called before persistence so what we store is always a 60d token with `expires_at` populated. The refresh service then proactively refreshes when there are <7 days left.
 
 ---
 

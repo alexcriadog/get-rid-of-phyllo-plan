@@ -58,6 +58,18 @@ export interface AudienceActivityBucket {
   count: number;
 }
 
+/**
+ * 7×24 heatmap of when followers / audience are active by weekday and hour.
+ * `dayOfWeek` follows JS `Date.getDay()` (0=Sunday … 6=Saturday).
+ * Adapters that only return a flat hourly breakdown should leave this
+ * undefined and populate the simpler `AudienceActivityBucket[]` instead.
+ */
+export interface AudienceActivityWeeklyBucket {
+  dayOfWeek: number;     // 0..6 (0=Sun)
+  hour: number;          // 0..23
+  count: number;
+}
+
 /** Daily totals + time-series captured at the account level. */
 export interface AccountInsightsData {
   periodDays?: number;
@@ -104,6 +116,12 @@ export interface AccountInsightsData {
    * Useful for "best time to post" insights.
    */
   audienceActivity?: AudienceActivityBucket[];
+  /**
+   * 7×24 weekly activity heatmap. Same data, broken down by day of the
+   * week so the UI can render a Mon-Sun × 0-23 grid (a Sunday peak is very
+   * different from a Tuesday peak).
+   */
+  audienceActivityWeekly?: AudienceActivityWeeklyBucket[];
   // Platform-specific overflow.
   extra?: Record<string, number>;
 }

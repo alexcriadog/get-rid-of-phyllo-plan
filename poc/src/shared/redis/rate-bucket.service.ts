@@ -159,7 +159,14 @@ export class RateBucketService {
     context: Readonly<Record<string, string>>,
   ): Promise<AcquireResult> {
     if (hints.length === 0) {
-      throw new Error('acquire() requires at least one hint');
+      // Strategies without any local-fuse hints (e.g. Meta family post-2026-05,
+      // where the BUC mirror is the only gate) call this service as a no-op.
+      // Allow unconditionally so the chokepoint can keep its uniform shape.
+      return {
+        allowed: true,
+        bucketKey: '__none__',
+        tokensRemaining: Number.POSITIVE_INFINITY,
+      };
     }
 
     const keys: string[] = [];

@@ -91,6 +91,7 @@ type DateFilter = {
 
 type PageProps = {
   id: string;
+  platform: string | null;
   posts: Post[];
   totalAll: number;
   totalMatching: number;
@@ -100,6 +101,10 @@ type PageProps = {
 };
 
 const PAGE_SIZE = 60;
+
+// Platforms whose adapters implement `fetchMentions`. Mirrors the support
+// matrix at /admin/support-matrix.
+const PLATFORMS_WITH_MENTIONS = new Set<string>(['tiktok', 'threads']);
 
 function parseQueryString(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
@@ -124,13 +129,47 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
     const db = await getDb();
     const accountFilter = { $or: [{ account_id: id }, { account_id: Number(id) || id }] };
 
+    // Resolve the connected account's own handle so we can keep mentions
+    // (posts authored by other users that @-tag us) out of this archive.
+    // The dedicated /mentions page surfaces them.
+    const identityDoc = await db
+      .collection('identity_snapshots')
+      .findOne(accountFilter);
+    const ownerHandle =
+      (identityDoc?.data as { username?: string } | undefined)?.username ??
+      null;
+    const platform =
+      (identityDoc as { platform?: string } | null)?.platform ?? null;
+    // IMPORTANT: accountFilter and ownPostsFilter both use `$or`. Spreading
+    // them into the same object would silently drop the first `$or` (last
+    // key wins), letting posts from other accounts leak in. Compose with
+    // `$and` so both predicates apply.
+    const ownPostsClause: Record<string, unknown> | null = ownerHandle
+      ? {
+          $or: [
+            { 'data.ownerHandle': ownerHandle },
+            { 'data.ownerHandle': null },
+            { 'data.ownerHandle': { $exists: false } },
+          ],
+        }
+      : null;
+
     const dateFilter: Record<string, unknown> = {};
     if (from) dateFilter.$gte = new Date(`${from}T00:00:00.000Z`);
     if (to) dateFilter.$lte = new Date(`${to}T23:59:59.999Z`);
-    const query =
-      Object.keys(dateFilter).length > 0
-        ? { ...accountFilter, 'data.publishedAt': dateFilter }
-        : accountFilter;
+
+    const buildQuery = (
+      includeDate: boolean,
+    ): Record<string, unknown> => {
+      const clauses: Record<string, unknown>[] = [accountFilter];
+      if (ownPostsClause) clauses.push(ownPostsClause);
+      if (includeDate && Object.keys(dateFilter).length > 0) {
+        clauses.push({ 'data.publishedAt': dateFilter });
+      }
+      return clauses.length === 1 ? clauses[0] : { $and: clauses };
+    };
+    const query = buildQuery(true);
+    const ownTotalFilter = buildQuery(false);
 
     const [raw, totalAll, totalMatching] = await Promise.all([
       db
@@ -140,13 +179,14 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
         .skip((page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE)
         .toArray(),
-      db.collection('posts').countDocuments(accountFilter),
+      db.collection('posts').countDocuments(ownTotalFilter),
       db.collection('posts').countDocuments(query),
     ]);
 
     return {
       props: {
         id,
+        platform,
         posts: raw.map((r) => toPlainJson(r) as Post),
         totalAll,
         totalMatching,
@@ -161,6 +201,7 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
     return {
       props: {
         id,
+        platform: null,
         posts: [],
         totalAll: 0,
         totalMatching: 0,
@@ -191,6 +232,7 @@ function toPlainJson(value: unknown): unknown {
 
 export default function AccountPosts({
   id,
+  platform,
   posts,
   totalAll,
   totalMatching,
@@ -269,6 +311,20 @@ export default function AccountPosts({
           >
             ← Overview
           </Link>
+          {PLATFORMS_WITH_MENTIONS.has(platform ?? '') && (
+            <Link
+              href={`/account/${id}/mentions`}
+              style={{
+                fontFamily: 'var(--v-mono)',
+                fontSize: 11,
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                color: 'var(--v-text-muted)',
+              }}
+            >
+              Mentions →
+            </Link>
+          )}
           <div style={{ flex: 1 }} />
           <span className="v-tag outline">
             {totalMatching === 0
@@ -464,6 +520,10 @@ function PostCard({ post, onClick }: { post: Post; onClick: () => void }) {
   const likes = d?.metrics?.likes ?? 0;
   const comments = d?.metrics?.comments ?? 0;
   const type = d?.contentType || 'post';
+  // Text-only posts (Threads TEXT_POST / REPOST_FACADE / plain status
+  // updates): no media but the caption is the whole content. Promote it
+  // to the visual area instead of the small footer line.
+  const isTextOnly = !imgSrc && !isVideoPreview && !!d?.caption;
 
   return (
     <button
@@ -513,6 +573,37 @@ function PostCard({ post, onClick }: { post: Post; onClick: () => void }) {
             aria-label={`${post.platform} ${type}`}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
+        ) : isTextOnly ? (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              padding: 22,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+              background:
+                'radial-gradient(120% 80% at 0% 0%, rgba(60,255,208,0.10) 0%, rgba(19,19,19,0) 55%), linear-gradient(180deg, #161616 0%, #0e0e0e 100%)',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'var(--v-sans)',
+                fontWeight: 600,
+                fontSize: 18,
+                lineHeight: 1.32,
+                color: '#ffffff',
+                whiteSpace: 'pre-wrap',
+                display: '-webkit-box',
+                WebkitLineClamp: 7,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                wordBreak: 'break-word',
+              }}
+            >
+              {d?.caption}
+            </div>
+          </div>
         ) : (
           <div
             style={{
@@ -547,22 +638,24 @@ function PostCard({ post, onClick }: { post: Post; onClick: () => void }) {
         )}
       </div>
       <div style={{ padding: 16 }}>
-        <div
-          style={{
-            fontFamily: 'var(--v-sans)',
-            fontWeight: 500,
-            fontSize: 13,
-            lineHeight: 1.45,
-            minHeight: 36,
-            color: '#ffffff',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-          }}
-        >
-          {d?.caption || <span style={{ color: 'var(--v-text-muted)' }}>(no caption)</span>}
-        </div>
+        {!isTextOnly && (
+          <div
+            style={{
+              fontFamily: 'var(--v-sans)',
+              fontWeight: 500,
+              fontSize: 13,
+              lineHeight: 1.45,
+              minHeight: 36,
+              color: '#ffffff',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {d?.caption || <span style={{ color: 'var(--v-text-muted)' }}>(no caption)</span>}
+          </div>
+        )}
         <div
           style={{
             display: 'flex',

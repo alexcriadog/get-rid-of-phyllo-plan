@@ -26,6 +26,8 @@ import {
 import { withToken } from './graph-context';
 import { parseUsageHeaders } from './graph-usage-headers';
 import { persistRaw } from './graph-raw-archive';
+import { isTokenDeadGraphBody } from './graph-errors';
+import { BucTelemetryService } from './buc-telemetry.service';
 import type { RateLimitStrategy } from './rate-limit-strategy.port';
 
 const GRAPH_BASE = 'https://graph.facebook.com/v22.0';
@@ -47,6 +49,7 @@ export class GraphClient {
     private readonly rateBucket: RateBucketService,
     private readonly mongo: MongoService,
     private readonly metrics: MetricsService,
+    private readonly telemetry: BucTelemetryService,
   ) {
     this.http = axios.create({
       baseURL: GRAPH_BASE,
@@ -69,6 +72,7 @@ export class GraphClient {
       this.rateBucket,
       this.mongo,
       this.metrics,
+      this.telemetry,
     );
   }
 }
@@ -87,6 +91,7 @@ export class BoundGraphClient {
     private readonly rateBucket: RateBucketService,
     private readonly mongo: MongoService,
     private readonly metrics: MetricsService,
+    private readonly telemetry: BucTelemetryService,
   ) {
     this.logger = new Logger(`GraphClient[${platform}]`);
   }
@@ -123,6 +128,29 @@ export class BoundGraphClient {
       result: 'allowed',
     });
 
+    // Phase 2 + 3 BUC mirror gate. Consult per-asset state plus the
+    // app-level cap Meta reports under x-app-usage. Deny if any bucket is
+    // at >= 75% or under estimated_time_to_regain_access. Fail-open when
+    // state is unknown (BucTelemetryService.checkGate handles Redis
+    // errors).
+    const bucScopeKeys = this.strategy.bucKeys?.(opts.context) ?? [];
+    const appScopeKey = this.telemetry.appKey();
+    if (appScopeKey) bucScopeKeys.push(appScopeKey);
+    if (bucScopeKeys.length > 0) {
+      const gate = await this.telemetry.checkGate(bucScopeKeys);
+      if (!gate.allowed) {
+        this.metrics.incr('acquire_total', {
+          scope: gate.blockedBy ?? 'buc',
+          result: 'denied_by_buc',
+        });
+        throw new RateLimitedError(
+          this.platform,
+          gate.retryAfterMs,
+          gate.blockedBy ?? 'buc',
+        );
+      }
+    }
+
     const bucketBefore = acquired.tokensRemaining;
     const started = Date.now();
     const params = withToken(opts.params, opts.accessToken);
@@ -156,6 +184,10 @@ export class BoundGraphClient {
 
     const durationMs = Date.now() - started;
     const usageHeader = parseUsageHeaders(response);
+    // Phase 1 of the rate-limit mirror: passively record what Meta just
+    // told us about this app + asset bucket. No gating yet — see
+    // BucTelemetryService for context.
+    await this.telemetry.observe(usageHeader);
     const bucketAfterState = await this.rateBucket.getState(acquired.bucketKey);
     const bucketAfter = bucketAfterState?.tokens ?? null;
 
@@ -184,6 +216,14 @@ export class BoundGraphClient {
     );
 
     if (response.status === 401 || response.status === 403) {
+      throw new TokenRevokedError(this.platform, opts.endpoint);
+    }
+    // Graph signals expired/invalid tokens as 400 with OAuthException code
+    // 190 (or one of the documented subcodes). Without this branch the worker
+    // would treat a dead token as a generic AdapterFetchError, bump
+    // failure_count, and auto-pause after 5 attempts instead of marking the
+    // account needs_reauth so the user knows to reconnect.
+    if (response.status === 400 && isTokenDeadGraphBody(response.data)) {
       throw new TokenRevokedError(this.platform, opts.endpoint);
     }
     if (response.status === 429) {

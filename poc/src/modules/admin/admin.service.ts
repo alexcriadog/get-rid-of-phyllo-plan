@@ -27,9 +27,12 @@ import {
   AdapterRegistry,
 } from '@modules/platforms/platforms.module';
 import { AccountsService, Platform } from '@modules/accounts/accounts.service';
+import { ThreadsTokenRefreshService } from '@modules/platforms/shared/threads-api/threads-token-refresh.service';
+import { BucTelemetryService } from '@modules/platforms/shared/meta-graph/buc-telemetry.service';
 
 const GRAPH_VERSION = 'v22.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
+const THREADS_GRAPH_BASE = 'https://graph.threads.net/v1.0';
 const DISCOVER_TIMEOUT_MS = 15_000;
 
 const SYNC_QUEUE_NAME: QueueName = 'sync';
@@ -108,8 +111,58 @@ export class AdminService {
     private readonly throttle: ThrottleLockService,
     private readonly accountsService: AccountsService,
     private readonly aes: AesLocalService,
+    private readonly threadsTokenRefresh: ThreadsTokenRefreshService,
+    private readonly bucTelemetry: BucTelemetryService,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
+
+  /**
+   * Phase 1 of the rate-limit mirror. Returns the current Meta bucket
+   * picture (one entry per asset/business/app id we've seen). Read-only —
+   * no gating, no admission decisions. The data is written passively by
+   * BucTelemetryService.observe() from every Graph response.
+   */
+  async rateLimitsSnapshot(): Promise<{
+    generated_at: string;
+    buckets: unknown[];
+  }> {
+    const buckets = await this.bucTelemetry.snapshot(50);
+    return {
+      generated_at: new Date().toISOString(),
+      buckets,
+    };
+  }
+
+  /**
+   * Replays historical x-app-usage / x-business-use-case-usage from
+   * api_call_log into the BucTelemetryService so the snapshot reflects
+   * recent reality without waiting for the next sync cycle. Idempotent —
+   * the latest call_count per bucket wins, which is what we'd see anyway
+   * after the next live response.
+   */
+  async replayUsageHeaders(sinceHours = 24): Promise<{
+    scanned: number;
+    observed: number;
+  }> {
+    const since = new Date(Date.now() - sinceHours * 60 * 60_000);
+    const rows = await this.prisma.apiCallLog.findMany({
+      where: {
+        calledAt: { gte: since },
+        platform: { in: ['instagram', 'facebook', 'threads'] },
+        usageHeader: { not: Prisma.JsonNull },
+      },
+      select: { usageHeader: true },
+      orderBy: { calledAt: 'asc' },
+    });
+    let observed = 0;
+    for (const r of rows) {
+      const headers = r.usageHeader as Record<string, unknown> | null;
+      if (!headers) continue;
+      await this.bucTelemetry.observe(headers);
+      observed += 1;
+    }
+    return { scanned: rows.length, observed };
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Overview
@@ -507,12 +560,13 @@ export class AdminService {
     if (product === 'engagement_new') {
       const fromSettings = Number(settings?.lookbackDays);
       const fromEnv = Number(process.env.ENGAGEMENT_LOOKBACK_DAYS);
+      // Default kept in sync with sync.worker.ts:ENGAGEMENT_LOOKBACK_DAYS_DEFAULT.
       out.lookbackDays =
         Number.isFinite(fromSettings) && fromSettings > 0
           ? Math.floor(fromSettings)
           : Number.isFinite(fromEnv) && fromEnv > 0
             ? Math.floor(fromEnv)
-            : 30;
+            : 90;
       const fromMax = Number(settings?.maxPostsPerSync);
       out.maxPostsPerSync =
         Number.isFinite(fromMax) && fromMax > 0 ? Math.floor(fromMax) : 500;
@@ -609,35 +663,53 @@ export class AdminService {
     }
 
     // — Rate buckets —
-    const bucketKey = (() => {
-      switch (job.account.platform) {
-        case 'facebook':
-          return 'rate:fb:app';
-        case 'instagram':
-          return 'rate:ig:app';
-        case 'tiktok':
-          return 'rate:tt:qps_app';
-        default:
-          return null;
-      }
-    })();
-    if (bucketKey) {
+    // Meta family (FB + IG) → consult the BUC mirror (`app:{appId}`)
+    // populated from X-App-Usage. TikTok still uses the legacy QPS bucket
+    // (it is not modelled by the BUC mirror). Threads has its own pacing
+    // and surfaces no admin signal here.
+    if (job.account.platform === 'facebook' || job.account.platform === 'instagram') {
       try {
-        const state = await this.rateBucket.getState(this.redis.key(bucketKey));
+        const appKey = this.bucTelemetry.appKey();
+        if (appKey) {
+          const state = await this.bucTelemetry.getBucketPct(appKey.replace(/^app:/, ''));
+          if (state) {
+            if (state.callCountPct >= 75 || state.retryAfterMs > 0) {
+              signals.push({
+                key: 'bucket_critical',
+                severity: 'block',
+                message: `Meta app-level usage is at ${state.callCountPct}% (or in retry-after). The call will be denied by the BUC mirror gate.`,
+                value: state.callCountPct,
+              });
+            } else if (state.callCountPct >= 50) {
+              signals.push({
+                key: 'bucket_low',
+                severity: 'warn',
+                message: `Meta app-level usage is at ${state.callCountPct}%. Heavy bursts may rate-limit and retry.`,
+                value: state.callCountPct,
+              });
+            }
+          }
+        }
+      } catch {
+        // soft-fail; the worker has its own gate check.
+      }
+    } else if (job.account.platform === 'tiktok') {
+      try {
+        const state = await this.rateBucket.getState(this.redis.key('rate:tt:qps_app'));
         if (state && state.capacity > 0) {
           const ratio = state.tokens / state.capacity;
           if (ratio < 0.05) {
             signals.push({
               key: 'bucket_critical',
               severity: 'block',
-              message: `App bucket ${bucketKey} is critically low (${state.tokens.toFixed(0)}/${state.capacity}). The call will be denied.`,
+              message: `TikTok QPS bucket is critically low (${state.tokens.toFixed(0)}/${state.capacity}). The call will be denied.`,
               value: state.tokens,
             });
           } else if (ratio < 0.3) {
             signals.push({
               key: 'bucket_low',
               severity: 'warn',
-              message: `App bucket ${bucketKey} is below 30% (${state.tokens.toFixed(0)}/${state.capacity}). The job may rate-limit and retry.`,
+              message: `TikTok QPS bucket is below 30% (${state.tokens.toFixed(0)}/${state.capacity}). The job may rate-limit and retry.`,
               value: state.tokens,
             });
           }
@@ -1626,11 +1698,16 @@ export class AdminService {
    */
   async discoverConnections(
     accessToken: string,
-    platform: 'facebook' | 'tiktok' = 'facebook',
+    platform: 'facebook' | 'tiktok' | 'threads' = 'facebook',
     openId?: string,
   ): Promise<{
     me: { id: string | null; name: string | null };
-    token_type: 'user' | 'page' | 'unknown' | 'tiktok-business';
+    token_type:
+      | 'user'
+      | 'page'
+      | 'unknown'
+      | 'tiktok-business'
+      | 'threads-user';
     pages: Array<{
       page_id: string;
       page_name: string;
@@ -1657,10 +1734,22 @@ export class AdminService {
       is_verified: boolean | null;
       already_connected: boolean;
     };
+    threads_account?: {
+      user_id: string;
+      username: string | null;
+      name: string | null;
+      profile_picture_url: string | null;
+      biography: string | null;
+      is_verified: boolean | null;
+      already_connected: boolean;
+    };
     warnings: string[];
   }> {
     if (platform === 'tiktok') {
       return this.discoverTikTokConnection(accessToken, openId);
+    }
+    if (platform === 'threads') {
+      return this.discoverThreadsConnection(accessToken);
     }
     const warnings: string[] = [];
 
@@ -1955,6 +2044,82 @@ export class AdminService {
     };
   }
 
+  /**
+   * Threads discover — calls graph.threads.net/v1.0/me with the long-lived
+   * user token. The Threads OAuth flow returns just an access_token (no
+   * separate user id), so /me is the canonical way to resolve the connected
+   * user. Read-only probe; never persists.
+   */
+  private async discoverThreadsConnection(
+    accessToken: string,
+  ): Promise<Awaited<ReturnType<AdminService['discoverConnections']>>> {
+    const warnings: string[] = [];
+    type ThreadsMeBody = {
+      id?: string;
+      username?: string;
+      name?: string;
+      threads_profile_picture_url?: string;
+      threads_biography?: string;
+      is_verified?: boolean;
+      error?: { message?: string; code?: number; error_subcode?: number };
+    };
+    let body: ThreadsMeBody;
+    try {
+      const res = await axios.get<ThreadsMeBody>(
+        `${THREADS_GRAPH_BASE}/me`,
+        {
+          params: {
+            fields:
+              'id,username,name,threads_profile_picture_url,threads_biography,is_verified',
+            access_token: accessToken,
+          },
+          timeout: DISCOVER_TIMEOUT_MS,
+          validateStatus: () => true,
+        },
+      );
+      body = res.data ?? {};
+      if (res.status < 200 || res.status >= 300) {
+        throw new BadRequestException({
+          message: `Threads HTTP ${res.status}`,
+          threads_error: body,
+        });
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException({
+        message:
+          'Token rejected by Threads on /me. Verify the access_token is a long-lived Threads user token with scopes threads_basic + threads_manage_insights.',
+        threads_error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    if (!body.id) {
+      throw new BadRequestException({
+        message: 'Threads /me returned no id; token may be malformed.',
+        threads_error: body,
+      });
+    }
+    const userId = body.id;
+    const existing = await this.prisma.account.findFirst({
+      where: { platform: 'threads', canonicalUserId: userId },
+      select: { id: true },
+    });
+    return {
+      me: { id: userId, name: body.name ?? body.username ?? null },
+      token_type: 'threads-user',
+      pages: [],
+      threads_account: {
+        user_id: userId,
+        username: body.username ?? null,
+        name: body.name ?? null,
+        profile_picture_url: body.threads_profile_picture_url ?? null,
+        biography: body.threads_biography ?? null,
+        is_verified: body.is_verified ?? null,
+        already_connected: existing != null,
+      },
+      warnings,
+    };
+  }
+
   async seedConnection(input: {
     platform: Platform;
     accessToken: string;
@@ -1964,11 +2129,41 @@ export class AdminService {
     handle?: string;
     metadata?: Record<string, unknown>;
   }): Promise<{ account_id: string; sync_jobs_created: string[] }> {
+    let accessToken = input.accessToken;
+    let expiresAt = input.expiresAt;
+
+    // Threads: trade a short-lived (1h) token for a long-lived one (60d).
+    // Idempotent — if the token is already long-lived Meta returns it
+    // unchanged; if THREADS_APP_SECRET isn't configured or upstream rejects,
+    // fall back to the original token. Persisting `expiresAt` is what lets
+    // ThreadsTokenRefreshService.ensureFresh refresh proactively before
+    // expiry; without it the refresh path early-returns and the token dies.
+    if (input.platform === 'threads') {
+      try {
+        const exchanged = await this.threadsTokenRefresh.exchangeShortLived(
+          input.accessToken,
+        );
+        accessToken = exchanged.accessToken;
+        if (exchanged.expiresInS && exchanged.expiresInS > 0) {
+          expiresAt = new Date(Date.now() + exchanged.expiresInS * 1000);
+        }
+        this.logger.log(
+          `Threads token exchanged to long-lived (expires_in=${exchanged.expiresInS ?? 'unknown'}s)`,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Threads exchangeShortLived failed; persisting the original token. Reason: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+
     return this.accountsService.seedAccount({
       platform: input.platform,
-      accessToken: input.accessToken,
+      accessToken,
       refreshToken: input.refreshToken,
-      expiresAt: input.expiresAt,
+      expiresAt,
       canonicalUserId: input.canonicalUserId,
       handle: input.handle,
       metadata: input.metadata,

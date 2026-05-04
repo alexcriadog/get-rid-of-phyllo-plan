@@ -48,7 +48,10 @@ const ThrottleReleaseSchema = z
 
 const ConnectDiscoverSchema = z
   .object({
-    platform: z.enum(['facebook', 'tiktok']).optional().default('facebook'),
+    platform: z
+      .enum(['facebook', 'tiktok', 'threads'])
+      .optional()
+      .default('facebook'),
     access_token: z.string().min(20),
     /** TikTok business id (== open_id from BC OAuth callback). Required when
      * platform=tiktok; ignored otherwise. */
@@ -69,7 +72,7 @@ const SyncJobSettingsPatchSchema = z
 
 const ConnectSeedSchema = z
   .object({
-    platform: z.enum(['instagram', 'facebook', 'tiktok']),
+    platform: z.enum(['instagram', 'facebook', 'tiktok', 'threads']),
     access_token: z.string().min(20),
     refresh_token: z.string().min(20).optional(),
     expires_at: z.string().datetime({ offset: true }).optional(),
@@ -112,6 +115,22 @@ export class AdminController {
   @Get('system/health')
   async systemHealth(): Promise<unknown> {
     return this.admin.systemHealth();
+  }
+
+  @Get('rate-limits')
+  async rateLimits(): Promise<unknown> {
+    return this.admin.rateLimitsSnapshot();
+  }
+
+  @Post('rate-limits/replay')
+  async rateLimitsReplay(@Body() body: unknown): Promise<unknown> {
+    const parsed = z
+      .object({ since_hours: z.number().int().min(1).max(168).optional() })
+      .safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten());
+    }
+    return this.admin.replayUsageHeaders(parsed.data.since_hours ?? 24);
   }
 
   @Get('cadence-overrides')

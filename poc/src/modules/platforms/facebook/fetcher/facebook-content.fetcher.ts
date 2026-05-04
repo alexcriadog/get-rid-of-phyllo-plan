@@ -160,6 +160,11 @@ export class FacebookContentFetcher {
         'post_clicks_by_type',
         'post_activity_by_action_type',
         'post_video_views',
+        // NB: post_negative_feedback and post_engaged_users are documented
+        // for the Page-level endpoint but Meta rejects them inside this
+        // /{post_id}/insights batch with `(#100) must be a valid insights
+        // metric`. A per-post negative feedback path would need its own
+        // call (with breakdown=type) — keep them out of this batch.
       ].join(',');
       try {
         const body = await this.client.call<{ data?: GraphInsight[] }>({

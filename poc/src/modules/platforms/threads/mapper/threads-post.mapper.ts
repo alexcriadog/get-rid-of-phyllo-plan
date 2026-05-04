@@ -69,7 +69,7 @@ export function mergeThreadsPostInsights(
   insights: ThreadsInsight[],
 ): void {
   for (const insight of insights) {
-    const v = insight.total_value?.value;
+    const v = readInsightScalar(insight);
     if (typeof v !== 'number') continue;
     switch (insight.name) {
       case 'views':
@@ -91,6 +91,24 @@ export function mergeThreadsPostInsights(
         item.metrics.extra = { ...(item.metrics.extra ?? {}), [insight.name]: v };
     }
   }
+}
+
+/**
+ * Threads' per-post insights endpoint returns lifetime metrics in the
+ * `values` array (single entry, no `total_value`); some account-level
+ * endpoints populate `total_value.value` instead. Read both shapes so the
+ * same mapper handles both.
+ */
+function readInsightScalar(insight: ThreadsInsight): number | undefined {
+  if (typeof insight.total_value?.value === 'number') {
+    return insight.total_value.value;
+  }
+  const series = insight.values;
+  if (Array.isArray(series) && series.length > 0) {
+    const last = series[series.length - 1]?.value;
+    if (typeof last === 'number') return last;
+  }
+  return undefined;
 }
 
 function detectThreadsContentType(media?: ThreadsMediaType): ContentType {

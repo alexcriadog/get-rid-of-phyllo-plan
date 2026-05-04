@@ -5,9 +5,10 @@
 
 import { Module } from '@nestjs/common';
 import { GraphClient } from './graph-client';
+import { BucTelemetryService } from './buc-telemetry.service';
 
 @Module({
-  providers: [GraphClient],
-  exports: [GraphClient],
+  providers: [GraphClient, BucTelemetryService],
+  exports: [GraphClient, BucTelemetryService],
 })
 export class MetaGraphModule {}

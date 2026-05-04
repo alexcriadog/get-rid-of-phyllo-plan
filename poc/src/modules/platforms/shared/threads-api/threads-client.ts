@@ -22,6 +22,8 @@ import {
 import { withToken } from '../meta-graph/graph-context';
 import { persistRaw } from '../meta-graph/graph-raw-archive';
 import { parseUsageHeaders } from '../meta-graph/graph-usage-headers';
+import { isTokenDeadGraphBody } from '../meta-graph/graph-errors';
+import { BucTelemetryService } from '../meta-graph/buc-telemetry.service';
 import type { RateLimitStrategy } from '../meta-graph/rate-limit-strategy.port';
 
 const THREADS_BASE = 'https://graph.threads.net/v1.0';
@@ -44,6 +46,7 @@ export class ThreadsClient {
     private readonly rateBucket: RateBucketService,
     private readonly mongo: MongoService,
     private readonly metrics: MetricsService,
+    private readonly telemetry: BucTelemetryService,
   ) {
     this.http = axios.create({
       baseURL: THREADS_BASE,
@@ -64,6 +67,7 @@ export class ThreadsClient {
       this.rateBucket,
       this.mongo,
       this.metrics,
+      this.telemetry,
     );
   }
 }
@@ -80,6 +84,7 @@ export class BoundThreadsClient {
     private readonly rateBucket: RateBucketService,
     private readonly mongo: MongoService,
     private readonly metrics: MetricsService,
+    private readonly telemetry: BucTelemetryService,
   ) {}
 
   /**
@@ -143,6 +148,10 @@ export class BoundThreadsClient {
 
     const durationMs = Date.now() - started;
     const usageHeader = parseUsageHeaders(response);
+    // Phase 1 of the rate-limit mirror: passively record the asset/app
+    // bucket state Meta just reported. No gating yet — see
+    // BucTelemetryService for context.
+    await this.telemetry.observe(usageHeader);
     const bucketAfterState = await this.rateBucket.getState(acquired.bucketKey);
     const bucketAfter = bucketAfterState?.tokens ?? null;
 
@@ -169,6 +178,14 @@ export class BoundThreadsClient {
     );
 
     if (response.status === 401 || response.status === 403) {
+      throw new TokenRevokedError(PLATFORM_NAME, opts.endpoint);
+    }
+    // Graph returns expired/invalid tokens as 400 with OAuthException code 190
+    // (or one of the documented subcodes). Without this branch the worker
+    // would treat a dead token as a generic AdapterFetchError, bump
+    // failure_count, and auto-pause after 5 attempts instead of marking the
+    // account needs_reauth so the user knows to reconnect.
+    if (response.status === 400 && isTokenDeadGraphBody(response.data)) {
       throw new TokenRevokedError(PLATFORM_NAME, opts.endpoint);
     }
     if (response.status === 429) {

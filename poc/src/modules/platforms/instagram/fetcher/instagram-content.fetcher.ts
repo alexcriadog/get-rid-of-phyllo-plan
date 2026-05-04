@@ -45,7 +45,7 @@ export class InstagramContentFetcher {
     metadata?: Record<string, unknown>,
   ): Promise<ContentData[]> {
     const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
-    const ctx = buildInstagramContext(accessToken, metadata);
+    const ctx = buildInstagramContext(accessToken, canonicalId, metadata);
     const accountId = extractAccountId(metadata);
     const collected: ContentData[] = [];
 

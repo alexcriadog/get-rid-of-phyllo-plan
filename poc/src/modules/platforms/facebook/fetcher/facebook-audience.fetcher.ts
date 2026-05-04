@@ -48,6 +48,10 @@ export class FacebookAudienceFetcher {
     type MetricSpec = {
       name: string;
       mapTo?: keyof AccountInsightsCounterMap;
+      /** Stash the period sum into `accountInsights.extra[extraKey]` instead
+       *  of one of the canonical counters. Used for metrics like
+       *  `page_post_engagements` that don't map onto the unified shape. */
+      extraKey?: string;
       timeSeries?: boolean;
       distribution?: 'country' | 'city';
     };
@@ -57,6 +61,12 @@ export class FacebookAudienceFetcher {
       { name: 'page_total_media_view_unique', mapTo: 'reach' },
       { name: 'page_views_total', mapTo: 'profileViews' },
       { name: 'page_total_actions', mapTo: 'totalInteractions' },
+      // Engagements scoped specifically to posts (likes/comments/shares/
+      // clicks on every post over the period). Distinct from
+      // page_total_actions which also counts CTA-button clicks on the Page
+      // itself. Lives in extra so the canonical totalInteractions stays
+      // exactly what page_total_actions returned.
+      { name: 'page_post_engagements', extraKey: 'page_post_engagements' },
       { name: 'page_follows_country', distribution: 'country' },
       { name: 'page_follows_city', distribution: 'city' },
     ];
@@ -92,6 +102,7 @@ export class FacebookAudienceFetcher {
     const followerSeries: Array<{ endTime: string; value: number }> = [];
     const countryDistribution: DistributionBucket[] = [];
     const cityDistribution: DistributionBucket[] = [];
+    const extras: Record<string, number> = {};
     const errors: string[] = [];
 
     for (const r of results) {
@@ -134,6 +145,9 @@ export class FacebookAudienceFetcher {
           }
         }
         if (r.spec.mapTo && !r.spec.timeSeries) counters[r.spec.mapTo] += total;
+        if (r.spec.extraKey && !r.spec.timeSeries) {
+          extras[r.spec.extraKey] = (extras[r.spec.extraKey] ?? 0) + total;
+        }
       }
     }
 
@@ -170,6 +184,7 @@ export class FacebookAudienceFetcher {
               : 0,
           followers_count_current:
             followerSeries[followerSeries.length - 1]?.value ?? 0,
+          ...extras,
         },
       },
       fetchedAt: new Date(),

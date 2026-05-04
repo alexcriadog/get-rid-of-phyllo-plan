@@ -1,9 +1,18 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import axios from 'axios';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 
-export type Platform = 'instagram' | 'facebook' | 'tiktok';
+const META_GRAPH = 'https://graph.facebook.com/v22.0';
+const NORMALIZE_TIMEOUT_MS = 15_000;
+
+export type Platform = 'instagram' | 'facebook' | 'tiktok' | 'threads';
 
 export interface SeedAccountInput {
   platform: Platform;
@@ -39,6 +48,8 @@ const PRODUCTS_BY_PLATFORM: Record<Platform, ReadonlyArray<string>> = {
   facebook: ['identity', 'audience', 'engagement_new', 'stories'],
   // TikTok BC v1.3: stories don't exist; mentions probe pending.
   tiktok: ['identity', 'audience', 'engagement_new', 'comments'],
+  // Threads has no stories. /me/mentioned_threads is the mentions surface.
+  threads: ['identity', 'audience', 'engagement_new', 'comments', 'mentions'],
 };
 
 @Injectable()
@@ -56,7 +67,18 @@ export class AccountsService {
       throw new Error(`Unsupported platform: ${input.platform}`);
     }
 
-    const accessCipher = this.aes.encrypt(input.accessToken);
+    // For Meta family (FB + IG) we MUST end up persisting a Page token so
+    // calls don't get charged against the App-Level rate limit (200 ×
+    // users/h). User tokens reach this method via the ManualForm in
+    // /admin/connect, the public POST /accounts/seed, and helper scripts —
+    // every path lands here, which is why the normalization belongs at this
+    // chokepoint instead of in any single caller.
+    const accessToken =
+      input.platform === 'facebook' || input.platform === 'instagram'
+        ? await this.normalizeMetaToken(input)
+        : input.accessToken;
+
+    const accessCipher = this.aes.encrypt(accessToken);
     const refreshCipher = input.refreshToken
       ? this.aes.encrypt(input.refreshToken)
       : null;
@@ -69,6 +91,22 @@ export class AccountsService {
         : Prisma.JsonNull;
 
     return this.prisma.$transaction(async (tx) => {
+      // Look up first so we can decide whether re-OAuth should also resume an
+      // auto-paused account. We only override syncTier when it's currently
+      // 'paused' — that preserves deliberate 'lite'/'demo' tiers across
+      // re-connects while clearing the auto-pause that the worker sets after
+      // five consecutive failures (sync.worker.ts).
+      const existing = await tx.account.findUnique({
+        where: {
+          platform_canonicalUserId: {
+            platform: input.platform,
+            canonicalUserId: input.canonicalUserId,
+          },
+        },
+        select: { id: true, syncTier: true },
+      });
+      const wasPaused = existing?.syncTier === 'paused';
+
       const account = await tx.account.upsert({
         where: {
           platform_canonicalUserId: {
@@ -87,6 +125,7 @@ export class AccountsService {
         update: {
           handle: input.handle ?? undefined,
           status: 'ready',
+          ...(wasPaused ? { syncTier: 'standard' } : {}),
           // Only overwrite metadata when the caller provided one — preserves
           // existing keys (e.g. page_id) on a re-seed of the same account.
           ...(input.metadata && Object.keys(input.metadata).length > 0
@@ -94,6 +133,16 @@ export class AccountsService {
             : {}),
         },
       });
+
+      // If the account was auto-paused, the failure_count on its jobs is the
+      // tripwire that paused it — clear it so future failures start from zero
+      // and don't re-trip immediately.
+      if (wasPaused) {
+        await tx.syncJob.updateMany({
+          where: { accountId: account.id },
+          data: { failureCount: 0, lastError: null },
+        });
+      }
 
       await tx.oAuthToken.upsert({
         where: { accountId: account.id },
@@ -141,6 +190,93 @@ export class AccountsService {
         account_id: account.id.toString(),
         sync_jobs_created: jobIds,
       };
+    });
+  }
+
+  /**
+   * Resolve any FB/IG access token down to the Page access token that
+   * actually owns the requested resource. The path is:
+   *
+   *   1. Try GET /me/accounts with the supplied token.
+   *      - 200 with a `data` array → it's a User token. Locate the page by
+   *        canonical_user_id (page_id for FB, instagram_business_account.id
+   *        for IG) and return that page's access_token.
+   *      - 400 with "nonexisting field (accounts)" → it's already a Page
+   *        token. Verify it can read /{canonical_user_id} and return it
+   *        as-is.
+   *
+   * Throws BadRequestException with a precise reason whenever we can't end
+   * up holding a Page token that owns the asset — that's what keeps a
+   * stray User token from ever reaching oauth_tokens.
+   */
+  private async normalizeMetaToken(input: SeedAccountInput): Promise<string> {
+    type GraphPage = {
+      id: string;
+      access_token?: string;
+      instagram_business_account?: { id: string };
+    };
+    type GraphErrorBody = { error?: { message?: string; code?: number } };
+
+    const accountsRes = await axios.get<{ data?: GraphPage[] } & GraphErrorBody>(
+      `${META_GRAPH}/me/accounts`,
+      {
+        params: {
+          fields: 'id,access_token,instagram_business_account{id}',
+          limit: 100,
+          access_token: input.accessToken,
+        },
+        timeout: NORMALIZE_TIMEOUT_MS,
+        validateStatus: () => true,
+      },
+    );
+
+    if (accountsRes.status >= 200 && accountsRes.status < 300) {
+      const pages = accountsRes.data.data ?? [];
+      const match = pages.find((p) =>
+        input.platform === 'facebook'
+          ? p.id === input.canonicalUserId
+          : p.instagram_business_account?.id === input.canonicalUserId,
+      );
+      if (!match || !match.access_token) {
+        throw new BadRequestException({
+          message: `This token does not manage ${input.platform}/${input.canonicalUserId}. /me/accounts returned ${pages.length} pages, none matching.`,
+          pages_seen: pages.map((p) => ({
+            page_id: p.id,
+            ig_business_id: p.instagram_business_account?.id ?? null,
+          })),
+        });
+      }
+      this.logger.log(
+        `normalized User token → Page token for ${input.platform}/${input.canonicalUserId} (page ${match.id})`,
+      );
+      return match.access_token;
+    }
+
+    const errMsg = accountsRes.data?.error?.message ?? `HTTP ${accountsRes.status}`;
+    if (/nonexisting field \(accounts\)/i.test(errMsg)) {
+      // Already a Page token. Verify it actually accesses the requested
+      // resource so we don't persist a Page token from a different page.
+      const probe = await axios.get<{ id?: string } & GraphErrorBody>(
+        `${META_GRAPH}/${input.canonicalUserId}`,
+        {
+          params: { fields: 'id', access_token: input.accessToken },
+          timeout: NORMALIZE_TIMEOUT_MS,
+          validateStatus: () => true,
+        },
+      );
+      if (probe.status < 200 || probe.status >= 300) {
+        throw new BadRequestException({
+          message: `Page token does not access ${input.platform}/${input.canonicalUserId}: ${probe.data?.error?.message ?? `HTTP ${probe.status}`}`,
+        });
+      }
+      // For IG, /me/accounts isn't an option (the token is page-scoped) so
+      // probe.id will be the page_id, not the IG id — that's fine, we're
+      // only checking that the token has read access.
+      return input.accessToken;
+    }
+
+    throw new BadRequestException({
+      message: `Failed to normalize ${input.platform} token: ${errMsg}`,
     });
   }
 

@@ -18,6 +18,8 @@ import { THREADS_API_CLIENT } from './threads.tokens';
 import { ThreadsProfileFetcher } from './fetcher/threads-profile.fetcher';
 import { ThreadsAudienceFetcher } from './fetcher/threads-audience.fetcher';
 import { ThreadsContentFetcher } from './fetcher/threads-content.fetcher';
+import { ThreadsRepliesFetcher } from './fetcher/threads-replies.fetcher';
+import { ThreadsMentionsFetcher } from './fetcher/threads-mentions.fetcher';
 
 @Module({
   imports: [ThreadsApiModule],
@@ -27,6 +29,8 @@ import { ThreadsContentFetcher } from './fetcher/threads-content.fetcher';
     ThreadsProfileFetcher,
     ThreadsAudienceFetcher,
     ThreadsContentFetcher,
+    ThreadsRepliesFetcher,
+    ThreadsMentionsFetcher,
     {
       provide: THREADS_API_CLIENT,
       useFactory: (client: ThreadsClient, strategy: ThreadsRateLimitStrategy) =>
@@ -34,6 +38,10 @@ import { ThreadsContentFetcher } from './fetcher/threads-content.fetcher';
       inject: [ThreadsClient, ThreadsRateLimitStrategy],
     },
   ],
-  exports: [ThreadsAdapter],
+  // Re-export ThreadsApiModule so downstream consumers (AdminModule, etc.)
+  // can inject ThreadsClient / ThreadsTokenRefreshService through us. Nest
+  // forbids exporting a provider that lives in another module — the module
+  // itself has to be re-exported.
+  exports: [ThreadsAdapter, ThreadsApiModule],
 })
 export class ThreadsModule {}

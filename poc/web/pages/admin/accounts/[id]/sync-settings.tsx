@@ -307,7 +307,7 @@ function SyncJobSettingsCard({
               }
               value={lookbackDays}
               onChange={setLookbackDays}
-              placeholder="default 30"
+              placeholder="default 90"
             />
             <SettingField
               label="maxPostsPerSync"

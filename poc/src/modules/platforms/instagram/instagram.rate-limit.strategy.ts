@@ -1,50 +1,36 @@
-// Instagram rate-limit hints. Phase B1.
-// Body lifted verbatim from the previous inline rateLimitHints in
-// instagram.adapter.ts — no behaviour change. The point of extracting it is
-// to remove HTTP/rate concerns from the adapter; FB now mirrors this exact
-// shape and order, closing drift D2 + D3.
+// Instagram rate-limit strategy.
+//
+// Post-2026-05 the synthetic local token-bucket scopes (`user_token`,
+// `page`, `app`) have all been retired — they capped throughput at numbers
+// we invented (200/h) instead of what Meta is actually willing to serve.
+// The single source of truth is now BucTelemetryService.checkGate via
+// `bucKeys()`, which mirrors X-App-Usage + X-Business-Use-Case-Usage and
+// gates at 75% (Meta's published cap, scaled by impressions per asset).
+//
+// `hints()` still implements RateLimitStrategy because the GraphClient
+// runs RateBucketService.acquire() unconditionally; returning [] makes
+// that path a no-op and the BUC mirror becomes the only effective gate.
+// Failure mode if Redis is unreachable: BucTelemetryService.checkGate
+// returns allowed=true (fail-open) and Meta itself protects us with 429
+// → RateLimitedError → worker reschedule.
 
 import { Injectable } from '@nestjs/common';
 import type { RateLimitHint } from '@shared/redis/rate-bucket.service';
 import type { PlatformAdapterContext } from '../shared/platform-adapter.port';
 import type { RateLimitStrategy } from '../shared/meta-graph/rate-limit-strategy.port';
 
-// 200 calls per hour ≈ 0.05555 tokens/ms.
-const IG_REFILL_PER_MS = 200 / (60 * 60 * 1000);
-const IG_CAPACITY = 200;
-
 @Injectable()
 export class InstagramRateLimitStrategy implements RateLimitStrategy {
-  hints(context: PlatformAdapterContext): RateLimitHint[] {
-    const hints: RateLimitHint[] = [
-      {
-        scope: 'user_token',
-        keyTemplate: 'rate:ig:user_token:{hash}',
-        capacity: IG_CAPACITY,
-        refillPerMs: IG_REFILL_PER_MS,
-        costPerCall: 1,
-        strategy: 'token-bucket',
-      },
-      {
-        scope: 'app',
-        keyTemplate: 'rate:ig:app',
-        capacity: IG_CAPACITY,
-        refillPerMs: IG_REFILL_PER_MS,
-        costPerCall: 1,
-        strategy: 'token-bucket',
-      },
-    ];
+  hints(_context: PlatformAdapterContext): RateLimitHint[] {
+    return [];
+  }
 
-    if (context?.pageId) {
-      hints.push({
-        scope: 'page',
-        keyTemplate: 'rate:ig:page:{page_id}',
-        capacity: IG_CAPACITY,
-        refillPerMs: IG_REFILL_PER_MS,
-        costPerCall: 1,
-        strategy: 'token-bucket',
-      });
-    }
-    return hints;
+  /**
+   * BUC mirror keys. The IG Business Account id is the asset Meta tracks
+   * under x-business-use-case-usage; we read it from the context
+   * (populated by buildInstagramContext from the canonicalUserId).
+   */
+  bucKeys(context: PlatformAdapterContext): string[] {
+    return context.igAccountId ? [`asset:${context.igAccountId}`] : [];
   }
 }

@@ -70,9 +70,8 @@ const FAILURE_BACKOFF_MAX_MS = 60 * 60_000;
  * Override LOOKBACK via `ENGAGEMENT_LOOKBACK_DAYS` (default 30 for the PoC;
  * production should set 90).
  */
-const ENGAGEMENT_LOOKBACK_DAYS_DEFAULT = 30;
+const ENGAGEMENT_LOOKBACK_DAYS_DEFAULT = 90;
 const ENGAGEMENT_MAX_POSTS_PER_SYNC = 500;
-const INCREMENTAL_OVERLAP_MS = 30 * 60_000;
 
 /** Coerce an unknown into a positive finite number, else fall back. */
 function pickPositiveNumber(value: unknown, fallback: number): number {
@@ -399,10 +398,7 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         return { kind: 'audience', data };
       }
       case 'engagement_new': {
-        const since = this.computeEngagementSince(
-          context.lastSuccessAt ?? null,
-          context.settings ?? null,
-        );
+        const since = this.computeEngagementSince(context.settings ?? null);
         const limit = pickPositiveNumber(
           context.settings?.maxPostsPerSync,
           ENGAGEMENT_MAX_POSTS_PER_SYNC,
@@ -694,25 +690,26 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
   }
 
   /**
-   * Window start for an engagement_new fetch. Returns the more-recent of:
-   *   (a) `lastSuccessAt - INCREMENTAL_OVERLAP_MS` (incremental — usually
-   *       captures only the past 2h plus 30 min overlap so we can't lose a
-   *       post that was published just before the previous sync but
-   *       indexed after it).
-   *   (b) `now - LOOKBACK_DAYS` (cap — first run, or runs after a long
-   *       outage, never reach further back than this).
+   * Window start for an engagement_new fetch. Always returns
+   * `now - LOOKBACK_DAYS` (default 90d) — `lastSuccessAt` is intentionally
+   * ignored.
    *
-   * LOOKBACK precedence: per-job settings.lookbackDays > env > default.
+   * Why: incremental windows (only refresh posts published since the last
+   * run) miss the metric growth curve of older content. Reels in
+   * particular accumulate the bulk of their views in the first 7-14 days
+   * after publish, so a snapshot taken hours after publish became the
+   * frozen value forever. Re-fetching the last 90 days every run keeps
+   * the curve up-to-date. See docs/refresh-cadence.md for the cost
+   * analysis (negligible vs Meta's BUC budget per asset).
+   *
+   * LOOKBACK precedence: per-job settings.lookbackDays > env
+   * (ENGAGEMENT_LOOKBACK_DAYS) > default (90).
    */
   private computeEngagementSince(
-    lastSuccessAt: Date | null,
     settings: Record<string, unknown> | null,
   ): Date {
     const lookbackDays = this.resolveEngagementLookbackDays(settings);
-    const lookbackStart = new Date(Date.now() - lookbackDays * 86_400_000);
-    if (!lastSuccessAt) return lookbackStart;
-    const incrementalStart = new Date(lastSuccessAt.getTime() - INCREMENTAL_OVERLAP_MS);
-    return incrementalStart > lookbackStart ? incrementalStart : lookbackStart;
+    return new Date(Date.now() - lookbackDays * 86_400_000);
   }
 
   private resolveEngagementLookbackDays(

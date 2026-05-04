@@ -1,10 +1,12 @@
 # Instagram
 
 **Status:** Stable reference
-**Last updated:** 2026-04-23
+**Last updated:** 2026-05-04
 **Platform API:** Instagram Graph API (Meta Business Platform)
 
 Instagram is the highest-volume platform for the connector. Two distinct OAuth flows are supported: **Business via Facebook Page** (primary) and **IG Direct** (legacy, preserved for parity with existing accounts).
+
+> **2026-05-04 invariants:** the only access-token type persisted for IG is the **Page access token** (or, equivalently, an IG_User token sourced from the linked Page). `AccountsService.seedAccount()` normalises every incoming token via `/me/accounts` before encryption — see [ADR 0015](../adr/0015-token-type-normalization.md). Rate limiting follows Meta's `X-Business-Use-Case-Usage` per `(App, IG Business Account)` rather than a synthetic local cap — see [ADR 0014](../adr/0014-meta-rate-limit-mirror.md). The `engagement_new` job re-fetches insights for the last 90 days of posts on every run (`refresh-cadence.md` §0).
 
 ---
 

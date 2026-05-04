@@ -1,10 +1,26 @@
 # Refresh Cadence
 
 **Status:** Stable reference
-**Last updated:** 2026-04-23
+**Last updated:** 2026-05-04
 **Answers question:** Q2 — How do we set default refreshes but customize per account (VIPs vs demos)?
 
 Not every account deserves the same attention. A flagship creator for a paying client needs engagement data every 30 minutes; a demo sandbox account is fine at once a day. The connector supports **three layers of cadence control** — sensible defaults, tier multipliers, and per-account overrides — resolved deterministically at scheduling time.
+
+---
+
+## 0. Engagement window — 90d always (since 2026-05-04)
+
+`engagement_new` previously used an **incremental** window: each run only re-fetched insights for posts published since the last successful run (`lastSuccessAt - 30min`), with a 30-day cap as a safety net. This was efficient on per-call cost but missed the metric growth curve of older posts: a Reel published Monday at 17:00 was snapshotted at the next run (~3h later) with whatever views Meta reported then, and that snapshot was never refreshed because the post fell outside every later window.
+
+`computeEngagementSince` (in `poc/src/modules/sync/sync.worker.ts`) now returns `now - 90d` unconditionally. Per-account `settings.lookbackDays` and `process.env.ENGAGEMENT_LOOKBACK_DAYS` still override the default; both also act as fixed lookback (no incremental).
+
+**Impact analysis (verified at the time of the change):**
+
+- Cost per Meta account: ~30 calls/run × 3 runs/day = ~90 calls/day. Negligible vs the BUC budget per asset (`4800 × Impressions / 24h`, often hundreds of millions).
+- The synthetic 200/h cap that used to constrain this is gone (see `rate-limiting.md` §0); the only remaining local fuse is `user_token` at 200/h per account, which still gives plenty of headroom for the 90d window.
+- Reels metrics finally track their natural growth curve in our UI instead of freezing hours after publish.
+
+If you ever need to dial it back (e.g. to reduce Mongo writes during a very large incident), set `ENGAGEMENT_LOOKBACK_DAYS=7` on the worker container — no code change needed.
 
 ---
 

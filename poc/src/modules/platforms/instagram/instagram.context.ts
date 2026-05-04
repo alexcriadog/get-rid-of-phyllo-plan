@@ -8,6 +8,7 @@ import { tokenHash } from '../shared/meta-graph';
 
 export function buildInstagramContext(
   accessToken: string,
+  canonicalId: string,
   metadata?: Record<string, unknown>,
 ): PlatformAdapterContext {
   return {
@@ -16,5 +17,6 @@ export function buildInstagramContext(
       metadata && typeof metadata['page_id'] === 'string'
         ? (metadata['page_id'] as string)
         : undefined,
+    igAccountId: canonicalId,
   };
 }

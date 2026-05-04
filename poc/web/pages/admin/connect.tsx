@@ -53,11 +53,27 @@ type TikTokDiscoveredAccount = {
   already_connected: boolean;
 };
 
+type ThreadsDiscoveredAccount = {
+  user_id: string;
+  username: string | null;
+  name: string | null;
+  profile_picture_url: string | null;
+  biography: string | null;
+  is_verified: boolean | null;
+  already_connected: boolean;
+};
+
 type DiscoverResponse = {
   me: { id: string | null; name: string | null };
-  token_type: 'user' | 'page' | 'unknown' | 'tiktok-business';
+  token_type:
+    | 'user'
+    | 'page'
+    | 'unknown'
+    | 'tiktok-business'
+    | 'threads-user';
   pages: DiscoveredPage[];
   tiktok_account?: TikTokDiscoveredAccount;
+  threads_account?: ThreadsDiscoveredAccount;
   warnings: string[];
 };
 
@@ -69,7 +85,7 @@ type SeedResponse = {
 type ConnectKey = string; // `${platform}:${id}`
 
 type SeedBody = {
-  platform: 'instagram' | 'facebook' | 'tiktok';
+  platform: 'instagram' | 'facebook' | 'tiktok' | 'threads';
   access_token: string;
   refresh_token?: string;
   expires_at?: string; // ISO 8601 with offset
@@ -78,7 +94,7 @@ type SeedBody = {
   metadata?: Record<string, unknown>;
 };
 
-type DiscoverPlatform = 'facebook' | 'tiktok';
+type DiscoverPlatform = 'facebook' | 'tiktok' | 'threads';
 
 export default function ConnectPage() {
   const [platform, setPlatform] = useState<DiscoverPlatform>('facebook');
@@ -145,6 +161,15 @@ export default function ConnectPage() {
               We&apos;ll call <code>/business/get/</code> to validate and fetch
               the basic profile.
             </>
+          ) : platform === 'threads' ? (
+            <>
+              Paste a long-lived <strong>Threads</strong> user token (scopes{' '}
+              <code>threads_basic</code> + <code>threads_manage_insights</code>{' '}
+              + <code>threads_read_replies</code> +{' '}
+              <code>threads_manage_mentions</code>). We&apos;ll call{' '}
+              <code>graph.threads.net/v1.0/me</code> to validate and fetch the
+              connected user.
+            </>
           ) : (
             <>
               Paste a Meta <strong>User</strong> or <strong>Page</strong>{' '}
@@ -177,6 +202,9 @@ export default function ConnectPage() {
               <SelectItem value="tiktok" className="font-mono text-xs">
                 TikTok
               </SelectItem>
+              <SelectItem value="threads" className="font-mono text-xs">
+                Threads
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -184,7 +212,13 @@ export default function ConnectPage() {
           <textarea
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder={platform === 'tiktok' ? 'act.zI317…' : 'EAAxxxxxxxx…'}
+            placeholder={
+              platform === 'tiktok'
+                ? 'act.zI317…'
+                : platform === 'threads'
+                  ? 'THAAxxxxxxxx…'
+                  : 'EAAxxxxxxxx…'
+            }
             spellCheck={false}
             rows={3}
             className="flex-1 resize-y rounded-md border border-input bg-card px-3 py-2 font-mono text-xs text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -289,7 +323,8 @@ export default function ConnectPage() {
             )}
           </Section>
 
-          {discovery.token_type !== 'tiktok-business' && (
+          {discovery.token_type !== 'tiktok-business' &&
+            discovery.token_type !== 'threads-user' && (
             <Section
               title={`2. Pages found (${discovery.pages.length})`}
               description="Each Page can be connected as Facebook, and (when present) as the linked Instagram Business account."
@@ -309,6 +344,36 @@ export default function ConnectPage() {
                   ))}
                 </div>
               )}
+            </Section>
+          )}
+
+          {discovery.threads_account && (
+            <Section
+              title="2. Threads account"
+              description="Verified by graph.threads.net/v1.0/me. Click Connect to seed it with the long-lived user token above."
+            >
+              <ThreadsAccountCard
+                account={discovery.threads_account}
+                busy={busy === `threads:${discovery.threads_account.user_id}`}
+                result={
+                  results[`threads:${discovery.threads_account.user_id}`]
+                }
+                onConnect={() => {
+                  const acc = discovery.threads_account;
+                  if (!acc) return;
+                  return connect(`threads:${acc.user_id}`, {
+                    platform: 'threads',
+                    access_token: token.trim(),
+                    canonical_user_id: acc.user_id,
+                    handle: acc.username
+                      ? `@${acc.username}`
+                      : acc.name ?? undefined,
+                    metadata: {
+                      user_id: acc.user_id,
+                    },
+                  });
+                }}
+              />
             </Section>
           )}
 
@@ -423,6 +488,77 @@ function TikTokAccountCard({
           <div className="font-mono text-[10px] text-muted-foreground/70">
             open_id {account.open_id.slice(0, 14)}…
           </div>
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-2">
+        <Button onClick={onConnect} disabled={busy}>
+          {busy ? 'Connecting…' : ok ? 'Reseed' : 'Connect'}
+          {!busy && !ok && <ArrowRight className="ml-1 h-3.5 w-3.5" />}
+        </Button>
+        {ok && (
+          <span className="font-mono text-[10px] text-ok">
+            ✓ acc #{ok.account_id} · {ok.sync_jobs_created.length} sync_jobs
+          </span>
+        )}
+        {errMsg && (
+          <span className="font-mono text-[10px] text-danger">{errMsg}</span>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function ThreadsAccountCard({
+  account,
+  busy,
+  result,
+  onConnect,
+}: {
+  account: ThreadsDiscoveredAccount;
+  busy: boolean;
+  result?: SeedResponse | string;
+  onConnect: () => Promise<void> | void;
+}) {
+  const handle = account.username ? `@${account.username}` : account.name ?? '—';
+  const ok =
+    result && typeof result === 'object' && 'account_id' in result
+      ? result
+      : null;
+  const errMsg = result && typeof result === 'string' ? result : null;
+
+  return (
+    <Card className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
+      <div className="flex items-center gap-4">
+        {account.profile_picture_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={account.profile_picture_url}
+            alt={`${handle} avatar`}
+            referrerPolicy="no-referrer"
+            className="h-14 w-14 rounded-full border border-border object-cover"
+          />
+        ) : (
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-muted font-mono text-sm text-muted-foreground">
+            th
+          </div>
+        )}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm font-semibold">{handle}</span>
+            {account.is_verified && <Badge variant="primary">verified</Badge>}
+            {account.already_connected && (
+              <Badge variant="ok">already connected</Badge>
+            )}
+          </div>
+          <div className="font-mono text-[11px] text-muted-foreground">
+            {account.name && account.username ? `${account.name} · ` : ''}
+            user_id {account.user_id}
+          </div>
+          {account.biography && (
+            <div className="line-clamp-2 max-w-[480px] text-[11px] text-muted-foreground/80">
+              {account.biography}
+            </div>
+          )}
         </div>
       </div>
       <div className="flex flex-col items-end gap-2">

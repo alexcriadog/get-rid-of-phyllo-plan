@@ -1,21 +1,24 @@
 // Threads audience / account-level insights fetcher.
 //
-// Endpoint: GET /{user-id}/threads_insights?metric=<name>
+// Endpoint: GET /{user-id}/threads_insights?metric=<name>[&breakdown=<dim>]
 //
 // Each metric is requested individually so a single rejection (e.g.
-// follower_demographics requires 100+ followers) doesn't poison the rest.
-// Behaviour mirrors facebook-audience.fetcher.ts:
-//   - One request per metric, run in parallel.
-//   - Per-metric errors are collected; if every metric failed we throw an
-//     AdapterFetchError with the diagnostic bundle.
-//   - Lifetime scalars are read from `total_value.value`.
-//   - Time-series metrics are read from `values[]` (only `followers_count`
-//     uses this shape today).
+// follower_demographics needs ≥100 followers) doesn't poison the rest.
 //
-// follower_demographics is the only distribution Threads exposes today, and
-// only for accounts > 100 followers. We request it with breakdown=country.
-// gender / age / city need separate calls with different breakdown values;
-// when supported by the account, the same request shape applies.
+// Per developers.facebook.com/docs/threads/insights:
+//   - follower_demographics supports breakdown ∈ {country, city, age, gender}.
+//   - Only ONE breakdown per call → we issue four parallel calls, one per
+//     dimension.
+//   - The metric needs 100+ followers; below that, Threads returns code=801
+//     subcode=4279032 ("No puedes obtener información demográfica de los
+//     usuarios con menos de 100 seguidores"). We capture that signal as a
+//     typed DemographicBreakdownError so the UI can explain the gap.
+//   - The bucket map ships in `total_value.value` (the documented shape).
+//     Older account snapshots also carried it inside `values[]`, so we read
+//     both for resilience.
+//
+// Lifetime scalars (views/likes/replies/reposts/quotes) come either as
+// `total_value.value` or a daily `values[]` we sum.
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { BoundThreadsClient } from '../../shared/threads-api/threads-client';
@@ -23,16 +26,22 @@ import type {
   ThreadsApiResponse,
   ThreadsInsight,
 } from '../../shared/threads-api/threads-types';
-import { extractAccountId, extractMetaError } from '../../shared/meta-graph';
+import {
+  extractAccountId,
+  extractGraphError,
+  extractMetaError,
+} from '../../shared/meta-graph';
 import { AdapterFetchError } from '../../shared/platform-adapter.port';
 import type {
   AudienceData,
+  DemographicBreakdownError,
   DistributionBucket,
 } from '../../shared/platform-types';
 import { buildThreadsContext } from '../threads.context';
 import { THREADS_API_CLIENT } from '../threads.tokens';
 
 type ScalarKey = 'views' | 'likes' | 'replies' | 'reposts' | 'quotes';
+type Breakdown = 'country' | 'city' | 'gender' | 'age';
 
 interface MetricSpec {
   name: string;
@@ -41,7 +50,7 @@ interface MetricSpec {
   /** Time-series metric (followers_count is the only one). */
   series?: 'followers';
   /** Demographic breakdown — pulls a single bucket dimension at a time. */
-  breakdown?: 'country' | 'city' | 'gender' | 'age';
+  breakdown?: Breakdown;
 }
 
 const METRICS: MetricSpec[] = [
@@ -51,8 +60,18 @@ const METRICS: MetricSpec[] = [
   { name: 'reposts', scalar: 'reposts' },
   { name: 'quotes', scalar: 'quotes' },
   { name: 'followers_count', series: 'followers' },
+  // All four supported follower_demographics breakdowns. Each one is a
+  // separate Threads call (the API only allows one breakdown per request).
   { name: 'follower_demographics', breakdown: 'country' },
+  { name: 'follower_demographics', breakdown: 'city' },
+  { name: 'follower_demographics', breakdown: 'age' },
+  { name: 'follower_demographics', breakdown: 'gender' },
 ];
+
+/** Threads error code/subcode pair returned when an account has <100 followers
+ *  and tries to read follower_demographics. */
+const DEMOGRAPHICS_THRESHOLD_CODE = 801;
+const DEMOGRAPHICS_THRESHOLD_SUBCODE = 4279032;
 
 @Injectable()
 export class ThreadsAudienceFetcher {
@@ -83,12 +102,19 @@ export class ThreadsAudienceFetcher {
             context: ctx,
             accountId,
           });
-          return { spec, body, error: null as string | null };
+          return {
+            spec,
+            body,
+            error: null as string | null,
+            errorMeta: null as { code?: number; subcode?: number; message: string } | null,
+          };
         } catch (err) {
+          const graph = extractGraphError(err);
           return {
             spec,
             body: null as ThreadsApiResponse<ThreadsInsight[]> | null,
             error: extractMetaError(err),
+            errorMeta: graph,
           };
         }
       }),
@@ -97,18 +123,50 @@ export class ThreadsAudienceFetcher {
     const scalars: Partial<Record<ScalarKey, number>> = {};
     let followersCurrent: number | undefined;
     const followerCountSeries: Array<{ endTime: string; value: number }> = [];
-    const countryDistribution: DistributionBucket[] = [];
+    const distributions: Record<Breakdown, DistributionBucket[]> = {
+      country: [],
+      city: [],
+      age: [],
+      gender: [],
+    };
+    const breakdownErrors: DemographicBreakdownError[] = [];
     const errors: string[] = [];
 
     for (const r of results) {
       if (r.error || !r.body) {
-        errors.push(`${r.spec.name}: ${r.error ?? 'no body'}`);
+        errors.push(`${r.spec.name}${r.spec.breakdown ? `[${r.spec.breakdown}]` : ''}: ${r.error ?? 'no body'}`);
+        // For demographic calls, surface the failure to the UI as a typed
+        // DemographicBreakdownError so we can show "needs 100 followers"
+        // instead of an empty panel.
+        if (r.spec.breakdown && r.errorMeta) {
+          breakdownErrors.push({
+            breakdown: r.spec.breakdown,
+            message:
+              r.errorMeta.code === DEMOGRAPHICS_THRESHOLD_CODE &&
+              r.errorMeta.subcode === DEMOGRAPHICS_THRESHOLD_SUBCODE
+                ? 'Threads requires 100+ followers before exposing follower demographics.'
+                : r.errorMeta.message,
+            code: r.errorMeta.code,
+            subcode: r.errorMeta.subcode,
+          });
+        }
         continue;
       }
       const insights = r.body.data ?? [];
       for (const insight of insights) {
         if (r.spec.scalar) {
-          const v = insight.total_value?.value;
+          // Threads returns scalar lifetime metrics two ways: either as
+          // `total_value.value` (likes/replies/reposts/quotes) or as a daily
+          // `values[]` time series that we sum (views — the only one that
+          // ships as series in account insights today). Read both shapes.
+          let v: number | undefined;
+          if (typeof insight.total_value?.value === 'number') {
+            v = insight.total_value.value;
+          } else if (Array.isArray(insight.values)) {
+            v = insight.values.reduce((sum, point) => {
+              return typeof point.value === 'number' ? sum + point.value : sum;
+            }, 0);
+          }
           if (typeof v === 'number') {
             scalars[r.spec.scalar] = (scalars[r.spec.scalar] ?? 0) + v;
           }
@@ -127,16 +185,20 @@ export class ThreadsAudienceFetcher {
           }
           continue;
         }
-        if (r.spec.breakdown === 'country') {
-          // follower_demographics returns a values[] entry whose `value` is
-          // a bucket map { US: 1234, GB: 567 }.
-          const last = insight.values?.[insight.values.length - 1]?.value;
-          if (last && typeof last === 'object') {
-            for (const [label, raw] of Object.entries(
-              last as Record<string, unknown>,
-            )) {
+        if (r.spec.breakdown) {
+          // follower_demographics:
+          //   - documented shape: total_value.value = { US: 1234, GB: 567 }
+          //   - legacy shape:     values[last].value = same map
+          // Read both for resilience.
+          const buckets = extractBucketMap(insight);
+          if (buckets) {
+            for (const [label, raw] of Object.entries(buckets)) {
               if (typeof raw === 'number') {
-                countryDistribution.push({ label, value: raw, unit: 'count' });
+                distributions[r.spec.breakdown].push({
+                  label,
+                  value: raw,
+                  unit: 'count',
+                });
               }
             }
           }
@@ -170,12 +232,16 @@ export class ThreadsAudienceFetcher {
     if (typeof scalars.quotes === 'number') extra.quotes = scalars.quotes;
 
     return {
-      // Threads exposes only country (and only when the account has ≥ 100
-      // followers) — leave the rest empty, the support matrix declares it.
-      genderDistribution: [],
-      ageDistribution: [],
-      countryDistribution,
-      cityDistribution: [],
+      countryDistribution: distributions.country,
+      cityDistribution: distributions.city,
+      ageDistribution: distributions.age,
+      genderDistribution: distributions.gender,
+      // The Threads demographics product is "followers" (not reached/engaged
+      // like IG). We surface per-breakdown failures via reachedDemographics
+      // so the UI can render "needs 100 followers" hints next to the
+      // empty-state panels.
+      reachedDemographics:
+        breakdownErrors.length > 0 ? { errors: breakdownErrors } : undefined,
       accountInsights: {
         views: scalars.views,
         likes: scalars.likes,
@@ -186,4 +252,23 @@ export class ThreadsAudienceFetcher {
       fetchedAt: new Date(),
     };
   }
+}
+
+/**
+ * Extract the bucket map ({US: 12, GB: 7, ...}) from a follower_demographics
+ * insight regardless of whether Threads returned it under `total_value.value`
+ * (the documented shape) or `values[last].value` (an older shape).
+ */
+function extractBucketMap(
+  insight: ThreadsInsight,
+): Record<string, unknown> | null {
+  const totalVal = (insight.total_value as { value?: unknown } | undefined)?.value;
+  if (totalVal && typeof totalVal === 'object') {
+    return totalVal as Record<string, unknown>;
+  }
+  const last = insight.values?.[insight.values.length - 1]?.value;
+  if (last && typeof last === 'object') {
+    return last as Record<string, unknown>;
+  }
+  return null;
 }

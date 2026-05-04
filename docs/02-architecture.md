@@ -1,10 +1,12 @@
 # 02 · Architecture Overview
 
 **Status:** Living — normalized English summary
-**Last updated:** 2026-04-23
+**Last updated:** 2026-05-04
 **Canonical source:** [`../context/phyllo-replacement-structure.md`](../context/phyllo-replacement-structure.md) (v2)
 
 High-level architecture of the connector. For the **visual schema with 3-axis extensibility**, see [`03-extensibility.md`](03-extensibility.md) — that is the faster entry point for a new reader.
+
+> **2026-05-04 deltas:** the Meta family now uses a rate-limit *mirror* (state derived from `X-App-Usage` and `X-Business-Use-Case-Usage` headers) instead of the synthetic token-bucket described historically here. See [ADR 0014](adr/0014-meta-rate-limit-mirror.md). For a plain-language explanation of the app-level bucket (with bar-aforo analogy and MotoGP-scale examples) see [`rate-limit-app-level.md`](rate-limit-app-level.md). Token persistence is gated by a `seedAccount` chokepoint that normalises any User token into a Page token before encryption — see [ADR 0015](adr/0015-token-type-normalization.md). The `engagement_new` job now refreshes the last 90 days of posts on every run instead of an incremental window — see `refresh-cadence.md` §0. All synthetic local-fuse buckets (`user_token`, `app`, `page`) have been retired from the IG/FB strategies; the BUC mirror is the only effective gate. The pending follow-ups are tracked in [`TODO.md`](TODO.md).
 
 ---
 

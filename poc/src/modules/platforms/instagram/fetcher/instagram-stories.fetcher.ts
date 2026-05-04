@@ -26,7 +26,7 @@ export class InstagramStoriesFetcher {
     canonicalId: string,
     metadata?: Record<string, unknown>,
   ): Promise<ContentData[]> {
-    const ctx = buildInstagramContext(accessToken, metadata);
+    const ctx = buildInstagramContext(accessToken, canonicalId, metadata);
     const accountId = extractAccountId(metadata);
     const body = await this.client.call<GraphListResponse<GraphMedia>>({
       endpoint: `/${canonicalId}/stories`,

@@ -30,7 +30,7 @@ export class InstagramProfileFetcher {
           'id,username,name,biography,profile_picture_url,followers_count,follows_count,media_count,website',
       },
       accessToken,
-      context: buildInstagramContext(accessToken, metadata),
+      context: buildInstagramContext(accessToken, canonicalId, metadata),
       accountId: extractAccountId(metadata),
     });
 

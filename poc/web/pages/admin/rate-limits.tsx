@@ -143,6 +143,8 @@ export default function RateLimitsPage() {
         </Section>
       )}
 
+      <BucMirrorPanel />
+
       <Section
         title="All rate buckets"
         description="Click Reset to refill a bucket immediately."
@@ -318,4 +320,127 @@ function useBucketHistory(key: string) {
     x: new Date(s.ts).getTime(),
     y: s.tokens,
   }));
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Meta BUC mirror panel — Phase 1-3 of the rate-limit mirror.
+// Reads /admin/rate-limits, which returns the snapshot maintained by
+// BucTelemetryService from X-App-Usage and X-Business-Use-Case-Usage on
+// every Meta response. This is what actually gates IG/FB calls today —
+// the legacy buckets shown below are only the local runaway fuse.
+// ──────────────────────────────────────────────────────────────────────────
+
+type MirrorBucket = {
+  scopeKey: string;       // e.g. 'app:273356382408695' or 'asset:17841...'
+  source: 'app' | 'buc';
+  type: string;            // 'instagram' | 'pages' | 'threads' | 'app'
+  callCountPct: number;    // 0-100
+  totalTimePct: number;
+  totalCpuPct: number;
+  retryAfterMs: number;    // Meta-supplied estimated_time_to_regain_access in ms
+  lastSeenAt: number;      // epoch ms
+};
+
+type MirrorSnapshot = {
+  generated_at: string;
+  buckets: MirrorBucket[];
+};
+
+function BucMirrorPanel() {
+  const { data, refresh } = useLive<MirrorSnapshot>('/admin/rate-limits', 5000);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const buckets = data?.buckets ?? [];
+
+  const replay = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await adminPost('/admin/rate-limits/replay', { since_hours: 24 });
+      refresh();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section
+      title="Meta BUC mirror"
+      description="Live state of Meta's own rate-limit headers (X-App-Usage + X-Business-Use-Case-Usage). This is the primary gate for IG/FB calls. Threshold for deny: 75% of call_count, or any retry-after > 0."
+    >
+      <div className="mb-3 flex items-center gap-3">
+        <Button
+          onClick={replay}
+          disabled={busy}
+          variant="outline"
+          className="text-xs"
+        >
+          {busy ? 'Replaying…' : 'Replay last 24h from api_call_log'}
+        </Button>
+        {data?.generated_at && (
+          <span className="font-mono text-[10.5px] text-muted-foreground/70">
+            generated {data.generated_at}
+          </span>
+        )}
+        {err && <span className="text-xs text-danger">{err}</span>}
+      </div>
+      {buckets.length === 0 ? (
+        <Empty message="No BUC mirror state yet. Run a Meta sync, or replay from api_call_log." />
+      ) : (
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+          {buckets.map((b) => (
+            <MirrorCard key={b.scopeKey} bucket={b} />
+          ))}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function MirrorCard({ bucket }: { bucket: MirrorBucket }) {
+  const pct = Math.round(bucket.callCountPct);
+  const tone: 'ok' | 'warn' | 'danger' =
+    pct >= 75 || bucket.retryAfterMs > 0
+      ? 'danger'
+      : pct >= 50
+        ? 'warn'
+        : 'ok';
+  const ageMs = Date.now() - bucket.lastSeenAt;
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-secondary/40 p-4">
+      <div className="flex min-h-[140px] items-center justify-center">
+        <Gauge value={pct} max={100} size={140} tone={tone} />
+      </div>
+      <div className="text-center">
+        <div className="mb-1 flex items-center justify-center gap-2 font-mono text-xs">
+          <Badge variant="outline">{bucket.type}</Badge>
+          <span className="text-muted-foreground/70">{bucket.source}</span>
+        </div>
+        <div
+          className="mb-1 font-mono text-[11px] text-foreground"
+          title={bucket.scopeKey}
+        >
+          {bucket.scopeKey}
+        </div>
+        <div className="font-mono text-[10px] text-muted-foreground">
+          time {Math.round(bucket.totalTimePct)}% · cpu{' '}
+          {Math.round(bucket.totalCpuPct)}% · seen {formatAge(ageMs)}
+        </div>
+        {bucket.retryAfterMs > 0 && (
+          <div className="mt-1 font-mono text-[10px] text-danger">
+            Meta retry-after: {Math.round(bucket.retryAfterMs / 1000)}s
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatAge(ms: number): string {
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`;
+  if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)}h ago`;
+  return `${Math.round(ms / 86_400_000)}d ago`;
 }

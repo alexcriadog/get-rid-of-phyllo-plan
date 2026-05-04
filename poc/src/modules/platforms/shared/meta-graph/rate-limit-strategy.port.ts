@@ -15,4 +15,17 @@ export interface RateLimitStrategy {
    * as "the blocker" in operations.
    */
   hints(context: PlatformAdapterContext): RateLimitHint[];
+
+  /**
+   * Phase 2 BUC mirror: Redis sub-keys (under `rate:meta:`) that
+   * BucTelemetryService.checkGate should consult before allowing this
+   * call. Strategies that don't yet model BUC return [] or omit the
+   * method entirely — it's optional.
+   *
+   * Convention:
+   *   - `asset:{id}` for IG Business Account, Facebook Page, Threads user.
+   *   - `app:{app_id}` is checked elsewhere (Phase 3); strategies do NOT
+   *     need to include it here.
+   */
+  bucKeys?(context: PlatformAdapterContext): string[];
 }

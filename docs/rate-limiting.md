@@ -1,10 +1,38 @@
 # Rate Limiting
 
 **Status:** Stable reference
-**Last updated:** 2026-04-23
+**Last updated:** 2026-05-04
 **Answers question:** Q1 — How do we control rate limits per platform?
 
 Every creator platform publishes a different rate-limit model — hourly budgets, daily quotas, per-minute points, per-endpoint counters. The connector's job is to respect **all of them simultaneously** without ever triggering a 429 during normal operation. This doc defines the strategy, the data structures, the per-platform configs, and the failure modes.
+
+---
+
+## 0. State of the system as of 2026-05-04
+
+> **For a non-technical, story-form explanation of the app-level cap (the only one shared across all clients), see [`rate-limit-app-level.md`](rate-limit-app-level.md). That doc covers the bar-aforo analogy, MotoGP-scale examples, and what an operator has to watch.**
+
+The original design (sections 1-9 below) modelled every platform with a synthetic token-bucket at a fixed cap (200/h for Meta). That cap was **invented**, not derived from what Meta actually allows, and was 100× more restrictive than reality for active accounts. Phases 1-3 of the rate-limit mirror replaced it for the Meta family with a model that follows what Meta itself reports in response headers.
+
+**Meta family (Instagram + Facebook):** the bucket is mirrored from `X-App-Usage` and `X-Business-Use-Case-Usage` per call. See `BucTelemetryService` (`poc/src/modules/platforms/shared/meta-graph/buc-telemetry.service.ts`).
+
+| Bucket | Source | Cap (per Meta docs) | Threshold | When it denies |
+|---|---|---|---|---|
+| `app:{appId}` | `X-App-Usage` | `200 × Daily Active Users` per hour, rolling | 75% | 75% reached, or any bucket signals `estimated_time_to_regain_access > 0` |
+| `asset:{ig_account_id}` | `X-Business-Use-Case-Usage` | `4800 × Impressions` per 24h, per IG asset | 75% | same |
+| `asset:{page_id}` | `X-Business-Use-Case-Usage` | `4800 × Engaged Users` per 24h, per FB Page | 75% | same |
+
+State is kept in Redis hashes under `{ns}:rate:meta:{scope}` with a 25h TTL. The `BoundGraphClient.call()` chokepoint consults `BucTelemetryService.checkGate()` before every request and skips the call (raising `RateLimitedError`) when any bucket exceeds the threshold or has a positive `retryAfterMs`. Failure mode is **fail-open conservative**: if Redis is unreachable or the bucket has no recorded state yet (cold cache), the call proceeds — Meta itself remains the source of truth and will reject with a real 429 if we overshoot.
+
+All synthetic local-fuse scopes (`user_token`, `app`, `page`) have been removed from the Instagram and Facebook strategies. They were inventing 200/h ceilings that capped active accounts (e.g. the MotoGP-tier scenario with 100 posts/day) far below what Meta is actually willing to serve. The BUC mirror is the only effective gate. Worker concurrency stays at 1 to avoid the inflight race documented in `TODO.md` §A.
+
+**Telemetry surface:** `GET /admin/rate-limits` returns the current bucket snapshot (top-50 by `callCountPct`, descending). `POST /admin/rate-limits/replay` re-hydrates Redis from `api_call_log.usage_header` over the last N hours — useful after a Redis flush or a fresh deploy.
+
+**Threads, TikTok, YouTube, Twitch:** unchanged from the original design (sections 3, 4, 7 below). Threads has `BucTelemetryService.observe()` wired in for visibility but no `checkGate()` enforcement yet — its volume is currently negligible.
+
+**SLO:** 75% threshold was picked as the sweet spot — at scale (~1000 connected accounts) it costs us ~2% of scheduled jobs being rescheduled by local throttle, which is invisible to users and avoids the much worse outcome of a real Meta 429 burning a per-asset bucket for the rest of the 24h window.
+
+The rest of this document stays as the original reference for non-Meta platforms and as a record of the design that preceded the mirror.
 
 ---
 
@@ -61,7 +89,7 @@ All buckets live in Redis (single source of truth across N worker replicas).
 
 ---
 
-## 3. Token bucket algorithm (IG / FB / Twitch / TikTok)
+## 3. Token bucket algorithm (Twitch / TikTok / Threads — Meta family superseded by §0)
 
 Implemented with atomic Lua in Redis so N workers cannot race.
 
@@ -118,7 +146,9 @@ Separate key for YT Analytics (`quota:youtube:analytics:{YYYY-MM-DD-UTC}`). Sche
 
 ---
 
-## 5. Headers — sanity check, not primary
+## 5. Headers — sanity check for non-Meta; primary signal for Meta (see §0)
+
+> **Update 2026-05-04:** for the Meta family the `X-App-Usage` and `X-Business-Use-Case-Usage` headers are now the **primary** signal — `BucTelemetryService.observe()` writes them to Redis after every response and `checkGate()` reads them to admit or deny the next call. The text below describes the original "advisory only" treatment; it still applies to Twitch, where headers are advisory because the local token bucket is the primary signal.
 
 Where platforms expose live usage headers, we parse them after every successful call:
 
