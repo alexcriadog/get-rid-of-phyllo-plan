@@ -12,7 +12,7 @@ import { AesLocalService } from '@shared/crypto/aes-local.service';
 const META_GRAPH = 'https://graph.facebook.com/v22.0';
 const NORMALIZE_TIMEOUT_MS = 15_000;
 
-export type Platform = 'instagram' | 'facebook' | 'tiktok' | 'threads';
+export type Platform = 'instagram' | 'facebook' | 'tiktok' | 'threads' | 'youtube';
 
 export interface SeedAccountInput {
   platform: Platform;
@@ -50,6 +50,8 @@ const PRODUCTS_BY_PLATFORM: Record<Platform, ReadonlyArray<string>> = {
   tiktok: ['identity', 'audience', 'engagement_new', 'comments'],
   // Threads has no stories. /me/mentioned_threads is the mentions surface.
   threads: ['identity', 'audience', 'engagement_new', 'comments', 'mentions'],
+  // YouTube: no stories, no mentions surface in the public API.
+  youtube: ['identity', 'audience', 'engagement_new', 'comments'],
 };
 
 @Injectable()

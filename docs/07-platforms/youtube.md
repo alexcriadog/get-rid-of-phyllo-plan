@@ -176,8 +176,16 @@ The **existing scraper stops being authoritative for official accounts** the mom
 
 ---
 
+## PoC implementation status (2026-05-05)
+
+Live in `poc/src/modules/platforms/youtube/`. See [`../adr/0016-youtube-integration.md`](../adr/0016-youtube-integration.md) for the implementation choices: `googleapis` SDK + bare-fetch chokepoint client, three OAuth scopes from day one (incl. `yt-analytics-monetary.readonly`), two rate-limit hints (`daily_quota` daily-counter + `qps_analytics` token-bucket) with per-endpoint cost override and a 50-unit quota floor, six parallel Analytics queries for audience, top-N-by-views comments. PubSubHubbub, multi-channel Brand-Account picker, Reporting-API backfill, and OAuth verification + CASA are deferred — tracked in [`../TODO.md`](../TODO.md) §D2.
+
+OAuth is driven manually via `GET /admin/connect/youtube/authorize-url` + `POST /admin/connect/youtube/complete`; setup walkthrough in [`../youtube-oauth-setup.md`](../youtube-oauth-setup.md).
+
 ## Related docs
 
+- [`../adr/0016-youtube-integration.md`](../adr/0016-youtube-integration.md) — PoC implementation decisions
+- [`../youtube-oauth-setup.md`](../youtube-oauth-setup.md) — Google Cloud Console step-by-step
 - [`../rate-limiting.md`](../rate-limiting.md) §4 — quota algorithm detail
 - [`../ingestion-modes.md`](../ingestion-modes.md) §3.2 — PubSubHubbub setup
 - [`../refresh-cadence.md`](../refresh-cadence.md) — YT cadences and back-pressure interplay

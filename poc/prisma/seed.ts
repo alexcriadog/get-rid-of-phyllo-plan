@@ -100,6 +100,15 @@ const CADENCE_DEFAULTS: CadenceRow[] = [
   { platform: 'facebook', product: 'engagement_new', defaultIntervalSeconds: 7200 },
   // Page Stories API: stories expire 24h after publish, so cadence mirrors IG.
   { platform: 'facebook', product: 'stories', defaultIntervalSeconds: 3600 },
+  // YouTube — Data API v3 has a 10k unit/day project quota so identity stays
+  // cheap (1u/refresh) and engagement_new is conservative (1 channels +
+  // 20 playlistItems + 20 videos for a 1k-video channel ≈ 41u/refresh).
+  // Audience uses Analytics API (no quota units, just QPS) so it can run
+  // daily without burning Data API budget.
+  { platform: 'youtube', product: 'identity', defaultIntervalSeconds: 21600 },
+  { platform: 'youtube', product: 'audience', defaultIntervalSeconds: 86400 },
+  { platform: 'youtube', product: 'engagement_new', defaultIntervalSeconds: 14400 },
+  { platform: 'youtube', product: 'comments', defaultIntervalSeconds: 43200 },
 ];
 
 async function seedCadences(): Promise<number> {

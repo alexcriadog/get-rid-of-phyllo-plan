@@ -46,6 +46,17 @@ Today the endpoint returns a snapshot. We have no historical view, no alerting, 
 - **FB Page Stories navigation breakdown** — `facebook-stories.fetcher.ts` requests `navigation` only via fallback (`reach-only`); confirm we get the full breakdown when the token has it.
 - **IG audience: noisy "Not enough users" debug logs on the `city` breakdown** — Meta enforces a privacy floor (~100 distinct users) on each individual demographic *bucket*. For `age` / `gender` / `country` the totals always clear it (padelwithjud at 60k followers easily hits the threshold), so those breakdowns return data. The `city` breakdown is much more granular and routinely falls below the floor when `timeframe='this_month'` early in the month. The data we end up persisting is correct (the per-breakdown error is swallowed locally), but the worker logs a `debug`-level "Not enough users" line per failing breakdown per audience run. Action: in `instagram-audience.fetcher.ts:130-136`, recognise the literal `"Not enough users"` message and downgrade it to a single info-level log per snapshot, not a debug per-breakdown entry. Cosmetic only; nothing in the data path changes.
 
+## D2. YouTube — post-PoC follow-ups
+
+**Trigger:** any of: (a) we want to go live with creators outside the test-user list, (b) a creator with >12 months of history needs full backfill, (c) we onboard a creator with multiple brand accounts.
+
+- **OAuth verification + CASA** — `youtube.readonly`, `yt-analytics.readonly` and `yt-analytics-monetary.readonly` are restricted scopes. Submit the consent screen for verification and complete the third-party security assessment before opening to non-test-user creators. Lead time: weeks. Until done, refresh tokens silently expire after 7 days.
+- **WebSub push for new uploads** — subscribe at `https://pubsubhubbub.appspot.com/subscribe` with topic `https://www.youtube.com/xml/feeds/videos.xml?channel_id=UC...`. Pushes upload + metadata-edit events near-realtime; deletes are NOT reliably notified so keep the playlist reconciliation in `youtube-content.fetcher.ts`. Lease ≤10 days — re-subscribe daily. Saves Data API units that would otherwise be burned polling.
+- **Reporting API v1 backfill** — for creators with >12 months of history, create a `channel_basic_a3` Reporting job at onboarding. Daily CSVs land 48h later; downloads don't count against the 10k/day Data-API budget.
+- **Brand-account picker UI** — `discoverYoutubeConnection` currently picks the first channel and adds a warning when the OAuth token owns multiple. Add a UI step that lets the operator pick which channel to seed.
+- **Per-video retention curve** — `dimensions=elapsedVideoTimeRatio&filters=video==VID&metrics=audienceWatchRatio` returns a 0–1 retention curve per video. Useful for the "best moments" UI panel; out of scope for the initial commit.
+- **Move OAuth consent to Production** — currently in Testing mode; refresh tokens expire after 7 days. Production status removes that limit but requires the verification work above.
+
 ## E. Code cleanup (low priority)
 
 **Trigger:** a developer working in an adjacent file decides it's time.

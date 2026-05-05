@@ -29,10 +29,12 @@ import {
 import { AccountsService, Platform } from '@modules/accounts/accounts.service';
 import { ThreadsTokenRefreshService } from '@modules/platforms/shared/threads-api/threads-token-refresh.service';
 import { BucTelemetryService } from '@modules/platforms/shared/meta-graph/buc-telemetry.service';
+import { ConfigService } from '@nestjs/config';
 
 const GRAPH_VERSION = 'v22.0';
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 const THREADS_GRAPH_BASE = 'https://graph.threads.net/v1.0';
+const YOUTUBE_DATA_BASE = 'https://www.googleapis.com/youtube/v3';
 const DISCOVER_TIMEOUT_MS = 15_000;
 
 const SYNC_QUEUE_NAME: QueueName = 'sync';
@@ -113,6 +115,7 @@ export class AdminService {
     private readonly aes: AesLocalService,
     private readonly threadsTokenRefresh: ThreadsTokenRefreshService,
     private readonly bucTelemetry: BucTelemetryService,
+    private readonly config: ConfigService,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
 
@@ -1698,7 +1701,7 @@ export class AdminService {
    */
   async discoverConnections(
     accessToken: string,
-    platform: 'facebook' | 'tiktok' | 'threads' = 'facebook',
+    platform: 'facebook' | 'tiktok' | 'threads' | 'youtube' = 'facebook',
     openId?: string,
   ): Promise<{
     me: { id: string | null; name: string | null };
@@ -1707,7 +1710,8 @@ export class AdminService {
       | 'page'
       | 'unknown'
       | 'tiktok-business'
-      | 'threads-user';
+      | 'threads-user'
+      | 'youtube-channel';
     pages: Array<{
       page_id: string;
       page_name: string;
@@ -1743,6 +1747,19 @@ export class AdminService {
       is_verified: boolean | null;
       already_connected: boolean;
     };
+    youtube_account?: {
+      channel_id: string;
+      handle: string | null;
+      title: string | null;
+      description: string | null;
+      thumbnail_url: string | null;
+      subscriber_count: number | null;
+      video_count: number | null;
+      view_count: number | null;
+      country: string | null;
+      uploads_playlist_id: string | null;
+      already_connected: boolean;
+    };
     warnings: string[];
   }> {
     if (platform === 'tiktok') {
@@ -1750,6 +1767,9 @@ export class AdminService {
     }
     if (platform === 'threads') {
       return this.discoverThreadsConnection(accessToken);
+    }
+    if (platform === 'youtube') {
+      return this.discoverYoutubeConnection(accessToken);
     }
     const warnings: string[] = [];
 
@@ -2120,6 +2140,109 @@ export class AdminService {
     };
   }
 
+  /**
+   * Probe a YouTube OAuth access token via Data API v3 channels.list(mine=true).
+   * Resolves the channel the token belongs to. If multiple channels are
+   * returned (brand-account ownership) we surface the first and add a
+   * warning — Phase 5 will add a UI to pick.
+   *
+   * Cost: 1 Data API quota unit.
+   */
+  private async discoverYoutubeConnection(
+    accessToken: string,
+  ): Promise<Awaited<ReturnType<AdminService['discoverConnections']>>> {
+    const warnings: string[] = [];
+    type YtThumb = { url?: string };
+    type YtChannel = {
+      id?: string;
+      snippet?: {
+        title?: string;
+        description?: string;
+        customUrl?: string;
+        country?: string;
+        thumbnails?: { default?: YtThumb; medium?: YtThumb; high?: YtThumb };
+      };
+      statistics?: {
+        viewCount?: string;
+        subscriberCount?: string;
+        videoCount?: string;
+      };
+      contentDetails?: { relatedPlaylists?: { uploads?: string } };
+    };
+    type YtListBody = {
+      items?: YtChannel[];
+      error?: { code?: number; message?: string };
+    };
+    let body: YtListBody;
+    try {
+      const res = await axios.get<YtListBody>(`${YOUTUBE_DATA_BASE}/channels`, {
+        params: { part: 'snippet,statistics,contentDetails', mine: true },
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: DISCOVER_TIMEOUT_MS,
+        validateStatus: () => true,
+      });
+      body = res.data ?? {};
+      if (res.status < 200 || res.status >= 300) {
+        throw new BadRequestException({
+          message: `YouTube HTTP ${res.status}`,
+          youtube_error: body,
+        });
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException({
+        message:
+          'Token rejected by YouTube on /channels?mine=true. Verify the access_token has scope youtube.readonly.',
+        youtube_error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    const items = body.items ?? [];
+    if (items.length === 0) {
+      throw new BadRequestException({
+        message: 'YouTube /channels?mine=true returned no items.',
+        youtube_error: body,
+      });
+    }
+    if (items.length > 1) {
+      warnings.push(
+        `OAuth token owns ${items.length} channels (brand accounts). Connecting the first; Phase 5 will add a picker.`,
+      );
+    }
+    const ch = items[0];
+    const channelId = ch.id ?? '';
+    const existing = channelId
+      ? await this.prisma.account.findFirst({
+          where: { platform: 'youtube', canonicalUserId: channelId },
+          select: { id: true },
+        })
+      : null;
+    const handle = ch.snippet?.customUrl ? ch.snippet.customUrl.replace(/^@+/, '') : null;
+    const thumb =
+      ch.snippet?.thumbnails?.high?.url ??
+      ch.snippet?.thumbnails?.medium?.url ??
+      ch.snippet?.thumbnails?.default?.url ??
+      null;
+    return {
+      me: { id: channelId || null, name: ch.snippet?.title ?? null },
+      token_type: 'youtube-channel',
+      pages: [],
+      youtube_account: {
+        channel_id: channelId,
+        handle,
+        title: ch.snippet?.title ?? null,
+        description: ch.snippet?.description ?? null,
+        thumbnail_url: thumb,
+        subscriber_count: parseIntOrNull(ch.statistics?.subscriberCount),
+        video_count: parseIntOrNull(ch.statistics?.videoCount),
+        view_count: parseIntOrNull(ch.statistics?.viewCount),
+        country: ch.snippet?.country ?? null,
+        uploads_playlist_id: ch.contentDetails?.relatedPlaylists?.uploads ?? null,
+        already_connected: existing != null,
+      },
+      warnings,
+    };
+  }
+
   async seedConnection(input: {
     platform: Platform;
     accessToken: string;
@@ -2210,3 +2333,139 @@ export class AdminService {
     return String(err);
   }
 }
+
+function parseIntOrNull(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && /^-?\d+$/.test(v)) return Number(v);
+  return null;
+}
+
+// Augment AdminService with the YouTube OAuth helpers via prototype patching
+// so we don't have to interleave another large method block in the middle of
+// the existing class. (Same pattern would normally be a private method but
+// this keeps the diff localised.)
+declare module './admin.service' {
+  // eslint-disable-next-line @typescript-eslint/no-empty-interface
+  interface AdminService {
+    youtubeAuthorizeUrl(includeMonetary: boolean): { url: string; scopes: string[] };
+    youtubeCompleteOAuth(code: string): Promise<unknown>;
+  }
+}
+
+const YOUTUBE_SCOPES_BASE = [
+  'https://www.googleapis.com/auth/youtube.readonly',
+  'https://www.googleapis.com/auth/yt-analytics.readonly',
+];
+const YOUTUBE_SCOPE_MONETARY =
+  'https://www.googleapis.com/auth/yt-analytics-monetary.readonly';
+const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+AdminService.prototype.youtubeAuthorizeUrl = function (
+  this: AdminService,
+  includeMonetary: boolean,
+): { url: string; scopes: string[] } {
+  const config = (this as unknown as { config: ConfigService }).config;
+  const clientId = config.get<string>('GOOGLE_CLIENT_ID');
+  const redirectUri = config.get<string>('GOOGLE_REDIRECT_URI');
+  if (!clientId || !redirectUri) {
+    throw new BadRequestException(
+      'GOOGLE_CLIENT_ID and GOOGLE_REDIRECT_URI must be set in .env',
+    );
+  }
+  const scopes = includeMonetary
+    ? [...YOUTUBE_SCOPES_BASE, YOUTUBE_SCOPE_MONETARY]
+    : [...YOUTUBE_SCOPES_BASE];
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true',
+    scope: scopes.join(' '),
+  });
+  return { url: `${GOOGLE_AUTHORIZE_URL}?${params.toString()}`, scopes };
+};
+
+AdminService.prototype.youtubeCompleteOAuth = async function (
+  this: AdminService,
+  code: string,
+): Promise<unknown> {
+  const config = (this as unknown as { config: ConfigService }).config;
+  const accountsService = (this as unknown as { accountsService: AccountsService })
+    .accountsService;
+  const clientId = config.get<string>('GOOGLE_CLIENT_ID');
+  const clientSecret = config.get<string>('GOOGLE_CLIENT_SECRET');
+  const redirectUri = config.get<string>('GOOGLE_REDIRECT_URI');
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new BadRequestException(
+      'GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI must all be set.',
+    );
+  }
+
+  // Exchange code for tokens.
+  const tokenParams = new URLSearchParams({
+    code,
+    client_id: clientId,
+    client_secret: clientSecret,
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code',
+  });
+  const tokenRes = await axios.post<{
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    scope?: string;
+    error?: string;
+    error_description?: string;
+  }>(GOOGLE_TOKEN_URL, tokenParams, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: DISCOVER_TIMEOUT_MS,
+    validateStatus: () => true,
+  });
+  if (tokenRes.status < 200 || tokenRes.status >= 300 || !tokenRes.data?.access_token) {
+    throw new BadRequestException({
+      message: `YouTube token exchange failed (HTTP ${tokenRes.status})`,
+      google_error: tokenRes.data,
+    });
+  }
+  const accessToken = tokenRes.data.access_token;
+  const refreshToken = tokenRes.data.refresh_token;
+  const expiresAt =
+    tokenRes.data.expires_in && tokenRes.data.expires_in > 0
+      ? new Date(Date.now() + tokenRes.data.expires_in * 1000)
+      : undefined;
+  const scopes = tokenRes.data.scope ? tokenRes.data.scope.split(' ') : undefined;
+
+  // Discover the channel and seed the account.
+  const probe = await this.discoverConnections(accessToken, 'youtube');
+  const yt = probe.youtube_account;
+  if (!yt || !yt.channel_id) {
+    throw new BadRequestException({
+      message: 'YouTube discover returned no channel after token exchange.',
+      probe,
+    });
+  }
+
+  const seeded = await accountsService.seedAccount({
+    platform: 'youtube',
+    accessToken,
+    refreshToken,
+    expiresAt,
+    canonicalUserId: yt.channel_id,
+    handle: yt.handle ?? undefined,
+    metadata: {
+      channel_id: yt.channel_id,
+      uploads_playlist_id: yt.uploads_playlist_id ?? undefined,
+      country: yt.country ?? undefined,
+      scopes,
+    },
+  });
+
+  return {
+    seeded,
+    youtube_account: yt,
+    warnings: probe.warnings,
+  };
+};

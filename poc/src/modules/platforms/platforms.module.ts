@@ -7,6 +7,8 @@ import { TikTokAdapter } from './tiktok/tiktok.adapter';
 import { TikTokModule } from './tiktok/tiktok.module';
 import { ThreadsAdapter } from './threads/threads.adapter';
 import { ThreadsModule } from './threads/threads.module';
+import { YoutubeAdapter } from './youtube/youtube.adapter';
+import { YoutubeModule } from './youtube/youtube.module';
 import {
   ADAPTER_REGISTRY,
   AdapterRegistry,
@@ -25,7 +27,13 @@ export type { AdapterRegistry };
  * Nothing else in the worker, scheduler, admin, or UI needs to change.
  */
 @Module({
-  imports: [InstagramModule, FacebookModule, TikTokModule, ThreadsModule],
+  imports: [
+    InstagramModule,
+    FacebookModule,
+    TikTokModule,
+    ThreadsModule,
+    YoutubeModule,
+  ],
   providers: [
     {
       provide: ADAPTER_REGISTRY,
@@ -34,13 +42,21 @@ export type { AdapterRegistry };
         fb: FacebookAdapter,
         tt: TikTokAdapter,
         th: ThreadsAdapter,
+        yt: YoutubeAdapter,
       ): AdapterRegistry => ({
         instagram: ig,
         facebook: fb,
         tiktok: tt,
         threads: th,
+        youtube: yt,
       }),
-      inject: [InstagramAdapter, FacebookAdapter, TikTokAdapter, ThreadsAdapter],
+      inject: [
+        InstagramAdapter,
+        FacebookAdapter,
+        TikTokAdapter,
+        ThreadsAdapter,
+        YoutubeAdapter,
+      ],
     },
   ],
   exports: [
@@ -49,6 +65,7 @@ export type { AdapterRegistry };
     FacebookModule,
     TikTokModule,
     ThreadsModule,
+    YoutubeModule,
   ],
 })
 export class PlatformsModule {}
