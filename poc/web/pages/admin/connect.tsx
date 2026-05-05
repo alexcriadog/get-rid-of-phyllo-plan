@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
-import { adminPost } from '../../lib/api';
+import { CONNECTOR_API_URL, adminPost } from '../../lib/api';
 import { fmtNumber } from '../../lib/format';
 import { Section } from '@/components/admin/section';
 import { Empty } from '@/components/admin/empty';
@@ -151,6 +151,22 @@ export default function ConnectPage() {
 
   return (
     <AdminLayout title="Connect new accounts">
+      <Section
+        title="Quick connect (browser OAuth)"
+        description="One-click flow for platforms that handle OAuth in the browser. We redirect you to the provider's consent screen and seed the account + sync_jobs on return."
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <Button asChild>
+            <a href={`${CONNECTOR_API_URL}/oauth/start/youtube`}>
+              Connect YouTube
+            </a>
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Requests <code>youtube.readonly</code> + <code>yt-analytics.readonly</code> +{' '}
+            <code>yt-analytics-monetary.readonly</code>.
+          </span>
+        </div>
+      </Section>
       <Section
         title="1. Discover"
         description={
