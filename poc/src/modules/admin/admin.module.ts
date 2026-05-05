@@ -6,6 +6,7 @@ import { PlatformsModule } from '@modules/platforms/platforms.module';
 import { MetaGraphModule } from '@modules/platforms/shared/meta-graph/meta-graph.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { OauthCallbackController } from './oauth-callback.controller';
 
 /**
  * Admin surface. Imports from AccountsModule + ApiModule so we can reuse
@@ -23,7 +24,7 @@ import { AdminService } from './admin.service';
     PlatformsModule,
     MetaGraphModule,
   ],
-  controllers: [AdminController],
+  controllers: [AdminController, OauthCallbackController],
   providers: [AdminService],
 })
 export class AdminModule {}
