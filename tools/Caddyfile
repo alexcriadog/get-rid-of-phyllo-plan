@@ -11,8 +11,9 @@
 		reverse_proxy api:3000
 	}
 
-	# Admin dashboard (Next.js POC web).
-	handle_path /admin* {
+	# Admin dashboard (Next.js POC web). Do NOT strip the /admin prefix —
+	# the Next.js routes live under /admin/*.
+	handle /admin* {
 		reverse_proxy web:3001
 	}
 
