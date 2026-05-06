@@ -29,13 +29,16 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
+      args:
+        # Inlined into the JS bundle by `next build` — must be set HERE,
+        # not below in `environment:` (compose env applies at runtime,
+        # too late for Next).
+        NEXT_PUBLIC_CONNECTOR_API_URL: "https://3-89-195-248.nip.io/api/poc"
     image: poc-web
     container_name: poc-web
     environment:
       NODE_ENV: production
-      # Browser-side calls (inlined into the bundle at build time).
-      NEXT_PUBLIC_CONNECTOR_API_URL: "https://3-89-195-248.nip.io/api/poc"
-      # SSR calls — go via the compose network.
+      # SSR calls — go via the compose network at runtime.
       CONNECTOR_API_URL: "http://api:3000"
       MONGO_URL: "mongodb://mongo:27017/connector_ui"
     expose:

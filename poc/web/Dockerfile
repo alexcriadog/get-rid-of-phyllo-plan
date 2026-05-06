@@ -9,10 +9,14 @@ RUN npm install --no-audit --no-fund
 
 FROM node:20-alpine AS builder
 WORKDIR /app
+# `NEXT_PUBLIC_*` env vars are inlined into the client bundle at build
+# time. Compose's `environment:` only applies at runtime — too late for
+# Next.js. Accept them as build args here, exported so `next build` sees
+# them.
+ARG NEXT_PUBLIC_CONNECTOR_API_URL
+ENV NEXT_PUBLIC_CONNECTOR_API_URL=${NEXT_PUBLIC_CONNECTOR_API_URL}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Force standalone output for the prod image without touching the dev
-# next.config.js the host uses with `next dev`.
 RUN node -e "const c=require('./next.config.js'); c.output='standalone'; require('fs').writeFileSync('./next.config.runtime.js','module.exports='+JSON.stringify(c)+';');" \
  && cp next.config.runtime.js next.config.js \
  && npm run build
