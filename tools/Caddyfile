@@ -11,13 +11,30 @@
 		reverse_proxy api:3000
 	}
 
-	# Admin dashboard (Next.js POC web). Do NOT strip the /admin prefix —
-	# the Next.js routes live under /admin/*.
+	# Next.js static bundles (CSS, JS chunks, images) for the admin dashboard.
+	# Must be before the connect-tool catchall so /_next/static/... reaches
+	# the web container instead of the OAuth helper.
+	handle /_next/* {
+		reverse_proxy web:3001
+	}
+
+	# Admin dashboard pages.
 	handle /admin* {
 		reverse_proxy web:3001
 	}
 
-	# connect-tool sits at the root.
+	# Public account profile pages (e.g. /account/2, /account/2/posts).
+	handle /account* {
+		reverse_proxy web:3001
+	}
+
+	# Internal admin web API (Mongo-proxy for comments).
+	handle /api/comments* {
+		reverse_proxy web:3001
+	}
+
+	# Everything else (/, /api/oauth/*, /facebook/pages, /confirm/*,
+	# /success, /api/seed-pages, /api/seed-confirm) → connect-tool.
 	handle {
 		reverse_proxy connect-tool:3002
 	}
