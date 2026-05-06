@@ -1,0 +1,23 @@
+# Caddy config for the EC2 deploy. Auto-obtains a Let's Encrypt cert via
+# HTTP-01 challenge for the AWS hostname; renews automatically.
+
+ec2-3-89-195-248.compute-1.amazonaws.com {
+	encode gzip
+
+	# POC backend exposed under /api/poc — bearer-guarded by ConnectToolGuard
+	# for /admin/connect/*; the rest of /admin/* on the API is also reachable
+	# (read-only operator endpoints).
+	handle_path /api/poc/* {
+		reverse_proxy api:3000
+	}
+
+	# Admin dashboard (Next.js POC web).
+	handle_path /admin* {
+		reverse_proxy web:3001
+	}
+
+	# connect-tool sits at the root.
+	handle {
+		reverse_proxy connect-tool:3002
+	}
+}
