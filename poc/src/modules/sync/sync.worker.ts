@@ -30,6 +30,7 @@ import {
   RateLimitedError,
   TokenRevokedError,
 } from '@modules/platforms/shared/platform-errors';
+import { FacebookExtrasService } from '@modules/platforms/facebook/fetcher/facebook-extras.service';
 
 const SYNC_QUEUE_NAME = 'sync';
 const DEFAULT_CONCURRENCY = 4;
@@ -91,13 +92,29 @@ type ProductType =
   | 'engagement_new'
   | 'stories'
   | 'comments'
-  | 'mentions';
+  | 'mentions'
+  | 'ratings'
+  | 'ads';
 
-type FetchResultKind = 'identity' | 'audience' | 'content' | 'comments';
+// 'noop' means the dispatch already persisted the result via a side-channel
+// (e.g. FacebookExtrasService writes ratings/ads to dedicated collections);
+// the worker should skip the canonical Mongo persist step but still record
+// success + emit an event.
+type FetchResultKind =
+  | 'identity'
+  | 'audience'
+  | 'content'
+  | 'comments'
+  | 'noop';
 
 interface FetchResult {
   kind: FetchResultKind;
-  data: ProfileData | AudienceData | ContentData[] | CommentData[];
+  data:
+    | ProfileData
+    | AudienceData
+    | ContentData[]
+    | CommentData[]
+    | Record<string, unknown>;
 }
 
 /**
@@ -126,6 +143,7 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
     private readonly metrics: MetricsService,
     private readonly cadence: CadenceService,
     private readonly throttle: ThrottleLockService,
+    private readonly facebookExtras: FacebookExtrasService,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
 
@@ -249,7 +267,15 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
     }
 
     try {
-      const accessToken = this.aes.decrypt(token.accessTokenCiphertext);
+      // ads_read needs USER scope; the rest of the FB products run on the
+      // PAGE token. Fall back gracefully if either side is missing so a
+      // legacy account (page-token-only) still works for non-ads products.
+      const wantsUserToken =
+        account.platform === 'facebook' && product === 'ads';
+      const accessToken =
+        wantsUserToken && token.userAccessTokenCiphertext
+          ? this.aes.decrypt(token.userAccessTokenCiphertext)
+          : this.aes.decrypt(token.accessTokenCiphertext);
 
       // Account may or may not have `metadata` JSON in its schema. Handle
       // both so adding it later is a non-breaking change.
@@ -436,6 +462,28 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         );
         return { kind: 'content', data };
       }
+      case 'ratings': {
+        // FB-only side-channel product: pages_read_user_content lets us
+        // pull /{page}/ratings. The service writes to `page_ratings`
+        // directly so the worker just records success.
+        if (adapter.platform !== 'facebook') return null;
+        const result = await this.facebookExtras.syncRatings(
+          context.accountId,
+          accessToken,
+          canonicalId,
+        );
+        return { kind: 'noop', data: { ...result } };
+      }
+      case 'ads': {
+        // FB-only side-channel: ads_read on /me/adaccounts + insights.
+        // Service writes to `ad_insights`; worker records success only.
+        if (adapter.platform !== 'facebook') return null;
+        const result = await this.facebookExtras.syncAdInsights(
+          context.accountId,
+          accessToken,
+        );
+        return { kind: 'noop', data: { ...result } };
+      }
       default: {
         this.logger.warn(`Unknown product: ${product}`);
         return null;
@@ -450,6 +498,11 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
   ): Promise<void> {
     const accountIdStr = accountId.toString();
     const now = new Date();
+
+    if (result.kind === 'noop') {
+      // Already persisted via a side-channel (e.g. FacebookExtrasService).
+      return;
+    }
 
     if (result.kind === 'identity') {
       const col = this.mongo.getCollection('identity_snapshots');
@@ -557,16 +610,27 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
     result: FetchResult,
   ): Promise<void> {
     const eventType = this.eventTypeForResult(product, result);
-    await this.emitRawEvent(accountId, product, eventType, {
+    const payload: Record<string, unknown> = {
       kind: result.kind,
       size: result.kind === 'content' ? (result.data as ContentData[]).length : 1,
-    });
+    };
+    if (result.kind === 'noop' && result.data && typeof result.data === 'object') {
+      // Surface the per-product summary (mentionsStored, insightRows, …)
+      // that the side-channel service produced, for debug visibility.
+      Object.assign(payload, { summary: result.data });
+    }
+    await this.emitRawEvent(accountId, product, eventType, payload);
   }
 
   private eventTypeForResult(product: string, result: FetchResult): string {
     if (result.kind === 'identity') return 'profile.updated';
     if (result.kind === 'audience') return 'audience.updated';
     if (result.kind === 'comments') return 'comment.added';
+    if (result.kind === 'noop') {
+      if (product === 'ratings') return 'rating.captured';
+      if (product === 'ads') return 'ad_insight.captured';
+      return 'sync.completed';
+    }
     // content
     if (product === 'stories') return 'story.added';
     if (product === 'mentions') return 'mention.added';

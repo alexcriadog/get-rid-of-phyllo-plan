@@ -8,6 +8,9 @@ import { FacebookProfileFetcher } from './fetcher/facebook-profile.fetcher';
 import { FacebookAudienceFetcher } from './fetcher/facebook-audience.fetcher';
 import { FacebookContentFetcher } from './fetcher/facebook-content.fetcher';
 import { FacebookStoriesFetcher } from './fetcher/facebook-stories.fetcher';
+import { FacebookMentionsFetcher } from './fetcher/facebook-mentions.fetcher';
+import { FacebookCommentsFetcher } from './fetcher/facebook-comments.fetcher';
+import { FacebookExtrasService } from './fetcher/facebook-extras.service';
 
 /**
  * Facebook DI wiring. Shared infra deps (Mongo, Redis, Metrics, Prisma,
@@ -27,6 +30,9 @@ import { FacebookStoriesFetcher } from './fetcher/facebook-stories.fetcher';
     FacebookAudienceFetcher,
     FacebookContentFetcher,
     FacebookStoriesFetcher,
+    FacebookMentionsFetcher,
+    FacebookCommentsFetcher,
+    FacebookExtrasService,
     {
       provide: FACEBOOK_GRAPH_CLIENT,
       useFactory: (client: GraphClient, strategy: FacebookRateLimitStrategy) =>
@@ -34,6 +40,6 @@ import { FacebookStoriesFetcher } from './fetcher/facebook-stories.fetcher';
       inject: [GraphClient, FacebookRateLimitStrategy],
     },
   ],
-  exports: [FacebookAdapter],
+  exports: [FacebookAdapter, FacebookExtrasService],
 })
 export class FacebookModule {}

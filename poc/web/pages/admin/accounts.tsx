@@ -211,6 +211,7 @@ function AccountCard({
   const id = String(account.id);
   const products = normalizeProducts(account.products);
   const paused = account.status === 'paused' || account.sync_tier === 'paused';
+  const needsReauth = account.status === 'needs_reauth';
 
   const sparkPoints = useMemo(() => buildSuccessSpark(recentCalls), [recentCalls]);
   const successPct = useMemo(() => {
@@ -240,6 +241,7 @@ function AccountCard({
       className={cn(
         'flex flex-col gap-4 p-5 transition-opacity hover:bg-accent/30',
         paused && 'opacity-70',
+        needsReauth && 'ring-1 ring-danger/40',
       )}
     >
       <div className="flex items-center gap-3">
@@ -258,14 +260,46 @@ function AccountCard({
             {account.platform} · #{id}
           </div>
         </div>
-        <Badge variant={paused ? 'danger' : 'ok'}>{account.sync_tier ?? '—'}</Badge>
+        <div className="flex items-center gap-1.5">
+          {needsReauth && (
+            <Badge
+              variant="danger"
+              className="gap-1 px-2 py-0.5 text-[10px] tracking-wider"
+              title="Platform rejected the access token. Re-OAuth from /admin/connect."
+            >
+              ↺ NEEDS REAUTH
+            </Badge>
+          )}
+          <Badge variant={paused ? 'danger' : 'ok'}>{account.sync_tier ?? '—'}</Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-1.5">
         {['identity', 'audience', 'engagement_new', 'stories'].map((p) => (
-          <ProductPill key={p} product={p} health={products.get(p)} paused={paused} />
+          <ProductPill
+            key={p}
+            product={p}
+            health={products.get(p)}
+            paused={paused || needsReauth}
+          />
         ))}
       </div>
+      {/* CA-only Meta extras — only shown when the FB account has them
+          seeded so we don't dilute the card for IG / TikTok / etc. */}
+      {(['mentions', 'comments', 'ratings', 'ads'] as const).some((p) =>
+        products.has(p),
+      ) && (
+        <div className="grid grid-cols-4 gap-1.5">
+          {['mentions', 'comments', 'ratings', 'ads'].map((p) => (
+            <ProductPill
+              key={p}
+              product={p}
+              health={products.get(p)}
+              paused={paused || needsReauth}
+            />
+          ))}
+        </div>
+      )}
 
       <div>
         <div className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">

@@ -69,3 +69,98 @@ export type AccountInsightsCounterMap = {
   totalInteractions: number;
   page_follows: number;
 };
+
+// ─── pages_read_user_content shapes ────────────────────────────────────────
+
+export interface FacebookFromActor {
+  id?: string;
+  name?: string;
+}
+
+/** Row from /{page_id}/tagged — third-party post that mentions the Page. */
+export interface FacebookTaggedPost extends FacebookPost {
+  /** The third-party Page that authored the post. Always present on /tagged. */
+  from?: FacebookFromActor;
+}
+
+/** Row from /{page_id}/ratings — public review left on the Page. */
+export interface FacebookRating {
+  created_time?: string;
+  rating?: number | null;
+  recommendation_type?: 'positive' | 'negative' | string | null;
+  review_text?: string | null;
+  reviewer?: FacebookFromActor;
+  has_review?: boolean;
+  has_rating?: boolean;
+  open_graph_story?: { id?: string; permalink_url?: string };
+}
+
+/** Row from /{post_id}/comments — user-authored comment thread. */
+export interface FacebookCommentRow {
+  id: string;
+  message?: string | null;
+  created_time?: string;
+  like_count?: number;
+  comment_count?: number;
+  parent?: { id?: string };
+  from?: FacebookFromActor;
+  permalink_url?: string;
+}
+
+// ─── ads_read shapes ───────────────────────────────────────────────────────
+
+export interface FacebookAdAccount {
+  id: string;
+  account_id?: string;
+  name?: string;
+  account_status?: number;
+  currency?: string;
+  timezone_name?: string;
+  amount_spent?: string;
+  balance?: string;
+  business?: { id?: string; name?: string };
+}
+
+export interface FacebookAdInsightsRow {
+  date_start?: string;
+  date_stop?: string;
+  spend?: string;
+  impressions?: string;
+  reach?: string;
+  frequency?: string;
+  clicks?: string;
+  ctr?: string;
+  cpc?: string;
+  cpm?: string;
+  cpp?: string;
+  unique_clicks?: string;
+  campaign_id?: string;
+  campaign_name?: string;
+  actions?: Array<{ action_type: string; value: string }>;
+}
+
+export interface FacebookAdCampaign {
+  id: string;
+  name?: string;
+  objective?: string;
+  status?: string;
+  effective_status?: string;
+  daily_budget?: string;
+  lifetime_budget?: string;
+  start_time?: string;
+  stop_time?: string;
+}
+
+// ─── Page Public Content Access shapes ────────────────────────────────────
+
+export interface FacebookPublicPage {
+  id: string;
+  name?: string;
+  fan_count?: number;
+  followers_count?: number;
+  about?: string;
+  category?: string;
+  link?: string;
+  verification_status?: string;
+  picture?: { data?: { url?: string } };
+}

@@ -42,7 +42,7 @@ type PageProps = {
 
 // Mirrors the support matrix at /admin/support-matrix — only adapters that
 // implement fetchMentions can populate this view.
-const PLATFORMS_WITH_MENTIONS = new Set<string>(['tiktok', 'threads']);
+const PLATFORMS_WITH_MENTIONS = new Set<string>(['tiktok', 'threads', 'facebook']);
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
   const id = String(ctx.params?.id || '');

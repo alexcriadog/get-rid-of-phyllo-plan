@@ -36,6 +36,11 @@ model OAuthToken {
   id                     BigInt   @id @default(autoincrement())
   accountId              BigInt   @unique @map("account_id")
   accessTokenCiphertext  Bytes    @map("access_token_ciphertext")
+  // For Meta family we also persist the user-level token alongside the
+  // primary (page) token. ads_read needs a USER token; everything else
+  // (pages_read_user_content, page insights) uses the PAGE token. Null on
+  // platforms that don't have the page/user split.
+  userAccessTokenCiphertext Bytes? @map("user_access_token_ciphertext")
   // TikTok and other rotating-refresh-token platforms keep their refresh secret here.
   // Meta long-lived tokens leave it null.
   refreshTokenCiphertext Bytes?   @map("refresh_token_ciphertext")

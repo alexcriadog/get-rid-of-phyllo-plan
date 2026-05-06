@@ -52,4 +52,51 @@ export const FACEBOOK_SUPPORT_MATRIX: SupportMatrix = {
     views: 'empty_possible',
     replies: 'supported',
   },
+  // pages_read_user_content (May 2026 grant) — third-party tagged posts.
+  mentions: {
+    caption: 'supported',
+    permalink: 'supported',
+    mediaUrls: 'supported',
+    ownerHandle: 'supported',
+    publishedAt: 'supported',
+    likes: 'supported',
+    comments: 'supported',
+  },
+  // pages_read_user_content — user identity on post comments.
+  comments: {
+    text: 'supported',
+    authorDisplayName: 'supported',
+    authorHandle: 'supported',
+    publishedAt: 'supported',
+    likes: 'supported',
+    parentCommentId: 'supported',
+  },
+  // pages_read_user_content — Page reviews (CA-only admin pull).
+  ratings: {
+    rating: 'supported',
+    recommendation_type: 'supported',
+    review_text: 'supported',
+    reviewer_name: 'supported',
+    publishedAt: 'supported',
+  },
+  // ads_read (May 2026 grant) — CA-only admin pull, returns empty when
+  // the ad account has no historical campaigns.
+  ads: {
+    spend: 'empty_possible',
+    impressions: 'empty_possible',
+    reach: 'empty_possible',
+    clicks: 'empty_possible',
+    ctr: 'empty_possible',
+    cpm: 'empty_possible',
+    campaignBreakdown: 'empty_possible',
+  },
+  // Page Public Content Access — read-only third-party Page metadata + posts.
+  public_pages: {
+    name: 'supported',
+    fan_count: 'supported',
+    followers_count: 'supported',
+    about: 'supported',
+    category: 'supported',
+    recent_posts: 'supported',
+  },
 };

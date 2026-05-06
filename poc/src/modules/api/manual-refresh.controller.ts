@@ -24,6 +24,11 @@ const SUPPORTED_PRODUCTS: ReadonlyArray<string> = [
   'audience',
   'engagement_new',
   'stories',
+  // pages_read_user_content / ads_read products — only FB has them today.
+  'mentions',
+  'comments',
+  'ratings',
+  'ads',
 ];
 
 const RefreshBodySchema = z
@@ -149,10 +154,21 @@ export class ManualRefreshController {
     };
   }
 
-  private defaultProductsForAdapter(adapter: { fetchStories?: unknown }): string[] {
+  private defaultProductsForAdapter(adapter: {
+    platform?: string;
+    fetchStories?: unknown;
+    fetchMentions?: unknown;
+    fetchComments?: unknown;
+  }): string[] {
     const base = ['identity', 'audience', 'engagement_new'];
-    if (typeof adapter.fetchStories === 'function') {
-      base.push('stories');
+    if (typeof adapter.fetchStories === 'function') base.push('stories');
+    if (typeof adapter.fetchMentions === 'function') base.push('mentions');
+    if (typeof adapter.fetchComments === 'function') base.push('comments');
+    // FB-only side-channel products. Coupling here is acceptable because
+    // the worker ALSO checks adapter.platform === 'facebook' before
+    // dispatching them — both layers fail safe if the platform changes.
+    if (adapter.platform === 'facebook') {
+      base.push('ratings', 'ads');
     }
     return base;
   }

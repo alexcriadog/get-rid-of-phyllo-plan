@@ -100,6 +100,14 @@ const CADENCE_DEFAULTS: CadenceRow[] = [
   { platform: 'facebook', product: 'engagement_new', defaultIntervalSeconds: 7200 },
   // Page Stories API: stories expire 24h after publish, so cadence mirrors IG.
   { platform: 'facebook', product: 'stories', defaultIntervalSeconds: 3600 },
+  // pages_read_user_content (May 2026 grant). /tagged is rare so 6h is
+  // plenty; user comments rotate faster on viral posts so 4h.
+  { platform: 'facebook', product: 'mentions', defaultIntervalSeconds: 21600 },
+  { platform: 'facebook', product: 'comments', defaultIntervalSeconds: 14400 },
+  // Reviews/ratings change rarely; daily is generous.
+  { platform: 'facebook', product: 'ratings', defaultIntervalSeconds: 86400 },
+  // Ads spend snapshot — daily window, daily refresh is the natural cadence.
+  { platform: 'facebook', product: 'ads', defaultIntervalSeconds: 86400 },
   // YouTube — Data API v3 has a 10k unit/day project quota so identity stays
   // cheap (1u/refresh) and engagement_new is conservative (1 channels +
   // 20 playlistItems + 20 videos for a 1k-video channel ≈ 41u/refresh).

@@ -17,6 +17,7 @@ import {
 } from '../shared/platform-adapter.port';
 import type {
   AudienceData,
+  CommentData,
   ContentData,
   FetchOpts,
   ProfileData,
@@ -30,6 +31,8 @@ import { FacebookProfileFetcher } from './fetcher/facebook-profile.fetcher';
 import { FacebookAudienceFetcher } from './fetcher/facebook-audience.fetcher';
 import { FacebookContentFetcher } from './fetcher/facebook-content.fetcher';
 import { FacebookStoriesFetcher } from './fetcher/facebook-stories.fetcher';
+import { FacebookMentionsFetcher } from './fetcher/facebook-mentions.fetcher';
+import { FacebookCommentsFetcher } from './fetcher/facebook-comments.fetcher';
 
 @Injectable()
 export class FacebookAdapter implements PlatformAdapter {
@@ -43,6 +46,8 @@ export class FacebookAdapter implements PlatformAdapter {
     private readonly audienceFetcher: FacebookAudienceFetcher,
     private readonly contentFetcher: FacebookContentFetcher,
     private readonly storiesFetcher: FacebookStoriesFetcher,
+    private readonly mentionsFetcher: FacebookMentionsFetcher,
+    private readonly commentsFetcher: FacebookCommentsFetcher,
   ) {
     // graphClient is held so `BoundGraphClient` stays alive in the DI
     // container alongside the fetchers (they consume it under the same
@@ -89,5 +94,23 @@ export class FacebookAdapter implements PlatformAdapter {
     metadata?: Record<string, unknown>,
   ): Promise<ContentData[]> {
     return this.storiesFetcher.fetch(accessToken, canonicalId, metadata);
+  }
+
+  fetchMentions(
+    accessToken: string,
+    canonicalId: string,
+    opts: FetchOpts,
+    metadata?: Record<string, unknown>,
+  ): Promise<ContentData[]> {
+    return this.mentionsFetcher.fetch(accessToken, canonicalId, opts, metadata);
+  }
+
+  fetchComments(
+    accessToken: string,
+    canonicalId: string,
+    opts: FetchOpts,
+    metadata?: Record<string, unknown>,
+  ): Promise<CommentData[]> {
+    return this.commentsFetcher.fetch(accessToken, canonicalId, opts, metadata);
   }
 }

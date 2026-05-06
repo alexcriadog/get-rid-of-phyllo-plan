@@ -79,6 +79,30 @@ services:
     container_name: poc-scheduler
     command: ["npx", "ts-node", "-r", "tsconfig-paths/register", "src/main.ts", "scheduler"]
 
+  # ── connect-tool — TRANSIENT OAuth helper (not part of POC core) ──────
+  # Lives at ../connect-tool/. Only legitimate caller of /admin/connect/seed
+  # in production. Delete this service block and `rm -rf ../connect-tool/`
+  # to remove. See connect-tool/README.md.
+  connect-tool:
+    build:
+      context: ../connect-tool
+      dockerfile: Dockerfile
+    image: poc-connect-tool
+    container_name: poc-connect-tool
+    env_file:
+      - ../connect-tool/.env
+    environment:
+      POC_API_URL: "http://api:3000"
+      PUBLIC_BASE_URL: "${CONNECT_TOOL_PUBLIC_URL:-http://localhost:3002}"
+      POC_ADMIN_URL: "${POC_ADMIN_URL:-http://localhost:3001/admin}"
+      NEXT_PUBLIC_POC_ADMIN_URL: "${POC_ADMIN_URL:-http://localhost:3001/admin}"
+      NODE_ENV: production
+    ports: ["3002:3002"]
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   mysql_data:
   mongo_data:

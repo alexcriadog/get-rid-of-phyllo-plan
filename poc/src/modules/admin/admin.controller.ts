@@ -9,10 +9,12 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
 import { AdminService } from './admin.service';
 import { ManualRefreshController } from '@modules/api/manual-refresh.controller';
+import { ConnectToolGuard } from './connect-tool.guard';
 
 // ─── body schemas ──────────────────────────────────────────────────────────
 
@@ -441,6 +443,7 @@ export class AdminController {
 
   @Post('connect/discover')
   @HttpCode(200)
+  @UseGuards(ConnectToolGuard)
   async connectDiscover(@Body() body: unknown): Promise<unknown> {
     const parsed = ConnectDiscoverSchema.safeParse(body ?? {});
     if (!parsed.success) {
@@ -458,6 +461,7 @@ export class AdminController {
 
   @Post('connect/seed')
   @HttpCode(201)
+  @UseGuards(ConnectToolGuard)
   async connectSeed(@Body() body: unknown): Promise<unknown> {
     const parsed = ConnectSeedSchema.safeParse(body ?? {});
     if (!parsed.success) {

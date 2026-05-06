@@ -200,8 +200,37 @@ export default function ConnectPage() {
     }
   };
 
+  const connectToolUrl =
+    process.env.NEXT_PUBLIC_CONNECT_TOOL_URL ?? 'http://localhost:3002';
+
   return (
     <AdminLayout title="Connect new accounts">
+      {/* connect-tool CTA — primary path. The paste-token UI below is the
+          fallback for emergencies or scripts. */}
+      <Section
+        title={
+          <span className="flex items-center gap-2">
+            <Badge variant="ok">Recommended</Badge>
+            <span>Use connect-tool</span>
+          </span>
+        }
+        description="Click a platform, approve the OAuth dialog, done. The paste-token form below is kept as a fallback."
+        actions={
+          <Button asChild>
+            <a href={connectToolUrl} target="_blank" rel="noopener noreferrer">
+              Open connect-tool ↗
+            </a>
+          </Button>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          The transient OAuth helper at <code>{connectToolUrl}</code> handles
+          Facebook, Instagram, TikTok, Threads and YouTube end-to-end and POSTs
+          the resulting tokens to <code>/admin/connect/seed</code> with the
+          configured bearer token. See <code>connect-tool/README.md</code> for
+          the kill-switch.
+        </p>
+      </Section>
       {oauthResult?.kind === 'success' && (
         <Section
           title={

@@ -7,6 +7,8 @@ import { MetaGraphModule } from '@modules/platforms/shared/meta-graph/meta-graph
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { OauthCallbackController } from './oauth-callback.controller';
+import { FacebookExtrasController } from './facebook-extras.controller';
+import { ConnectToolGuard } from './connect-tool.guard';
 
 /**
  * Admin surface. Imports from AccountsModule + ApiModule so we can reuse
@@ -24,7 +26,7 @@ import { OauthCallbackController } from './oauth-callback.controller';
     PlatformsModule,
     MetaGraphModule,
   ],
-  controllers: [AdminController, OauthCallbackController],
-  providers: [AdminService],
+  controllers: [AdminController, OauthCallbackController, FacebookExtrasController],
+  providers: [AdminService, ConnectToolGuard],
 })
 export class AdminModule {}

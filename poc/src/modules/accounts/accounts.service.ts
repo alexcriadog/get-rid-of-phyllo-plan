@@ -45,7 +45,20 @@ export interface SeedAccountResult {
 const PRODUCTS_BY_PLATFORM: Record<Platform, ReadonlyArray<string>> = {
   instagram: ['identity', 'audience', 'engagement_new', 'stories'],
   // Page Stories API is GA in v22 — see FacebookAdapter.fetchStories.
-  facebook: ['identity', 'audience', 'engagement_new', 'stories'],
+  // pages_read_user_content (May 2026 grant) unlocked `mentions` (/tagged),
+  // user-identity in `comments`, and Page `ratings`. ads_read added `ads`.
+  // public_pages monitor (PPCA) is NOT a per-account product — it's a
+  // separate watchlist on `public_page_snapshots`.
+  facebook: [
+    'identity',
+    'audience',
+    'engagement_new',
+    'stories',
+    'mentions',
+    'comments',
+    'ratings',
+    'ads',
+  ],
   // TikTok BC v1.3: stories don't exist; mentions probe pending.
   tiktok: ['identity', 'audience', 'engagement_new', 'comments'],
   // Threads has no stories. /me/mentioned_threads is the mentions surface.
@@ -64,9 +77,29 @@ export class AccountsService {
   ) {}
 
   async seedAccount(input: SeedAccountInput): Promise<SeedAccountResult> {
-    const products = PRODUCTS_BY_PLATFORM[input.platform];
-    if (!products) {
+    const allProducts = PRODUCTS_BY_PLATFORM[input.platform];
+    if (!allProducts) {
       throw new Error(`Unsupported platform: ${input.platform}`);
+    }
+
+    // connect-tool (and any future caller) can scope which products to
+    // seed by passing `metadata.products: string[]`. Unknown ids are
+    // silently dropped; a fully-empty list after filtering is rejected
+    // because it'd produce an account with zero sync jobs.
+    const requestedRaw = input.metadata?.['products'];
+    const requested = Array.isArray(requestedRaw)
+      ? (requestedRaw as unknown[]).filter(
+          (p): p is string => typeof p === 'string',
+        )
+      : null;
+    const products = requested
+      ? requested.filter((p) => allProducts.includes(p))
+      : allProducts;
+    if (products.length === 0) {
+      throw new BadRequestException(
+        `metadata.products yielded no valid products for ${input.platform}. ` +
+          `Allowed: ${allProducts.join(', ')}`,
+      );
     }
 
     // For Meta family (FB + IG) we MUST end up persisting a Page token so
@@ -75,12 +108,32 @@ export class AccountsService {
     // /admin/connect, the public POST /accounts/seed, and helper scripts —
     // every path lands here, which is why the normalization belongs at this
     // chokepoint instead of in any single caller.
-    const accessToken =
-      input.platform === 'facebook' || input.platform === 'instagram'
-        ? await this.normalizeMetaToken(input)
-        : input.accessToken;
+    //
+    // We also remember the user-level token: ads_read needs USER scope, so
+    // FB needs both. Stored side-by-side; resolved per-product downstream.
+    const isMeta =
+      input.platform === 'facebook' || input.platform === 'instagram';
+    const tokens = isMeta
+      ? await this.normalizeMetaToken(input)
+      : { pageToken: input.accessToken, userToken: null };
 
-    const accessCipher = this.aes.encrypt(accessToken);
+    // connect-tool (the transient OAuth helper) carries the user-token
+    // alongside the page-token via metadata.user_access_token. Use that
+    // when normalizeMetaToken couldn't produce one — e.g. when the input
+    // already IS the Page token and the user token came from the same
+    // OAuth round-trip.
+    const metadataUserToken =
+      isMeta &&
+      input.metadata &&
+      typeof input.metadata['user_access_token'] === 'string'
+        ? (input.metadata['user_access_token'] as string)
+        : null;
+    const effectiveUserToken = tokens.userToken ?? metadataUserToken;
+
+    const accessCipher = this.aes.encrypt(tokens.pageToken);
+    const userCipher = effectiveUserToken
+      ? this.aes.encrypt(effectiveUserToken)
+      : null;
     const refreshCipher = input.refreshToken
       ? this.aes.encrypt(input.refreshToken)
       : null;
@@ -151,12 +204,17 @@ export class AccountsService {
         create: {
           accountId: account.id,
           accessTokenCiphertext: accessCipher,
+          userAccessTokenCiphertext: userCipher,
           refreshTokenCiphertext: refreshCipher,
           expiresAt: input.expiresAt ?? null,
           scopes: (input.metadata?.scopes as Prisma.InputJsonValue) ?? [],
         },
         update: {
           accessTokenCiphertext: accessCipher,
+          // Only overwrite when the seed actually carries a user token —
+          // re-seeds via Page-token-only paths must not erase a previously
+          // captured user token.
+          ...(userCipher ? { userAccessTokenCiphertext: userCipher } : {}),
           refreshTokenCiphertext: refreshCipher ?? undefined,
           expiresAt: input.expiresAt ?? undefined,
           lastRefreshedAt: now,
@@ -210,8 +268,17 @@ export class AccountsService {
    * Throws BadRequestException with a precise reason whenever we can't end
    * up holding a Page token that owns the asset — that's what keeps a
    * stray User token from ever reaching oauth_tokens.
+   *
+   * Returns BOTH tokens when both are knowable:
+   *   - User token path: input.accessToken IS the user token; we discover
+   *     the page token from /me/accounts. We return both.
+   *   - Page token path: input.accessToken IS the page token; the user
+   *     token is unknown so userToken = null. Caller can backfill later
+   *     via a re-seed initiated with the user token.
    */
-  private async normalizeMetaToken(input: SeedAccountInput): Promise<string> {
+  private async normalizeMetaToken(
+    input: SeedAccountInput,
+  ): Promise<{ pageToken: string; userToken: string | null }> {
     type GraphPage = {
       id: string;
       access_token?: string;
@@ -251,7 +318,10 @@ export class AccountsService {
       this.logger.log(
         `normalized User token → Page token for ${input.platform}/${input.canonicalUserId} (page ${match.id})`,
       );
-      return match.access_token;
+      // The original input.accessToken IS the user token (it returned a
+      // /me/accounts page list). Stash it alongside the page token so
+      // ads_read calls have what they need.
+      return { pageToken: match.access_token, userToken: input.accessToken };
     }
 
     const errMsg = accountsRes.data?.error?.message ?? `HTTP ${accountsRes.status}`;
@@ -274,12 +344,59 @@ export class AccountsService {
       // For IG, /me/accounts isn't an option (the token is page-scoped) so
       // probe.id will be the page_id, not the IG id — that's fine, we're
       // only checking that the token has read access.
-      return input.accessToken;
+      // We don't have the user token here; caller can re-seed later with
+      // the user token to backfill it.
+      return { pageToken: input.accessToken, userToken: null };
     }
 
     throw new BadRequestException({
       message: `Failed to normalize ${input.platform} token: ${errMsg}`,
     });
+  }
+
+  /**
+   * Resolve an account's stored access token, picking page vs user based on
+   * the requested product. ads_read needs USER scope; everything else (
+   * pages_read_user_content, page insights, post comments) uses PAGE.
+   *
+   * Falls back to the page token if the user token isn't stored. Throws
+   * when neither is present.
+   */
+  async getDecryptedAccessToken(
+    accountId: bigint,
+    product: 'ads' | 'page' = 'page',
+  ): Promise<{ token: string; level: 'page' | 'user' }> {
+    const tok = await this.prisma.oAuthToken.findUnique({
+      where: { accountId },
+      select: {
+        accessTokenCiphertext: true,
+        userAccessTokenCiphertext: true,
+      },
+    });
+    if (!tok) {
+      throw new Error(`No OAuth token stored for account ${accountId.toString()}`);
+    }
+    if (product === 'ads' && tok.userAccessTokenCiphertext) {
+      return {
+        token: this.aes.decrypt(tok.userAccessTokenCiphertext),
+        level: 'user',
+      };
+    }
+    if (tok.accessTokenCiphertext) {
+      return {
+        token: this.aes.decrypt(tok.accessTokenCiphertext),
+        level: 'page',
+      };
+    }
+    if (tok.userAccessTokenCiphertext) {
+      return {
+        token: this.aes.decrypt(tok.userAccessTokenCiphertext),
+        level: 'user',
+      };
+    }
+    throw new Error(
+      `Account ${accountId.toString()} has neither page nor user token stored`,
+    );
   }
 
   async listAccounts(): Promise<unknown[]> {

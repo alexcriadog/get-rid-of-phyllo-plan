@@ -111,7 +111,10 @@ type PageProps = {
 // in the canonical `posts` collection (with `data.ownerHandle` !== self).
 // Mirrors the support matrix at /admin/support-matrix; keep in sync if a
 // platform gains/loses the product.
-const PLATFORMS_WITH_MENTIONS = new Set<string>(['tiktok', 'threads']);
+const PLATFORMS_WITH_MENTIONS = new Set<string>(['tiktok', 'threads', 'facebook']);
+// CA-only Meta extras (pages_read_user_content / ads_read / PPCA). Surfaced
+// only for facebook accounts since they piggy-back on those scopes.
+const PLATFORMS_WITH_CA_EXTRAS = new Set<string>(['facebook']);
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
   const id = String(ctx.params?.id || '');
@@ -216,6 +219,25 @@ export default function AccountDetail({ id, identity, audience, posts }: PagePro
             <Link href={`/account/${id}/mentions`} className="v-pill-outline-mint">
               Mentions
             </Link>
+          )}
+          {PLATFORMS_WITH_CA_EXTRAS.has(identity?.platform ?? '') && (
+            <>
+              <Link
+                href={`/account/${id}/reviews`}
+                className="v-pill-outline-mint"
+              >
+                Reviews
+              </Link>
+              <Link href={`/account/${id}/ads`} className="v-pill-outline-mint">
+                Ads
+              </Link>
+              <Link
+                href={`/account/${id}/public-pages`}
+                className="v-pill-outline-mint"
+              >
+                Watchlist
+              </Link>
+            </>
           )}
           <button className="v-pill-primary" onClick={onRefresh} disabled={refreshing}>
             {refreshing ? 'Refreshing…' : 'Refresh now'}

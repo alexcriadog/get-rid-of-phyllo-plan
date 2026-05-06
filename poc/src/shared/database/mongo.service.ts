@@ -18,6 +18,11 @@ export const MONGO_COLLECTIONS = {
   rawPlatformResponses: 'raw_platform_responses',
   eventLog: 'event_log',
   bucketHistorySnapshots: 'bucket_history_snapshots',
+  // CA-only Meta extras (pages_read_user_content / ads_read / PPCA)
+  pageRatings: 'page_ratings',
+  pageComments: 'page_comments',
+  adInsights: 'ad_insights',
+  publicPageSnapshots: 'public_page_snapshots',
 } as const;
 
 export type MongoCollectionKey = keyof typeof MONGO_COLLECTIONS;
