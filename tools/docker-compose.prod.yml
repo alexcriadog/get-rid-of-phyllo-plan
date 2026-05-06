@@ -54,11 +54,12 @@ services:
       POC_ADMIN_URL: "https://ec2-3-89-195-248.compute-1.amazonaws.com/admin"
       NEXT_PUBLIC_POC_ADMIN_URL: "https://ec2-3-89-195-248.compute-1.amazonaws.com/admin"
       NODE_ENV: production
-    # Compose merges arrays additively, so we can't "remove" the 3002:3002
-    # mapping from the base file. Bind to loopback only — outside traffic
-    # only enters via Caddy.
-    ports:
-      - "127.0.0.1:3002:3002"
+    # We deliberately do NOT override ports here. The base file maps
+    # 3002:3002 on 0.0.0.0; AWS Security Group blocks 3002 inbound, so
+    # only the compose-network path Caddy uses reaches the container.
+    # Compose merges array entries additively which would cause a "port
+    # already in use" conflict if we added a 127.0.0.1:3002 mapping on
+    # top of the base 0.0.0.0 one.
 
 volumes:
   caddy_data:
