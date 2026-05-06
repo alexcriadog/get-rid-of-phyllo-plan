@@ -109,6 +109,6 @@ sleep 15
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml ps
 
 ok "Bootstrap complete. Test:"
-echo "  https://ec2-3-89-195-248.compute-1.amazonaws.com/                       (connect-tool)"
-echo "  https://ec2-3-89-195-248.compute-1.amazonaws.com/admin/accounts         (POC admin)"
-echo "  https://ec2-3-89-195-248.compute-1.amazonaws.com/api/poc/admin/healthz  (POC API)"
+echo "  https://3-89-195-248.nip.io/                       (connect-tool)"
+echo "  https://3-89-195-248.nip.io/admin/accounts         (POC admin)"
+echo "  https://3-89-195-248.nip.io/api/poc/admin/healthz  (POC API)"

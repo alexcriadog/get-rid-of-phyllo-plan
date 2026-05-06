@@ -1,7 +1,7 @@
 # Caddy config for the EC2 deploy. Auto-obtains a Let's Encrypt cert via
 # HTTP-01 challenge for the AWS hostname; renews automatically.
 
-ec2-3-89-195-248.compute-1.amazonaws.com {
+3-89-195-248.nip.io {
 	encode gzip
 
 	# POC backend exposed under /api/poc — bearer-guarded by ConnectToolGuard

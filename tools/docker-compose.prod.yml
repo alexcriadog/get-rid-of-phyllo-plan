@@ -34,7 +34,7 @@ services:
     environment:
       NODE_ENV: production
       # Browser-side calls (inlined into the bundle at build time).
-      NEXT_PUBLIC_CONNECTOR_API_URL: "https://ec2-3-89-195-248.compute-1.amazonaws.com/api/poc"
+      NEXT_PUBLIC_CONNECTOR_API_URL: "https://3-89-195-248.nip.io/api/poc"
       # SSR calls — go via the compose network.
       CONNECTOR_API_URL: "http://api:3000"
       MONGO_URL: "mongodb://mongo:27017/connector_ui"
@@ -50,9 +50,9 @@ services:
   connect-tool:
     environment:
       POC_API_URL: "http://api:3000"
-      PUBLIC_BASE_URL: "https://ec2-3-89-195-248.compute-1.amazonaws.com"
-      POC_ADMIN_URL: "https://ec2-3-89-195-248.compute-1.amazonaws.com/admin"
-      NEXT_PUBLIC_POC_ADMIN_URL: "https://ec2-3-89-195-248.compute-1.amazonaws.com/admin"
+      PUBLIC_BASE_URL: "https://3-89-195-248.nip.io"
+      POC_ADMIN_URL: "https://3-89-195-248.nip.io/admin"
+      NEXT_PUBLIC_POC_ADMIN_URL: "https://3-89-195-248.nip.io/admin"
       NODE_ENV: production
     # We deliberately do NOT override ports here. The base file maps
     # 3002:3002 on 0.0.0.0; AWS Security Group blocks 3002 inbound, so

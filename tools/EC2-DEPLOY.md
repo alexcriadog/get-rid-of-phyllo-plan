@@ -1,21 +1,21 @@
 # EC2 deploy
 
-Single-host docker compose deploy on `ec2-3-89-195-248.compute-1.amazonaws.com`. Caddy fronts everything with a Let's Encrypt cert.
+Single-host docker compose deploy on `3-89-195-248.nip.io`. Caddy fronts everything with a Let's Encrypt cert.
 
 ## Public URLs
 
 | URL | Routes to |
 |---|---|
-| `https://ec2-3-89-195-248.compute-1.amazonaws.com/` | connect-tool (port 3002) |
-| `https://ec2-3-89-195-248.compute-1.amazonaws.com/admin/*` | POC admin web (port 3001) |
-| `https://ec2-3-89-195-248.compute-1.amazonaws.com/api/poc/*` | POC API (port 3000, bearer-guarded) |
+| `https://3-89-195-248.nip.io/` | connect-tool (port 3002) |
+| `https://3-89-195-248.nip.io/admin/*` | POC admin web (port 3001) |
+| `https://3-89-195-248.nip.io/api/poc/*` | POC API (port 3000, bearer-guarded) |
 
 ## Bootstrap (one-time, fresh EC2)
 
 Pre-req in **AWS Security Group**: open inbound TCP **80** and **443** (SSH 22 already). Without 80 open, Let's Encrypt HTTP-01 fails and Caddy serves a self-signed cert.
 
 ```bash
-ssh -i ~/Camaleonic/credentials/new_web.pem ubuntu@ec2-3-89-195-248.compute-1.amazonaws.com
+ssh -i ~/Camaleonic/credentials/new_web.pem ubuntu@3-89-195-248.nip.io
 
 # 1. clone tooling early so the bootstrap script is available before the
 #    full repo clone (chicken-and-egg on the deploy key)
@@ -38,9 +38,9 @@ The script will fail telling you the `.env` files are missing. Upload them from 
 ```bash
 # from local machine
 scp -i ~/Camaleonic/credentials/new_web.pem poc/.env \
-    ubuntu@ec2-3-89-195-248.compute-1.amazonaws.com:~/get-rid-of-phyllo/poc/.env
+    ubuntu@3-89-195-248.nip.io:~/get-rid-of-phyllo/poc/.env
 scp -i ~/Camaleonic/credentials/new_web.pem connect-tool/.env \
-    ubuntu@ec2-3-89-195-248.compute-1.amazonaws.com:~/get-rid-of-phyllo/connect-tool/.env
+    ubuntu@3-89-195-248.nip.io:~/get-rid-of-phyllo/connect-tool/.env
 ```
 
 Re-run on the EC2:
@@ -66,16 +66,16 @@ That SSHes into the EC2 and runs `redeploy.sh` (git pull + `docker compose up -d
 Add the prod URIs alongside the existing ngrok ones. **Do not delete** the ngrok ones until you've verified prod works.
 
 ```
-https://ec2-3-89-195-248.compute-1.amazonaws.com/api/oauth/callback/facebook
-https://ec2-3-89-195-248.compute-1.amazonaws.com/api/oauth/callback/youtube
-https://ec2-3-89-195-248.compute-1.amazonaws.com/api/oauth/callback/tiktok
-https://ec2-3-89-195-248.compute-1.amazonaws.com/api/oauth/callback/threads
+https://3-89-195-248.nip.io/api/oauth/callback/facebook
+https://3-89-195-248.nip.io/api/oauth/callback/youtube
+https://3-89-195-248.nip.io/api/oauth/callback/tiktok
+https://3-89-195-248.nip.io/api/oauth/callback/threads
 ```
 
 ## Removal
 
 ```bash
-ssh ubuntu@ec2-3-89-195-248.compute-1.amazonaws.com
+ssh ubuntu@3-89-195-248.nip.io
 cd ~/get-rid-of-phyllo/poc
 docker compose -f docker-compose.yml -f ../tools/docker-compose.prod.yml down -v
 ```
