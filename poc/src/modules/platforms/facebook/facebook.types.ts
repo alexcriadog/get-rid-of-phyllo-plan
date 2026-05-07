@@ -6,19 +6,15 @@ import type { GraphInsight } from '../shared/meta-graph';
 
 export interface FacebookAttachment {
   media_type?: string;
-  media?: {
-    image?: { src?: string };
-    source?: string;
-    /**
-     * Populated when the LIST call expanded
-     * `attachments{media{video{id,views,length}}}`. `views` is Meta's
-     * free playback counter on the Video edge — works on Pages where
-     * /post/insights returns silent-empty (BC-managed agency setups),
-     * which is most agency clients.
-     */
-    video?: { id?: string; views?: number; length?: number };
-  };
+  media?: { image?: { src?: string }; source?: string };
   subattachments?: { data: FacebookAttachment[] };
+  /**
+   * For video posts, `target.id` IS the video_id (matches /{page_id}/videos).
+   * For album/carousel posts the top-level target.id matches the post id;
+   * subattachments carry per-item target ids. Used to map posts to
+   * /videos batch results so we can fetch view counts in O(1) calls.
+   */
+  target?: { id?: string; url?: string };
   type?: string;
   url?: string;
 }

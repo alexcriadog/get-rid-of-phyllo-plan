@@ -52,7 +52,7 @@ export class FacebookContentFetcher {
     const accountId = extractAccountId(metadata);
     const perSourceLimit = Math.min(limit, DEFAULT_PAGE_SIZE);
 
-    const posts = await this.fetchPosts(
+    const fetched = await this.fetchPosts(
       accessToken,
       canonicalId,
       perSourceLimit,
@@ -60,15 +60,92 @@ export class FacebookContentFetcher {
       accountId,
       opts,
     );
-    posts.sort((a, b) => {
-      const aTs = a.publishedAt ? a.publishedAt.getTime() : 0;
-      const bTs = b.publishedAt ? b.publishedAt.getTime() : 0;
+    fetched.sort((a, b) => {
+      const aTs = a.item.publishedAt ? a.item.publishedAt.getTime() : 0;
+      const bTs = b.item.publishedAt ? b.item.publishedAt.getTime() : 0;
       return bTs - aTs;
     });
+    const trimmed = fetched.slice(0, limit);
+    const trimmedItems = trimmed.map((t) => t.item);
 
-    const trimmed = posts.slice(0, limit);
-    await this.enrichPostsWithInsights(trimmed, accessToken, ctx, accountId);
-    return trimmed;
+    // Single batch call to /{page_id}/videos populates view counts for
+    // every video on the page in one shot — beats per-post insights
+    // calls and works on BC-managed pages where /post/insights returns
+    // silent empty. Uses each post's attachments[].target.id (which IS
+    // the video_id for video posts, verified empirically) to map.
+    await this.enrichWithVideoViews(
+      trimmed,
+      canonicalId,
+      accessToken,
+      ctx,
+      accountId,
+    );
+
+    await this.enrichPostsWithInsights(trimmedItems, accessToken, ctx, accountId);
+    return trimmedItems;
+  }
+
+  /**
+   * Single /{page_id}/videos batch fetch. Builds a map (video_id → views)
+   * and stamps every post whose attachment-target matches into
+   * metrics.views (mirrored to metrics.impressions when not already set).
+   * Free, works on every Page including BC-managed agency pages.
+   */
+  private async enrichWithVideoViews(
+    pairs: Array<{ post: FacebookPost; item: ContentData }>,
+    canonicalId: string,
+    accessToken: string,
+    ctx: PlatformAdapterContext,
+    accountId: bigint | undefined,
+  ): Promise<void> {
+    if (pairs.length === 0) return;
+    let body: GraphListResponse<{ id?: string; views?: number; length?: number }>;
+    try {
+      body = await this.client.call<
+        GraphListResponse<{ id?: string; views?: number; length?: number }>
+      >({
+        endpoint: `/${canonicalId}/videos`,
+        params: { fields: 'id,views,length', limit: 100 },
+        accessToken,
+        context: ctx,
+        accountId,
+      });
+    } catch (err) {
+      this.logger.debug(
+        `videos batch failed for ${canonicalId}: ${extractMetaError(err)}`,
+      );
+      return;
+    }
+    const viewsByVideoId = new Map<string, number>();
+    for (const v of body.data ?? []) {
+      if (v.id && typeof v.views === 'number') {
+        viewsByVideoId.set(v.id, v.views);
+      }
+    }
+    if (viewsByVideoId.size === 0) return;
+
+    for (const { post, item } of pairs) {
+      // Walk attachments looking for a target.id that matches a video.
+      // Video posts have one attachment with type='video_inline' (or
+      // similar) and target.id = video_id; carousels with a video sub
+      // have it nested under subattachments.
+      const targetIds = collectAttachmentTargetIds(post);
+      let totalViews = 0;
+      let matched = false;
+      for (const tid of targetIds) {
+        const v = viewsByVideoId.get(tid);
+        if (typeof v === 'number') {
+          totalViews += v;
+          matched = true;
+        }
+      }
+      if (!matched) continue;
+      item.metrics = item.metrics ?? {};
+      item.metrics.views = totalViews;
+      if (item.metrics.impressions === undefined) {
+        item.metrics.impressions = totalViews;
+      }
+    }
   }
 
   private async fetchPosts(
@@ -78,25 +155,19 @@ export class FacebookContentFetcher {
     ctx: PlatformAdapterContext,
     accountId: bigint | undefined,
     opts: FetchOpts,
-  ): Promise<ContentData[]> {
-    const collected: ContentData[] = [];
+  ): Promise<Array<{ post: FacebookPost; item: ContentData }>> {
+    const collected: Array<{ post: FacebookPost; item: ContentData }> = [];
     let nextEndpoint = `/${canonicalId}/posts`;
 
     // v22 rejects inline `insights.metric(...)` expansion on /posts even
     // with the right scopes. Fetch with metadata-only fields and enrich
     // separately. `comments.summary(total_count)` and
     // `reactions.summary(total_count)` ride free on the same call.
-    //
-    // `attachments` is expanded with `media{video{id,views,length}}` so we
-    // get the free Video-edge `views` counter inline — critical for
-    // BC-managed pages where /post/insights returns silent empty
-    // (agency setups). Without it, video posts would show 0 views.
-    // `subattachments` (carousel/album) carry the same shape.
-    const attachmentFields =
-      'attachments{type,title,url,target,media{image,source,video{id,views,length}},' +
-      'subattachments{type,target,url,media{image,source,video{id,views,length}}}}';
+    // Video views come from a separate /{page_id}/videos call
+    // (one batch instead of one per post) and are merged in via
+    // mapPostsToVideoViews — see fetch().
     const liteFields =
-      `id,message,created_time,permalink_url,full_picture,${attachmentFields},` +
+      'id,message,created_time,permalink_url,full_picture,attachments,' +
       'comments.summary(total_count),reactions.summary(total_count)';
 
     let nextParams: Record<string, string | number | undefined> = {
@@ -115,7 +186,7 @@ export class FacebookContentFetcher {
 
       for (const post of body.data ?? []) {
         if (!withinTimeWindow(post.created_time, opts)) continue;
-        collected.push(postToContent(post));
+        collected.push({ post, item: postToContent(post) });
         if (collected.length >= limit) break;
       }
 
@@ -258,14 +329,34 @@ function withinTimeWindow(
 
 /**
  * Counts how many items have at least one insight-derived metric set.
- * `metrics.impressions` is set by `mergePostInsights` from
- * `post_media_view`; we use it as the canonical "did /insights yield
- * anything?" indicator.
+ * Used by adaptive-skip to decide whether /post/insights is worth
+ * continuing. We track whether the `post_media_view`-derived `extra`
+ * key landed; that's distinct from the soft-proxy `impressions` we
+ * may already have stamped from video.views.
  */
 function countWithInsights(items: ContentData[]): number {
   let n = 0;
   for (const it of items) {
-    if (typeof it.metrics?.impressions === 'number') n++;
+    const extra = it.metrics?.extra;
+    if (extra && Object.keys(extra).length > 0) n++;
   }
   return n;
+}
+
+/**
+ * Walk every attachment + subattachment on a post and yield each
+ * `target.id` (the video id for video posts). Used to match posts to
+ * /videos batch results.
+ */
+function collectAttachmentTargetIds(post: FacebookPost): string[] {
+  const ids: string[] = [];
+  for (const a of post.attachments?.data ?? []) {
+    const t = (a as { target?: { id?: string } }).target;
+    if (t?.id) ids.push(t.id);
+    for (const sub of a.subattachments?.data ?? []) {
+      const st = (sub as { target?: { id?: string } }).target;
+      if (st?.id) ids.push(st.id);
+    }
+  }
+  return ids;
 }
