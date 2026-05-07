@@ -119,12 +119,12 @@ export function mergePostInsights(post: ContentData, data: GraphInsight[]): void
       // `post_media_view`; surface it as `metrics.views` so the UI
       // never labels deprecated terminology. `metrics.impressions`
       // stays unset for FB.
+      // NB: post_reach was tried as the per-post reach replacement
+      // but Meta rejects it as invalid in v22 (despite stale 2025
+      // blog posts claiming otherwise) — including it poisons the
+      // whole insights batch with #100. There's no per-post reach
+      // metric in v22.
       post.metrics.views = first;
-    } else if (insight.name === 'post_reach' && typeof first === 'number') {
-      // Still valid in v22 (Meta has flagged it for removal in
-      // June 2026 → migrate to Media Viewers when that lands).
-      // Per-post unique users reached, all post types.
-      post.metrics.reach = first;
     } else if (
       insight.name === 'post_reactions_by_type_total' &&
       first !== null &&

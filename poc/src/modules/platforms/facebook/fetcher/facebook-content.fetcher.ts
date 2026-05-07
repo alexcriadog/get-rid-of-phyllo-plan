@@ -266,20 +266,20 @@ export class FacebookContentFetcher {
         // Meta v22 (post-2025-11-15): post_impressions* removed,
         // post_media_view is the replacement (rebranded "Views").
         'post_media_view',
-        // post_reach still valid in v22; flagged for June-2026
-        // retirement in favour of Media Viewers. Per-post unique users
-        // reached, works for image/album/video/text alike.
-        'post_reach',
         'post_reactions_by_type_total',
         'post_clicks_by_type',
         'post_activity_by_action_type',
         'post_video_views',
-        // NB: post_negative_feedback and post_engaged_users are
-        // documented for the Page-level endpoint but Meta rejects them
-        // inside this /{post_id}/insights batch with `(#100) must be a
-        // valid insights metric`. A per-post negative feedback path
-        // would need its own call (with breakdown=type) — keep them
-        // out of this batch.
+        // NB on excluded metrics:
+        //   • post_reach — verified empirically INVALID in v22 (#100
+        //     "must be a valid insights metric") even though some 2025
+        //     Meta blog posts still listed it. The whole batch fails
+        //     if a single invalid metric is included, so it would
+        //     poison every post insights call.
+        //   • post_negative_feedback / post_engaged_users are also
+        //     rejected here (documented for page-level only).
+        // Reach for FB posts is effectively gone in v22; for video
+        // posts we surface `views` from the /videos batch instead.
       ].join(',');
       try {
         const body = await this.client.call<{ data?: GraphInsight[] }>({
