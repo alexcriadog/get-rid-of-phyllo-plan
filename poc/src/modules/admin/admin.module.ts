@@ -8,6 +8,8 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { OauthCallbackController } from './oauth-callback.controller';
 import { FacebookExtrasController } from './facebook-extras.controller';
+import { WatchlistController } from './watchlist.controller';
+import { WatchlistService } from './watchlist.service';
 import { ConnectToolGuard } from './connect-tool.guard';
 
 /**
@@ -26,7 +28,12 @@ import { ConnectToolGuard } from './connect-tool.guard';
     PlatformsModule,
     MetaGraphModule,
   ],
-  controllers: [AdminController, OauthCallbackController, FacebookExtrasController],
-  providers: [AdminService, ConnectToolGuard],
+  controllers: [
+    AdminController,
+    OauthCallbackController,
+    FacebookExtrasController,
+    WatchlistController,
+  ],
+  providers: [AdminService, ConnectToolGuard, WatchlistService],
 })
 export class AdminModule {}

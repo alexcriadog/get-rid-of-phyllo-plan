@@ -5,6 +5,7 @@ import {
   Activity,
   Clock,
   Database,
+  Eye,
   ExternalLink,
   FileJson,
   Gauge,
@@ -49,6 +50,7 @@ const NAV: NavSection[] = [
     items: [
       { href: '/admin/accounts', label: 'Accounts', icon: Users },
       { href: '/admin/connect', label: 'Connect new', icon: Plug2 },
+      { href: '/admin/watchlist', label: 'Watchlist', icon: Eye },
     ],
   },
   {
