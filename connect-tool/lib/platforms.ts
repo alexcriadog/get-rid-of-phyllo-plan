@@ -14,11 +14,19 @@ const THREADS_GRAPH = 'https://graph.threads.net/v1.0';
 const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 const YOUTUBE_DATA = 'https://www.googleapis.com/youtube/v3';
-const TIKTOK_AUTHORIZE = 'https://business-api.tiktok.com/portal/auth';
-const TIKTOK_TOKEN =
-  'https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/';
-const TIKTOK_USER =
-  'https://business-api.tiktok.com/open_api/v1.3/business/get/';
+// TikTok offers two parallel OAuth flows:
+//   1. BC / Marketing API (business-api.tiktok.com/portal/auth) — for ad
+//      accounts. Requires the user to have at least one Advertiser
+//      account, which most personal creators don't.
+//   2. User-flow / Login Kit (tiktok.com/v2/auth/authorize) — for
+//      creators / personal accounts. Returns `open_id` which our POC
+//      adapter requires in `metadata.open_id` to call the user-scoped
+//      endpoints (/v2/user/info/, /v2/video/list/, etc.).
+// We use the user-flow here so creator accounts work; the POC adapter
+// already targets the v2 user-scoped endpoints.
+const TIKTOK_AUTHORIZE = 'https://www.tiktok.com/v2/auth/authorize';
+const TIKTOK_TOKEN = 'https://open.tiktokapis.com/v2/oauth/token/';
+const TIKTOK_USER_INFO = 'https://open.tiktokapis.com/v2/user/info/';
 const META_AUTHORIZE = 'https://www.facebook.com/v22.0/dialog/oauth';
 // Meta moved the Threads authorize host to www. in late 2025; the bare
 // host now redirects but some App settings still reject it as a mismatch.
@@ -42,12 +50,18 @@ const YT_SCOPES = [
   'https://www.googleapis.com/auth/yt-analytics-monetary.readonly',
 ];
 
+// User-flow scopes (Login Kit). Approved scopes only — extras like
+// `biz.brand.insights` or `discovery.search.words` need separate review
+// and would block the consent screen if the app isn't approved for them.
 const TIKTOK_SCOPES = [
-  'business.basic',
-  'business.account.info',
-  'business.account.video',
-  'business.video.list',
-  'business.comment.list',
+  'user.info.basic',
+  'user.info.profile',
+  'user.info.stats',
+  'user.account.type',
+  'user.insights',
+  'video.list',
+  'video.insights',
+  'comment.list',
 ];
 
 // Threads scope catalog as of 2025-2026 (Meta removed `threads_read_likes`
@@ -275,125 +289,110 @@ const youtube: PlatformDef = {
   },
 };
 
-// ─── TikTok BC ─────────────────────────────────────────────────────────
+// ─── TikTok user-flow (Login Kit / Display API) ────────────────────────
 
 const tiktok: PlatformDef = {
   key: 'tiktok',
   buildAuthorizeUrl(redirectUri) {
-    const appId = requireEnv('TIKTOK_CLIENT_KEY');
+    const clientKey = requireEnv('TIKTOK_CLIENT_KEY');
     const params = new URLSearchParams({
-      app_id: appId,
+      client_key: clientKey,
+      response_type: 'code',
+      scope: TIKTOK_SCOPES.join(','),
       redirect_uri: redirectUri,
       state: cryptoRandomState(),
-      scope: TIKTOK_SCOPES.join(','),
-      rid: cryptoRandomState().replace(/-/g, '').slice(0, 16),
     });
     return `${TIKTOK_AUTHORIZE}?${params.toString()}`;
   },
-  async handleCallback(code) {
+  async handleCallback(code, redirectUri) {
     const clientKey = requireEnv('TIKTOK_CLIENT_KEY');
     const clientSecret = requireEnv('TIKTOK_CLIENT_SECRET');
-    const tokenRes = await axios.post<{
-      data?: {
-        access_token: string;
-        token_type?: string;
-        expires_in?: number;
-        refresh_token?: string;
-        refresh_expires_in?: number;
-        open_id?: string;
-        advertiser_ids?: string[];
-        scope?: string[];
-      };
-      message?: string;
-      code?: number;
-    }>(
-      TIKTOK_TOKEN,
-      { app_id: clientKey, secret: clientSecret, auth_code: code },
-      { timeout: 15_000 },
-    );
-    const data = tokenRes.data.data;
-    // TikTok BC OAuth (`business-api.tiktok.com/portal/auth`) returns
-    //   { code: 0, message: "OK", data: { access_token, advertiser_ids:[…],
-    //     scope, token_type, expires_in } }
-    // No `open_id` here — that's user-flow / Login Kit. When the user
-    // doesn't tick any Advertiser account on the consent screen,
-    // advertiser_ids comes back empty, so we fall back to /user/info/
-    // to identify the BC user.
-    let canonicalId: string | undefined =
-      data?.open_id ?? data?.advertiser_ids?.[0];
-    let username: string | undefined;
-    let displayName: string | undefined;
-    let userEmail: string | undefined;
-    let userId: string | undefined;
 
-    if (data?.access_token) {
-      try {
-        const userRes = await axios.get<{
-          data?: {
-            // BC API uses `core_user_id`. Older docs/endpoints sometimes
-            // return `user_id`; accept both for forward-compat.
-            core_user_id?: string | number;
-            user_id?: string | number;
-            display_name?: string;
-            email?: string;
-            username?: string;
-            create_time?: number;
-          };
-          code?: number;
-          message?: string;
-        }>('https://business-api.tiktok.com/open_api/v1.3/user/info/', {
-          headers: { 'Access-Token': data.access_token },
-          timeout: 10_000,
-        });
-        const u = userRes.data?.data;
-        if (u) {
-          const rawUid = u.core_user_id ?? u.user_id;
-          userId = rawUid !== undefined ? String(rawUid) : undefined;
-          username = u.username;
-          displayName = u.display_name;
-          userEmail = u.email;
-          canonicalId = canonicalId ?? userId;
-        }
-      } catch {
-        // Best-effort. If this fails AND advertiser_ids was empty we'll
-        // surface the helpful error below.
-      }
+    // Token exchange — user-flow uses form-urlencoded body, not JSON.
+    const body = new URLSearchParams({
+      client_key: clientKey,
+      client_secret: clientSecret,
+      code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    });
+    const tokenRes = await axios.post<{
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      refresh_expires_in?: number;
+      open_id?: string;
+      scope?: string;
+      token_type?: string;
+      error?: string;
+      error_description?: string;
+    }>(TIKTOK_TOKEN, body.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cache-Control': 'no-cache',
+      },
+      timeout: 15_000,
+    });
+
+    const t = tokenRes.data;
+    if (!t.access_token || !t.open_id) {
+      const msg =
+        t.error_description || t.error || 'no access_token / open_id in response';
+      throw new Error(`TikTok exchange failed: ${msg}`);
     }
 
-    if (!data?.access_token || !canonicalId) {
-      const debug = {
-        outer_keys: Object.keys(tokenRes.data ?? {}),
-        code: tokenRes.data?.code,
-        message: tokenRes.data?.message,
-        data_keys: data ? Object.keys(data) : [],
-        has_access_token: !!data?.access_token,
-        advertiser_ids_count: Array.isArray(data?.advertiser_ids)
-          ? data.advertiser_ids.length
-          : null,
-        user_info_resolved: !!userId,
-      };
-      throw new Error(
-        `TikTok auth granted but no advertiser_id and no user_id ` +
-          `available — the account has no Advertiser/Business assets to ` +
-          `sync. Re-authorize and tick at least one Advertiser account ` +
-          `on the consent screen, or connect a different TikTok account ` +
-          `that owns a Business Center. ${JSON.stringify(debug)}`,
-      );
+    // Best-effort profile fetch — /v2/user/info/ takes a `fields` query.
+    let username: string | undefined;
+    let displayName: string | undefined;
+    let avatarUrl: string | undefined;
+    try {
+      const infoRes = await axios.get<{
+        data?: {
+          user?: {
+            open_id?: string;
+            union_id?: string;
+            avatar_url?: string;
+            display_name?: string;
+            username?: string;
+          };
+        };
+      }>(TIKTOK_USER_INFO, {
+        params: {
+          fields: 'open_id,union_id,avatar_url,display_name,username',
+        },
+        headers: { Authorization: `Bearer ${t.access_token}` },
+        timeout: 10_000,
+      });
+      const u = infoRes.data?.data?.user;
+      if (u) {
+        username = u.username;
+        displayName = u.display_name;
+        avatarUrl = u.avatar_url;
+      }
+    } catch {
+      // Best-effort.
     }
 
     const seedBody: SeedBody = {
       platform: 'tiktok',
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: data.expires_in
-        ? new Date(Date.now() + data.expires_in * 1000).toISOString()
+      access_token: t.access_token,
+      refresh_token: t.refresh_token,
+      expires_at: t.expires_in
+        ? new Date(Date.now() + t.expires_in * 1000).toISOString()
         : undefined,
-      canonical_user_id: canonicalId,
+      canonical_user_id: t.open_id,
       handle: username ?? displayName,
+      // The POC TikTok adapter reads `metadata.open_id` (or business_id)
+      // to call /v2/user/info/, /v2/video/list/, /v2/research/comments/,
+      // etc. Persist it so the worker can fetch.
       metadata: {
-        business_id: data.open_id,
-        advertiser_ids: data.advertiser_ids,
-        scopes: data.scope,
+        open_id: t.open_id,
+        business_id: t.open_id,
+        avatar_url: avatarUrl,
+        scopes: t.scope ? t.scope.split(',') : undefined,
+        refresh_expires_at: t.refresh_expires_in
+          ? new Date(Date.now() + t.refresh_expires_in * 1000).toISOString()
+          : undefined,
       },
     };
     const sessionId = putSession({
@@ -403,7 +402,7 @@ const tiktok: PlatformDef = {
       preview: {
         handle: username,
         name: displayName,
-        extras: { open_id: data.open_id, advertiser_ids: data.advertiser_ids },
+        extras: { open_id: t.open_id, scope: t.scope },
       },
     });
     return {
@@ -413,7 +412,7 @@ const tiktok: PlatformDef = {
       preview: {
         handle: username,
         name: displayName,
-        extras: { open_id: data.open_id, advertiser_ids: data.advertiser_ids },
+        extras: { open_id: t.open_id, scope: t.scope },
       },
     };
   },
