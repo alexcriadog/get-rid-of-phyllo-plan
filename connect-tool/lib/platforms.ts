@@ -330,10 +330,14 @@ const tiktok: PlatformDef = {
       try {
         const userRes = await axios.get<{
           data?: {
+            // BC API uses `core_user_id`. Older docs/endpoints sometimes
+            // return `user_id`; accept both for forward-compat.
+            core_user_id?: string | number;
             user_id?: string | number;
             display_name?: string;
             email?: string;
             username?: string;
+            create_time?: number;
           };
           code?: number;
           message?: string;
@@ -343,7 +347,8 @@ const tiktok: PlatformDef = {
         });
         const u = userRes.data?.data;
         if (u) {
-          userId = u.user_id !== undefined ? String(u.user_id) : undefined;
+          const rawUid = u.core_user_id ?? u.user_id;
+          userId = rawUid !== undefined ? String(rawUid) : undefined;
           username = u.username;
           displayName = u.display_name;
           userEmail = u.email;
