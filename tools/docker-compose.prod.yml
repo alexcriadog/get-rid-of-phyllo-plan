@@ -34,6 +34,7 @@ services:
         # not below in `environment:` (compose env applies at runtime,
         # too late for Next).
         NEXT_PUBLIC_CONNECTOR_API_URL: "https://3-89-195-248.nip.io/api/poc"
+        NEXT_PUBLIC_CONNECT_TOOL_URL: "https://3-89-195-248.nip.io/"
     image: poc-web
     container_name: poc-web
     environment:

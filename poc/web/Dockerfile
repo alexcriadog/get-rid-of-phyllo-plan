@@ -15,6 +15,8 @@ WORKDIR /app
 # them.
 ARG NEXT_PUBLIC_CONNECTOR_API_URL
 ENV NEXT_PUBLIC_CONNECTOR_API_URL=${NEXT_PUBLIC_CONNECTOR_API_URL}
+ARG NEXT_PUBLIC_CONNECT_TOOL_URL
+ENV NEXT_PUBLIC_CONNECT_TOOL_URL=${NEXT_PUBLIC_CONNECT_TOOL_URL}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN node -e "const c=require('./next.config.js'); c.output='standalone'; require('fs').writeFileSync('./next.config.runtime.js','module.exports='+JSON.stringify(c)+';');" \
