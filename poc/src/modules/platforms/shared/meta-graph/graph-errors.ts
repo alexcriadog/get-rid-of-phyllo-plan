@@ -78,6 +78,24 @@ export function isTokenDeadGraphBody(body: unknown): boolean {
   return false;
 }
 
+/**
+ * Documented "no data available" subcodes returned as 4xx by Meta-family
+ * APIs. Not real failures — the audience is below a privacy threshold or
+ * otherwise opted out — so dashboards exclude them from error tallies.
+ *   - 2874010: IG `*_audience_demographics` "Not enough users in segment"
+ *   - 4279032: Threads `threads_insights` "Low Follower Count" (<100 fans)
+ */
+export const EXPECTED_GRAPH_SUBCODES: ReadonlySet<number> = new Set([
+  2874010,
+  4279032,
+]);
+
+export function isExpectedGraphFailure(body: unknown): boolean {
+  const e = graphErrorFromBody(body);
+  if (!e) return false;
+  return e.subcode !== undefined && EXPECTED_GRAPH_SUBCODES.has(e.subcode);
+}
+
 function graphErrorFromBody(body: unknown): GraphError | null {
   if (!body || typeof body !== 'object') return null;
   const errObj = (body as { error?: unknown }).error;

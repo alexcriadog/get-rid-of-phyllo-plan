@@ -22,7 +22,7 @@ import {
 import { withToken } from '../meta-graph/graph-context';
 import { persistRaw } from '../meta-graph/graph-raw-archive';
 import { parseUsageHeaders } from '../meta-graph/graph-usage-headers';
-import { isTokenDeadGraphBody } from '../meta-graph/graph-errors';
+import { isExpectedGraphFailure, isTokenDeadGraphBody } from '../meta-graph/graph-errors';
 import { BucTelemetryService } from '../meta-graph/buc-telemetry.service';
 import type { RateLimitStrategy } from '../meta-graph/rate-limit-strategy.port';
 
@@ -136,6 +136,7 @@ export class BoundThreadsClient {
         usageHeader: null,
         accountId: opts.accountId ?? null,
         rateBucketKey: acquired.bucketKey,
+        expected: isExpectedGraphFailure(axErr.response?.data),
       });
       throw new AdapterFetchError(
         PLATFORM_NAME,
@@ -166,6 +167,8 @@ export class BoundThreadsClient {
       usageHeader,
       accountId: opts.accountId ?? null,
       rateBucketKey: acquired.bucketKey,
+      expected:
+        response.status >= 400 && isExpectedGraphFailure(response.data),
     });
 
     await persistRaw(

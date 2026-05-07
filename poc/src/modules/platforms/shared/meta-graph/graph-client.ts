@@ -26,7 +26,7 @@ import {
 import { withToken } from './graph-context';
 import { parseUsageHeaders } from './graph-usage-headers';
 import { persistRaw } from './graph-raw-archive';
-import { isTokenDeadGraphBody } from './graph-errors';
+import { isExpectedGraphFailure, isTokenDeadGraphBody } from './graph-errors';
 import { BucTelemetryService } from './buc-telemetry.service';
 import type { RateLimitStrategy } from './rate-limit-strategy.port';
 
@@ -255,21 +255,3 @@ export class BoundGraphClient {
   }
 }
 
-/**
- * Documented "no data" outcomes that Meta returns as HTTP 4xx but are not
- * real failures (privacy thresholds, deprecated metrics for empty audiences,
- * etc.). Marked so dashboards can exclude them from error counts while still
- * persisting the call for auditability. Extend as new benign codes appear.
- */
-const EXPECTED_GRAPH_SUBCODES: ReadonlySet<number> = new Set([
-  // IG `*_audience_demographics` privacy threshold.
-  // Message: "Not enough users in the segment to share data."
-  2874010,
-]);
-
-function isExpectedGraphFailure(body: unknown): boolean {
-  if (!body || typeof body !== 'object') return false;
-  const error = (body as { error?: { error_subcode?: number } }).error;
-  const sub = error?.error_subcode;
-  return typeof sub === 'number' && EXPECTED_GRAPH_SUBCODES.has(sub);
-}
