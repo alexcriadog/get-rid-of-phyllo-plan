@@ -172,6 +172,7 @@ export class BoundGraphClient {
         usageHeader: null,
         accountId: opts.accountId ?? null,
         rateBucketKey: acquired.bucketKey,
+        expected: isExpectedGraphFailure(axErr.response?.data),
       });
       throw new AdapterFetchError(
         this.platform,
@@ -202,6 +203,8 @@ export class BoundGraphClient {
       usageHeader,
       accountId: opts.accountId ?? null,
       rateBucketKey: acquired.bucketKey,
+      expected:
+        response.status >= 400 && isExpectedGraphFailure(response.data),
     });
 
     // Persist before status-based throws so error bodies (Meta error message
@@ -250,4 +253,23 @@ export class BoundGraphClient {
 
     return response.data as T;
   }
+}
+
+/**
+ * Documented "no data" outcomes that Meta returns as HTTP 4xx but are not
+ * real failures (privacy thresholds, deprecated metrics for empty audiences,
+ * etc.). Marked so dashboards can exclude them from error counts while still
+ * persisting the call for auditability. Extend as new benign codes appear.
+ */
+const EXPECTED_GRAPH_SUBCODES: ReadonlySet<number> = new Set([
+  // IG `*_audience_demographics` privacy threshold.
+  // Message: "Not enough users in the segment to share data."
+  2874010,
+]);
+
+function isExpectedGraphFailure(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false;
+  const error = (body as { error?: { error_subcode?: number } }).error;
+  const sub = error?.error_subcode;
+  return typeof sub === 'number' && EXPECTED_GRAPH_SUBCODES.has(sub);
 }

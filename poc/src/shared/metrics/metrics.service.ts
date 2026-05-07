@@ -20,6 +20,12 @@ export interface ApiCallObservation {
   accountId: bigint | null;
   rateBucketKey: string | null;
   product?: string | null;
+  /**
+   * Marks calls whose non-2xx is a documented "no data" outcome (e.g.
+   * Meta IG privacy threshold). Excluded from dashboard error counts;
+   * still visible in raw logs.
+   */
+  expected?: boolean;
 }
 
 export interface ApiCallRecord extends ApiCallObservation {
@@ -224,6 +230,7 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
           | undefined,
         accountId: record.accountId,
         product: record.product ?? null,
+        expected: record.expected ?? false,
       },
     });
   }

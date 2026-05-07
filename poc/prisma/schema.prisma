@@ -129,6 +129,10 @@ model ApiCallLog {
   usageHeader   Json?    @map("usage_header")
   accountId     BigInt?  @map("account_id")
   product       String?
+  /// True when the non-2xx is a documented "no data" outcome (e.g. Meta IG
+  /// privacy-threshold subcode 2874010 — "Not enough users"). Dashboards
+  /// exclude these from error counts; they remain visible in raw logs.
+  expected      Boolean  @default(false)
   calledAt      DateTime @default(now()) @map("called_at")
 
   @@index([calledAt])

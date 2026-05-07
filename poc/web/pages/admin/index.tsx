@@ -81,6 +81,12 @@ type ApiCall = {
   duration_ms?: number;
   account_id?: string | null;
   account_handle?: string | null;
+  /**
+   * True when the platform's non-2xx is a documented "no data" outcome
+   * (e.g. Meta IG privacy threshold). Excluded from error-rate cards
+   * but still listed in the raw call view.
+   */
+  expected?: boolean;
 };
 
 const PRODUCTS = ['identity', 'audience', 'engagement_new', 'stories'];
@@ -557,11 +563,15 @@ function throughputThisHour(calls: ApiCall[]): number {
 }
 
 function successRate(calls: ApiCall[]): string {
-  if (!calls.length) return '—';
-  const ok = calls.filter(
+  // Drop "expected" non-2xx (documented no-data outcomes) from both
+  // numerator and denominator so a small audience that legitimately
+  // returns "Not enough users" doesn't tank the overall success score.
+  const real = calls.filter((c) => !c.expected);
+  if (!real.length) return '—';
+  const ok = real.filter(
     (c) => typeof c.status_code === 'number' && c.status_code >= 200 && c.status_code < 300,
   ).length;
-  return `${((ok / calls.length) * 100).toFixed(0)}%`;
+  return `${((ok / real.length) * 100).toFixed(0)}%`;
 }
 
 function parseSuccess(s: string): number {
@@ -573,6 +583,7 @@ function parseSuccess(s: string): number {
 function errorsLastHour(calls: ApiCall[]): number {
   const cutoff = Date.now() - 3_600_000;
   return calls.filter((c) => {
+    if (c.expected) return false;
     if (!c.called_at) return false;
     if (new Date(c.called_at).getTime() < cutoff) return false;
     return typeof c.status_code === 'number' && c.status_code >= 400;
@@ -610,6 +621,7 @@ function buildTopErrors(calls: ApiCall[]) {
   const cutoff = Date.now() - 24 * 3_600_000;
   const errorCalls = calls.filter(
     (c) =>
+      !c.expected &&
       c.called_at &&
       new Date(c.called_at).getTime() >= cutoff &&
       typeof c.status_code === 'number' &&

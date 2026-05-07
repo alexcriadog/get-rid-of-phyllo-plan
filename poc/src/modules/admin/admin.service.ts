@@ -1145,6 +1145,7 @@ export class AdminService {
           ? accountMap.get(r.accountId.toString()) ?? null
           : null,
         product: r.product ?? null,
+        expected: r.expected ?? false,
         called_at: r.calledAt.toISOString(),
       })),
     };
