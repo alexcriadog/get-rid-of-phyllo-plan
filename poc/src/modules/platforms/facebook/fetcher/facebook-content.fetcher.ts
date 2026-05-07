@@ -142,9 +142,9 @@ export class FacebookContentFetcher {
       if (!matched) continue;
       item.metrics = item.metrics ?? {};
       item.metrics.views = totalViews;
-      if (item.metrics.impressions === undefined) {
-        item.metrics.impressions = totalViews;
-      }
+      // Don't mirror to metrics.impressions — that field is
+      // intentionally unset on FB now that v22 retired
+      // post_impressions and rebranded the replacement to "Views".
     }
   }
 
@@ -263,16 +263,23 @@ export class FacebookContentFetcher {
     const isComposite = item.platformContentId.includes('_');
     if (isComposite) {
       const metrics = [
+        // Meta v22 (post-2025-11-15): post_impressions* removed,
+        // post_media_view is the replacement (rebranded "Views").
         'post_media_view',
+        // post_reach still valid in v22; flagged for June-2026
+        // retirement in favour of Media Viewers. Per-post unique users
+        // reached, works for image/album/video/text alike.
+        'post_reach',
         'post_reactions_by_type_total',
         'post_clicks_by_type',
         'post_activity_by_action_type',
         'post_video_views',
-        // NB: post_negative_feedback and post_engaged_users are documented
-        // for the Page-level endpoint but Meta rejects them inside this
-        // /{post_id}/insights batch with `(#100) must be a valid insights
-        // metric`. A per-post negative feedback path would need its own
-        // call (with breakdown=type) — keep them out of this batch.
+        // NB: post_negative_feedback and post_engaged_users are
+        // documented for the Page-level endpoint but Meta rejects them
+        // inside this /{post_id}/insights batch with `(#100) must be a
+        // valid insights metric`. A per-post negative feedback path
+        // would need its own call (with breakdown=type) — keep them
+        // out of this batch.
       ].join(',');
       try {
         const body = await this.client.call<{ data?: GraphInsight[] }>({
@@ -330,13 +337,18 @@ function withinTimeWindow(
 /**
  * Counts how many items have at least one insight-derived metric set.
  * Used by adaptive-skip to decide whether /post/insights is worth
- * continuing. We track whether the `post_media_view`-derived `extra`
- * key landed; that's distinct from the soft-proxy `impressions` we
- * may already have stamped from video.views.
+ * continuing. `reach` only comes from /post/insights (post_reach);
+ * `views` may already be set from the /videos batch, so we ignore it
+ * here. `extra` keys (reaction breakdown, clicks_by_type, …) also
+ * only land via /post/insights.
  */
 function countWithInsights(items: ContentData[]): number {
   let n = 0;
   for (const it of items) {
+    if (typeof it.metrics?.reach === 'number') {
+      n++;
+      continue;
+    }
     const extra = it.metrics?.extra;
     if (extra && Object.keys(extra).length > 0) n++;
   }

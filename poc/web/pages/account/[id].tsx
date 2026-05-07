@@ -538,9 +538,12 @@ function PanelAccountInsights({
   insights: AccountInsights;
   followersCount?: number;
 }) {
+  // "Impressions" deliberately omitted — Meta retired the metric on
+  // 2025-11-15 and rebranded the replacement as "Views" (separate tile
+  // below). Page-level insights now surface via `views` / `reach` /
+  // `accountsEngaged`.
   const tiles: Array<{ label: string; value: number | undefined }> = [
     { label: 'Reach', value: insights.reach },
-    { label: 'Impressions', value: insights.impressions },
     { label: 'Accounts engaged', value: insights.accountsEngaged },
     { label: 'Total interactions', value: insights.totalInteractions },
     { label: 'Profile views', value: insights.profileViews },

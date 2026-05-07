@@ -114,11 +114,17 @@ export function mergePostInsights(post: ContentData, data: GraphInsight[]): void
     const values = insight.values ?? [];
     const first = values[values.length - 1]?.value ?? values[0]?.value;
     if (insight.name === 'post_media_view' && typeof first === 'number') {
-      // `post_media_view` is impressions. Meta removed per-post unique reach
-      // in v22 (`post_impressions_unique` was deprecated) so we do NOT set
-      // `reach` here — leaving it undefined is honest rather than pretending
-      // impressions equals reach.
-      post.metrics.impressions = first;
+      // Meta retired `post_impressions*` on 2025-11-15 and rebranded the
+      // replacement field as "Views". The wire-format metric is
+      // `post_media_view`; surface it as `metrics.views` so the UI
+      // never labels deprecated terminology. `metrics.impressions`
+      // stays unset for FB.
+      post.metrics.views = first;
+    } else if (insight.name === 'post_reach' && typeof first === 'number') {
+      // Still valid in v22 (Meta has flagged it for removal in
+      // June 2026 → migrate to Media Viewers when that lands).
+      // Per-post unique users reached, all post types.
+      post.metrics.reach = first;
     } else if (
       insight.name === 'post_reactions_by_type_total' &&
       first !== null &&

@@ -42,6 +42,11 @@ const FB_SCOPES = [
   'business_management',
   'instagram_basic',
   'instagram_manage_insights',
+  // read_insights is NOT deprecated despite the v22 rebrand — Meta
+  // still requires it for /post/insights on Pages where the OAuth
+  // user is not the page owner (BC-managed agency pages most
+  // commonly). Without it /post/insights returns 200 with `data:[]`.
+  'read_insights',
 ];
 
 const YT_SCOPES = [
