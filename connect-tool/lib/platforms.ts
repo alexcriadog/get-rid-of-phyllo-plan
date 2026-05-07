@@ -315,17 +315,47 @@ const tiktok: PlatformDef = {
     // TikTok BC OAuth (`business-api.tiktok.com/portal/auth`) returns
     //   { code: 0, message: "OK", data: { access_token, advertiser_ids:[…],
     //     scope, token_type, expires_in } }
-    // — NO `open_id` (that field belongs to the user-flow / Login Kit
-    // exchange at `open.tiktokapis.com/v2/oauth/token/`). Earlier this
-    // method required open_id, which made the BC happy-path throw and
-    // surface `message: "OK"` as the error string. Use the first advertiser
-    // id as canonical id; fall back to open_id only if a future user-flow
-    // path lands here.
-    const canonicalId = data?.open_id ?? data?.advertiser_ids?.[0];
+    // No `open_id` here — that's user-flow / Login Kit. When the user
+    // doesn't tick any Advertiser account on the consent screen,
+    // advertiser_ids comes back empty, so we fall back to /user/info/
+    // to identify the BC user.
+    let canonicalId: string | undefined =
+      data?.open_id ?? data?.advertiser_ids?.[0];
+    let username: string | undefined;
+    let displayName: string | undefined;
+    let userEmail: string | undefined;
+    let userId: string | undefined;
+
+    if (data?.access_token) {
+      try {
+        const userRes = await axios.get<{
+          data?: {
+            user_id?: string | number;
+            display_name?: string;
+            email?: string;
+            username?: string;
+          };
+          code?: number;
+          message?: string;
+        }>('https://business-api.tiktok.com/open_api/v1.3/user/info/', {
+          headers: { 'Access-Token': data.access_token },
+          timeout: 10_000,
+        });
+        const u = userRes.data?.data;
+        if (u) {
+          userId = u.user_id !== undefined ? String(u.user_id) : undefined;
+          username = u.username;
+          displayName = u.display_name;
+          userEmail = u.email;
+          canonicalId = canonicalId ?? userId;
+        }
+      } catch {
+        // Best-effort. If this fails AND advertiser_ids was empty we'll
+        // surface the helpful error below.
+      }
+    }
+
     if (!data?.access_token || !canonicalId) {
-      // Diagnostic: dump non-secret keys + sizes so the operator can see
-      // whether access_token is missing entirely or advertiser_ids is just
-      // an empty array (creator-only auth, no BC accounts).
       const debug = {
         outer_keys: Object.keys(tokenRes.data ?? {}),
         code: tokenRes.data?.code,
@@ -335,33 +365,15 @@ const tiktok: PlatformDef = {
         advertiser_ids_count: Array.isArray(data?.advertiser_ids)
           ? data.advertiser_ids.length
           : null,
-        scope: data?.scope,
+        user_info_resolved: !!userId,
       };
-      throw new Error(`TikTok exchange failed: ${JSON.stringify(debug)}`);
-    }
-
-    // The /business/get/ endpoint is for the user-flow Business Suite —
-    // it 400s on advertiser-only tokens. Only call it when open_id is
-    // present (user-flow path), otherwise skip.
-    let username: string | undefined;
-    let displayName: string | undefined;
-    if (data.open_id) {
-      try {
-        const userRes = await axios.get<{
-          data?: { username?: string; display_name?: string };
-        }>(TIKTOK_USER, {
-          params: {
-            business_id: data.open_id,
-            fields: '["username","display_name"]',
-          },
-          headers: { 'Access-Token': data.access_token },
-          timeout: 10_000,
-        });
-        username = userRes.data.data?.username;
-        displayName = userRes.data.data?.display_name;
-      } catch {
-        // Best-effort.
-      }
+      throw new Error(
+        `TikTok auth granted but no advertiser_id and no user_id ` +
+          `available — the account has no Advertiser/Business assets to ` +
+          `sync. Re-authorize and tick at least one Advertiser account ` +
+          `on the consent screen, or connect a different TikTok account ` +
+          `that owns a Business Center. ${JSON.stringify(debug)}`,
+      );
     }
 
     const seedBody: SeedBody = {
