@@ -28,5 +28,11 @@ log "Reconciling Prisma schema…"
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
   npx prisma db push --accept-data-loss 2>&1 | tail -3 || true
 
+# Caddy bind-mounts the Caddyfile but doesn't auto-reload on file changes.
+# `docker compose up -d` won't restart the container unless its compose
+# definition changed. Force a restart so Caddyfile edits propagate.
+log "Restarting Caddy to pick up Caddyfile changes…"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml restart caddy 2>&1 | tail -2 || true
+
 log "Status:"
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml ps
