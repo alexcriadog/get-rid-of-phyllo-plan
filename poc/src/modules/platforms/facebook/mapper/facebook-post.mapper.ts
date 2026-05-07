@@ -45,6 +45,18 @@ export function extractPostMetrics(post: FacebookPost): ContentMetrics {
   if (typeof commentsTotal === 'number') out.comments = commentsTotal;
   const reactionsTotal = post.reactions?.summary?.total_count;
   if (typeof reactionsTotal === 'number') out.likes = reactionsTotal;
+
+  // Video views from `attachments{media{video{views}}}` (free Video-edge
+  // counter). Available on every Page including BC-managed ones where
+  // /post/insights returns silent empty. Stored as `views`; mirrored
+  // into `impressions` as a soft proxy when no real impressions metric
+  // is reachable. The proper `post_media_view` will overwrite via
+  // mergePostInsights when /insights does yield data.
+  const videoViews = sumAttachmentVideoViews(post);
+  if (videoViews !== null) {
+    out.views = videoViews;
+    if (out.impressions === undefined) out.impressions = videoViews;
+  }
   for (const insight of post.insights?.data ?? []) {
     const first = insight.values?.[0]?.value;
     if (insight.name === 'post_impressions' && typeof first === 'number') {
@@ -162,4 +174,30 @@ export function extractPictureUrl(picture: unknown): string | null {
   const data = (picture as { data?: { url?: string } }).data;
   if (data && typeof data.url === 'string') return data.url;
   return null;
+}
+
+/**
+ * Sum the free `views` counter across every video attachment on the post
+ * (top-level + carousel sub-attachments). Returns null when no video
+ * attachment is present so callers can distinguish "no video" from "video
+ * with 0 views".
+ */
+function sumAttachmentVideoViews(post: FacebookPost): number | null {
+  let total = 0;
+  let found = false;
+  for (const a of post.attachments?.data ?? []) {
+    const v = a.media?.video?.views;
+    if (typeof v === 'number') {
+      total += v;
+      found = true;
+    }
+    for (const sub of a.subattachments?.data ?? []) {
+      const sv = sub.media?.video?.views;
+      if (typeof sv === 'number') {
+        total += sv;
+        found = true;
+      }
+    }
+  }
+  return found ? total : null;
 }

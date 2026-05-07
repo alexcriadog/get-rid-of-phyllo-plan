@@ -6,7 +6,18 @@ import type { GraphInsight } from '../shared/meta-graph';
 
 export interface FacebookAttachment {
   media_type?: string;
-  media?: { image?: { src?: string }; source?: string };
+  media?: {
+    image?: { src?: string };
+    source?: string;
+    /**
+     * Populated when the LIST call expanded
+     * `attachments{media{video{id,views,length}}}`. `views` is Meta's
+     * free playback counter on the Video edge — works on Pages where
+     * /post/insights returns silent-empty (BC-managed agency setups),
+     * which is most agency clients.
+     */
+    video?: { id?: string; views?: number; length?: number };
+  };
   subattachments?: { data: FacebookAttachment[] };
   type?: string;
   url?: string;

@@ -82,13 +82,21 @@ export class FacebookContentFetcher {
     const collected: ContentData[] = [];
     let nextEndpoint = `/${canonicalId}/posts`;
 
-    // v22 rejects inline `insights.metric(...)` expansion on /posts even with
-    // the right scopes. Always fetch posts with metadata-only fields and
-    // enrich reactions/impressions with a separate per-post /insights call
-    // (see enrichPostsWithInsights). `comments.summary(total_count)` and
+    // v22 rejects inline `insights.metric(...)` expansion on /posts even
+    // with the right scopes. Fetch with metadata-only fields and enrich
+    // separately. `comments.summary(total_count)` and
     // `reactions.summary(total_count)` ride free on the same call.
+    //
+    // `attachments` is expanded with `media{video{id,views,length}}` so we
+    // get the free Video-edge `views` counter inline — critical for
+    // BC-managed pages where /post/insights returns silent empty
+    // (agency setups). Without it, video posts would show 0 views.
+    // `subattachments` (carousel/album) carry the same shape.
+    const attachmentFields =
+      'attachments{type,title,url,target,media{image,source,video{id,views,length}},' +
+      'subattachments{type,target,url,media{image,source,video{id,views,length}}}}';
     const liteFields =
-      'id,message,created_time,permalink_url,full_picture,attachments,' +
+      `id,message,created_time,permalink_url,full_picture,${attachmentFields},` +
       'comments.summary(total_count),reactions.summary(total_count)';
 
     let nextParams: Record<string, string | number | undefined> = {
@@ -125,7 +133,16 @@ export class FacebookContentFetcher {
    * Enriches each content item with real metrics via a second Graph call.
    * Composite-id posts → `/{id}/insights?metric=post_*`.
    * Pure-numeric video ids → `/{id}/video_insights?metric=total_video_*`.
-   * Runs in parallel batches; per-item failures swallowed at debug.
+   *
+   * Adaptive skip: BC-managed pages (most agencies) silently return
+   * `data: []` from /post/insights for every post. To avoid wasting N
+   * calls per refresh on these pages, we probe the FIRST batch and if
+   * every result was empty, we abort the remaining N-batchSize calls.
+   * Re-tested every refresh so a change in Meta's behaviour is picked
+   * up automatically — no persistent flag, no schema migration.
+   *
+   * Items still get the inline data we collected via field expansion
+   * (reactions, comments, video.views via attachments).
    */
   private async enrichPostsWithInsights(
     items: ContentData[],
@@ -135,14 +152,34 @@ export class FacebookContentFetcher {
   ): Promise<void> {
     if (items.length === 0) return;
     const BATCH_SIZE = 5;
+    const PROBE_BATCHES = 1;
+
+    let nonEmptyHits = 0;
+    let probedItems = 0;
 
     for (let i = 0; i < items.length; i += BATCH_SIZE) {
       const batch = items.slice(i, i + BATCH_SIZE);
+      const beforeCount = countWithInsights(batch);
       await Promise.all(
         batch.map((item) =>
           this.enrichOneItem(item, accessToken, ctx, accountId),
         ),
       );
+      const afterCount = countWithInsights(batch);
+      const newHits = afterCount - beforeCount;
+      nonEmptyHits += newHits;
+      probedItems += batch.length;
+
+      const batchIndex = Math.floor(i / BATCH_SIZE);
+      if (batchIndex + 1 >= PROBE_BATCHES && nonEmptyHits === 0) {
+        const remaining = items.length - probedItems;
+        if (remaining > 0) {
+          this.logger.debug(
+            `skipping ${remaining} /post/insights calls — first ${probedItems} returned silent-empty (BC-restricted page); inline reactions/views from field expansion remain in place`,
+          );
+        }
+        return;
+      }
     }
   }
 
@@ -217,4 +254,18 @@ function withinTimeWindow(
   if (opts.since && ts < opts.since) return false;
   if (opts.until && ts > opts.until) return false;
   return true;
+}
+
+/**
+ * Counts how many items have at least one insight-derived metric set.
+ * `metrics.impressions` is set by `mergePostInsights` from
+ * `post_media_view`; we use it as the canonical "did /insights yield
+ * anything?" indicator.
+ */
+function countWithInsights(items: ContentData[]): number {
+  let n = 0;
+  for (const it of items) {
+    if (typeof it.metrics?.impressions === 'number') n++;
+  }
+  return n;
 }
