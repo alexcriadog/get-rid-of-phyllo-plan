@@ -323,12 +323,21 @@ const tiktok: PlatformDef = {
     // path lands here.
     const canonicalId = data?.open_id ?? data?.advertiser_ids?.[0];
     if (!data?.access_token || !canonicalId) {
-      const code = tokenRes.data.code;
-      const msg =
-        code !== 0 && tokenRes.data.message
-          ? tokenRes.data.message
-          : 'no access_token / advertiser_id in response';
-      throw new Error(`TikTok exchange failed: ${msg}`);
+      // Diagnostic: dump non-secret keys + sizes so the operator can see
+      // whether access_token is missing entirely or advertiser_ids is just
+      // an empty array (creator-only auth, no BC accounts).
+      const debug = {
+        outer_keys: Object.keys(tokenRes.data ?? {}),
+        code: tokenRes.data?.code,
+        message: tokenRes.data?.message,
+        data_keys: data ? Object.keys(data) : [],
+        has_access_token: !!data?.access_token,
+        advertiser_ids_count: Array.isArray(data?.advertiser_ids)
+          ? data.advertiser_ids.length
+          : null,
+        scope: data?.scope,
+      };
+      throw new Error(`TikTok exchange failed: ${JSON.stringify(debug)}`);
     }
 
     // The /business/get/ endpoint is for the user-flow Business Suite —
