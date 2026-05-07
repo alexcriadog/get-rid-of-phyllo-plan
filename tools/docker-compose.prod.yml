@@ -52,6 +52,14 @@ services:
     restart: unless-stopped
 
   connect-tool:
+    build:
+      context: ../connect-tool
+      dockerfile: Dockerfile
+      args:
+        # Inlined into the JS bundle by `next build` — runtime env vars
+        # are too late. Used by pages/success.tsx for the "See accounts
+        # in POC" link.
+        NEXT_PUBLIC_POC_ADMIN_URL: "https://3-89-195-248.nip.io/admin"
     environment:
       POC_API_URL: "http://api:3000"
       PUBLIC_BASE_URL: "https://3-89-195-248.nip.io"
