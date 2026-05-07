@@ -104,8 +104,17 @@ if ! docker compose version >/dev/null 2>&1; then DC="sudo docker compose"; fi
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml build --pull
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml up -d
 
-log "Waiting 15s for Caddy to obtain TLS cert…"
+log "Waiting 15s for stack to settle (TLS, MySQL healthcheck)…"
 sleep 15
+
+log "Applying Prisma schema (idempotent, no-op if already applied)…"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
+  npx prisma db push --accept-data-loss 2>&1 | tail -5
+
+log "Seeding cadences (idempotent upsert)…"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
+  npx ts-node -r tsconfig-paths/register prisma/seed.ts 2>&1 | tail -5
+
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml ps
 
 ok "Bootstrap complete. Test:"

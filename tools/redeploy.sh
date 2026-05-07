@@ -22,5 +22,11 @@ if ! docker compose version >/dev/null 2>&1; then DC="sudo docker compose"; fi
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml build --pull
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml up -d
 
+# Reconcile Prisma schema. Idempotent — no-op when live DB matches
+# schema.prisma. Catches schema additions automatically on every deploy.
+log "Reconciling Prisma schema…"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
+  npx prisma db push --accept-data-loss 2>&1 | tail -3 || true
+
 log "Status:"
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml ps
