@@ -1,9 +1,21 @@
 # TODO
 
 **Status:** Living doc
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-07
 
 What is left to do, ordered by impact and urgency. Each item has a "trigger" — the signal that tells you it's time to start. Don't pick items off this list speculatively; pick them when their trigger fires.
+
+---
+
+## 0. TikTok Ads (Marketing API) — new platform `tiktok_ads`
+
+**Trigger:** first customer signs up who has active TikTok ad campaigns and wants spend / impressions / CPC / CPM / conversion data alongside their organic content.
+
+The current `tiktok` platform (Login Kit / Display API) covers organic creator data only — profile, follower stats, video list, engagement counts, comments. TikTok's Marketing API (BC) is a separate API surface with its own OAuth host, its own token, its own ID space (`advertiser_id`s, `identity_id`), and its own data schema (campaigns / ad sets / ads / spend / paid audience reports). The two surfaces never cross — `open_id` and `identity_id` are different identifiers — so trying to fold ads under the existing `tiktok` platform as a single product would force mid-flow re-OAuth, dual tokens on one row, and a schema that doesn't fit the existing identity/audience/engagement product slots.
+
+Decision: ship as a **new platform key** `tiktok_ads`, priced as a separate connector SKU, with its own product set (`identity`, `campaigns`, `ad_insights`, `ad_creatives`, `audience_demographics_paid`). Customers with both organic content and ads connect both flows; the dashboard can visually merge them by `display_name`. Industry precedent: Sprout Social, Hootsuite, HubSpot all expose two distinct TikTok integrations.
+
+Full implementation plan, scope, fetchers, and references in `docs/07-platforms/tiktok-ads.md`.
 
 ---
 
