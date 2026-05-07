@@ -35,7 +35,10 @@ type DemographicBreakdownError = {
   subcode?: number;
 };
 
-type DemographicTimeframe = 'this_week' | 'this_month' | 'prev_month';
+// Meta v20+ retired prev_month for *_audience_demographics. Only this_week
+// and this_month remain valid; older snapshots may carry a prev_month key
+// in byTimeframe but the UI no longer offers it.
+type DemographicTimeframe = 'this_week' | 'this_month';
 
 type DemographicGroup = {
   genderDistribution?: Distribution;
@@ -54,7 +57,6 @@ type DemographicGroup = {
 const TIMEFRAME_LABELS: Record<DemographicTimeframe, string> = {
   this_week: 'This week',
   this_month: 'This month',
-  prev_month: 'Prev month',
 };
 
 // Meta documents these as ROLLING windows, not calendar week/month —
@@ -63,7 +65,6 @@ const TIMEFRAME_LABELS: Record<DemographicTimeframe, string> = {
 const TIMEFRAME_TOOLTIPS: Record<DemographicTimeframe, string> = {
   this_week: 'Last 7 days (rolling)',
   this_month: 'Last 30 days (rolling)',
-  prev_month: '30 to 60 days ago (the 30 days before "This month")',
 };
 
 type AccountInsights = {
@@ -1052,7 +1053,7 @@ function PanelDemographics({
   platform?: string;
 }) {
   const [scope, setScope] = useState<'followers' | 'reached' | 'engaged'>('followers');
-  const [timeframe, setTimeframe] = useState<DemographicTimeframe>('prev_month');
+  const [timeframe, setTimeframe] = useState<DemographicTimeframe>('this_month');
   const isFacebook = platform === 'facebook';
   if (!aud) {
     return (
@@ -1259,7 +1260,7 @@ function PanelDemographics({
           >
             Window ⓘ
           </span>
-          {(['this_week', 'this_month', 'prev_month'] as DemographicTimeframe[]).map((tf) => (
+          {(['this_week', 'this_month'] as DemographicTimeframe[]).map((tf) => (
             <ScopeTab
               key={tf}
               label={TIMEFRAME_LABELS[tf]}

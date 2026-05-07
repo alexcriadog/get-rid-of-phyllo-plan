@@ -37,8 +37,13 @@ export interface DemographicBreakdownError {
   subcode?: number;
 }
 
-/** Window keys IG Graph v22 accepts on `*_audience_demographics` insights. */
-export type DemographicTimeframe = 'this_week' | 'this_month' | 'prev_month';
+/**
+ * Window keys IG Graph v22 accepts on `*_audience_demographics` insights.
+ * Meta retired `prev_month` for these metrics starting in v20 (#100 error
+ * "timeframe parameter specified prev_month is no longer supported"); only
+ * `this_week` and `this_month` are valid.
+ */
+export type DemographicTimeframe = 'this_week' | 'this_month';
 
 export interface DemographicDistributions {
   genderDistribution?: DistributionBucket[];

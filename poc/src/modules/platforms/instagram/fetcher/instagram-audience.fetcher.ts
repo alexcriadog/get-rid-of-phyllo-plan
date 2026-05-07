@@ -142,11 +142,12 @@ export class InstagramAudienceFetcher {
   }
 
   /**
-   * For metrics that REQUIRE a `timeframe` param, fan out across all three
-   * windows accepted by Graph v22 (`this_week`, `this_month`, `prev_month`)
-   * so the UI can pivot between them. Each window has its own per-breakdown
-   * results / errors. Top-level fields receive the "best populated" window
-   * (prev_month → this_month → this_week) so legacy consumers still work.
+   * For metrics that REQUIRE a `timeframe` param, fan out across the two
+   * windows Meta still accepts in v22 for `*_audience_demographics`
+   * (`this_week`, `this_month` — `prev_month` was removed in v20+, see
+   * Graph error #100 "no longer supported"). Each window has its own
+   * per-breakdown results / errors. Top-level fields receive the "best
+   * populated" window (this_month → this_week) so legacy consumers work.
    */
   private async fetchDemographicsAcrossWindows(
     metric: string,
@@ -155,7 +156,7 @@ export class InstagramAudienceFetcher {
     context: PlatformAdapterContext,
     accountId: bigint | undefined,
   ): Promise<DemographicDistributions> {
-    const windows: DemographicTimeframe[] = ['this_week', 'this_month', 'prev_month'];
+    const windows: DemographicTimeframe[] = ['this_week', 'this_month'];
     const byTimeframe: Partial<Record<DemographicTimeframe, DemographicDistributions>> = {};
     for (const tf of windows) {
       byTimeframe[tf] = await this.fetchDemographics(
@@ -176,7 +177,7 @@ export class InstagramAudienceFetcher {
         (g.cityDistribution?.length ?? 0) > 0);
 
     const preferred =
-      windows.find((w) => hasDistributions(byTimeframe[w])) ?? 'prev_month';
+      windows.find((w) => hasDistributions(byTimeframe[w])) ?? 'this_month';
     const head = byTimeframe[preferred] ?? {};
 
     return {
