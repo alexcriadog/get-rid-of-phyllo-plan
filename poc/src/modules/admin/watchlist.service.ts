@@ -34,7 +34,8 @@ const PAGE_FIELDS = [
   'link',
   'verification_status',
   'is_verified',
-  'is_published',
+  // is_published / supports_instant_articles need pages_manage_*
+  // permissions — skip; Pages Search API doesn't grant those.
   'picture.width(720).height(720)',
   'cover{source,offset_x,offset_y}',
   'location{city,country,state,zip,street,latitude,longitude}',
@@ -49,7 +50,6 @@ const PAGE_FIELDS = [
   'rating_count',
   'overall_star_rating',
   'price_range',
-  'supports_instant_articles',
 ].join(',');
 
 const POST_FIELDS = [
