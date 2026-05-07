@@ -125,6 +125,9 @@ export default function Home({ accounts, topCityByAccount, topCountryByAccount }
             </h1>
           </div>
           <div style={{ flex: 1 }} />
+          <Link href="/watchlist" className="v-pill-outline-mint">
+            Watchlist
+          </Link>
           <Link href="/admin" className="v-pill-outline-mint">
             Admin console
           </Link>

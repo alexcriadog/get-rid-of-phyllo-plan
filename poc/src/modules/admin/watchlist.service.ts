@@ -207,18 +207,37 @@ export class WatchlistService {
       for (const d of docs) tracked.add(String((d as { page_id?: string }).page_id ?? ''));
     }
 
-    return hits.map((p) => {
-      const pic = (p.picture as { data?: { url?: string } } | undefined)?.data?.url;
+    // Pages Search returns minimal metadata. Enrich each hit in parallel
+    // with a small follow-up GET so the UI can show picture + follower
+    // count + verification badge (the only fields that disambiguate which
+    // "Adidas" page the operator wants).
+    const enrichments = await Promise.all(
+      hits.map(async (p) => {
+        try {
+          return await this.graphGet<Record<string, unknown>>(`/${String(p.id)}`, {
+            fields:
+              'picture.width(120).height(120),fan_count,followers_count,verification_status,is_verified,category,link,username',
+          });
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    return hits.map((p, i) => {
+      const enr = enrichments[i] ?? {};
+      const merged = { ...p, ...enr };
+      const pic = (merged.picture as { data?: { url?: string } } | undefined)?.data?.url;
       return {
         id: String(p.id),
-        name: (p.name as string) ?? null,
-        username: (p.username as string) ?? null,
-        category: (p.category as string) ?? null,
-        verification_status: (p.verification_status as string) ?? null,
-        is_verified: (p.is_verified as boolean) ?? null,
-        fan_count: (p.fan_count as number) ?? null,
-        followers_count: (p.followers_count as number) ?? null,
-        link: (p.link as string) ?? null,
+        name: (merged.name as string) ?? null,
+        username: (merged.username as string) ?? null,
+        category: (merged.category as string) ?? null,
+        verification_status: (merged.verification_status as string) ?? null,
+        is_verified: (merged.is_verified as boolean) ?? null,
+        fan_count: (merged.fan_count as number) ?? null,
+        followers_count: (merged.followers_count as number) ?? null,
+        link: (merged.link as string) ?? null,
         picture_url: pic ?? null,
         already_tracked: tracked.has(String(p.id)),
       };

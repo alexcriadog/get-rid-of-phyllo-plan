@@ -255,12 +255,6 @@ export default function AccountDetail({ id, identity, audience, posts }: PagePro
               <Link href={`/account/${id}/ads`} className="v-pill-outline-mint">
                 Ads
               </Link>
-              <Link
-                href={`/account/${id}/public-pages`}
-                className="v-pill-outline-mint"
-              >
-                Watchlist
-              </Link>
             </>
           )}
           <button className="v-pill-primary" onClick={onRefresh} disabled={refreshing}>

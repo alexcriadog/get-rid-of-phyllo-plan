@@ -27,6 +27,11 @@
 		reverse_proxy web:3001
 	}
 
+	# Public watchlist (FB Pages monitor — PPCA, app-token only).
+	handle /watchlist* {
+		reverse_proxy web:3001
+	}
+
 	# Internal admin web API (Mongo-proxy for comments).
 	handle /api/comments* {
 		reverse_proxy web:3001
