@@ -11,17 +11,12 @@
 		reverse_proxy api:3000
 	}
 
-	# Admin dashboard + its Next.js assets. The web image is built with
-	# assetPrefix='/admin', so ALL its /_next/* requests land under
-	# /admin/_next/* and are naturally caught here. This way connect-tool
-	# (which serves its own /_next/* via the catchall below) doesn't get
-	# its hydration data 404'd by routes meant for web.
+	# Admin dashboard.
 	handle /admin* {
 		reverse_proxy web:3001
 	}
 
 	# Public account profile pages (e.g. /account/2, /account/2/posts).
-	# Their assets also go through /admin/_next/* via assetPrefix.
 	handle /account* {
 		reverse_proxy web:3001
 	}
@@ -29,6 +24,17 @@
 	# Internal admin web API (Mongo-proxy for comments).
 	handle /api/comments* {
 		reverse_proxy web:3001
+	}
+
+	# Both Next apps emit assets at /_next/*; we disambiguate by giving
+	# connect-tool a build-time assetPrefix='/connect'. So:
+	#   /_next/*         → web (no prefix, vanilla Next paths)
+	#   /connect/_next/* → connect-tool (its prefixed assets + hydration)
+	handle /_next/* {
+		reverse_proxy web:3001
+	}
+	handle /connect/_next/* {
+		reverse_proxy connect-tool:3002
 	}
 
 	# Everything else (/, /api/oauth/*, /facebook/pages, /confirm/*,

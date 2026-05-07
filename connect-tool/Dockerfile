@@ -11,7 +11,14 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+# Force assetPrefix='/connect' so Next emits /_next/* requests under
+# /connect/_next/*. Avoids a path collision with the POC web image
+# (which also serves /_next/*) when both sit behind the same Caddy.
+# Page paths (/, /facebook/*, /confirm/*, /success) stay where they are
+# since none of them start with /connect.
+RUN node -e "const c=require('./next.config.js'); c.assetPrefix='/connect'; require('fs').writeFileSync('./next.config.runtime.js','module.exports='+JSON.stringify(c)+';');" \
+ && cp next.config.runtime.js next.config.js \
+ && npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
