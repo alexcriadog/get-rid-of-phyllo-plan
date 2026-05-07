@@ -19,7 +19,7 @@ ARG NEXT_PUBLIC_CONNECT_TOOL_URL
 ENV NEXT_PUBLIC_CONNECT_TOOL_URL=${NEXT_PUBLIC_CONNECT_TOOL_URL}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN node -e "const c=require('./next.config.js'); c.output='standalone'; require('fs').writeFileSync('./next.config.runtime.js','module.exports='+JSON.stringify(c)+';');" \
+RUN node -e "const c=require('./next.config.js'); c.output='standalone'; c.assetPrefix='/admin'; require('fs').writeFileSync('./next.config.runtime.js','module.exports='+JSON.stringify(c)+';');" \
  && cp next.config.runtime.js next.config.js \
  && npm run build
 

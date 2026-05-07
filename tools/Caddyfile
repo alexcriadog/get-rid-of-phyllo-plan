@@ -11,19 +11,17 @@
 		reverse_proxy api:3000
 	}
 
-	# Next.js static bundles (CSS, JS chunks, images) for the admin dashboard.
-	# Must be before the connect-tool catchall so /_next/static/... reaches
-	# the web container instead of the OAuth helper.
-	handle /_next/* {
-		reverse_proxy web:3001
-	}
-
-	# Admin dashboard pages.
+	# Admin dashboard + its Next.js assets. The web image is built with
+	# assetPrefix='/admin', so ALL its /_next/* requests land under
+	# /admin/_next/* and are naturally caught here. This way connect-tool
+	# (which serves its own /_next/* via the catchall below) doesn't get
+	# its hydration data 404'd by routes meant for web.
 	handle /admin* {
 		reverse_proxy web:3001
 	}
 
 	# Public account profile pages (e.g. /account/2, /account/2/posts).
+	# Their assets also go through /admin/_next/* via assetPrefix.
 	handle /account* {
 		reverse_proxy web:3001
 	}
