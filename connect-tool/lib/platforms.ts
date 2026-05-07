@@ -312,29 +312,47 @@ const tiktok: PlatformDef = {
       { timeout: 15_000 },
     );
     const data = tokenRes.data.data;
-    if (!data?.access_token || !data.open_id) {
-      throw new Error(
-        `TikTok exchange failed: ${tokenRes.data.message ?? 'no access_token in response'}`,
-      );
+    // TikTok BC OAuth (`business-api.tiktok.com/portal/auth`) returns
+    //   { code: 0, message: "OK", data: { access_token, advertiser_ids:[…],
+    //     scope, token_type, expires_in } }
+    // — NO `open_id` (that field belongs to the user-flow / Login Kit
+    // exchange at `open.tiktokapis.com/v2/oauth/token/`). Earlier this
+    // method required open_id, which made the BC happy-path throw and
+    // surface `message: "OK"` as the error string. Use the first advertiser
+    // id as canonical id; fall back to open_id only if a future user-flow
+    // path lands here.
+    const canonicalId = data?.open_id ?? data?.advertiser_ids?.[0];
+    if (!data?.access_token || !canonicalId) {
+      const code = tokenRes.data.code;
+      const msg =
+        code !== 0 && tokenRes.data.message
+          ? tokenRes.data.message
+          : 'no access_token / advertiser_id in response';
+      throw new Error(`TikTok exchange failed: ${msg}`);
     }
 
+    // The /business/get/ endpoint is for the user-flow Business Suite —
+    // it 400s on advertiser-only tokens. Only call it when open_id is
+    // present (user-flow path), otherwise skip.
     let username: string | undefined;
     let displayName: string | undefined;
-    try {
-      const userRes = await axios.get<{
-        data?: { username?: string; display_name?: string };
-      }>(TIKTOK_USER, {
-        params: {
-          business_id: data.open_id,
-          fields: '["username","display_name"]',
-        },
-        headers: { 'Access-Token': data.access_token },
-        timeout: 10_000,
-      });
-      username = userRes.data.data?.username;
-      displayName = userRes.data.data?.display_name;
-    } catch {
-      // Best-effort.
+    if (data.open_id) {
+      try {
+        const userRes = await axios.get<{
+          data?: { username?: string; display_name?: string };
+        }>(TIKTOK_USER, {
+          params: {
+            business_id: data.open_id,
+            fields: '["username","display_name"]',
+          },
+          headers: { 'Access-Token': data.access_token },
+          timeout: 10_000,
+        });
+        username = userRes.data.data?.username;
+        displayName = userRes.data.data?.display_name;
+      } catch {
+        // Best-effort.
+      }
     }
 
     const seedBody: SeedBody = {
@@ -344,7 +362,7 @@ const tiktok: PlatformDef = {
       expires_at: data.expires_in
         ? new Date(Date.now() + data.expires_in * 1000).toISOString()
         : undefined,
-      canonical_user_id: data.open_id,
+      canonical_user_id: canonicalId,
       handle: username ?? displayName,
       metadata: {
         business_id: data.open_id,
