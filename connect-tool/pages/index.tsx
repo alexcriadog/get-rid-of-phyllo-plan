@@ -12,6 +12,7 @@ import { PlatformTile, type PlatformInfo } from '../components/PlatformTile';
 type PageProps = {
   platforms: PlatformInfo[];
   pocAdminUrl: string;
+  pocFeedUrl: string;
   /** ?error=… banner pass-through from cancelled OAuth flows. */
   errorBanner?: string;
 };
@@ -19,10 +20,15 @@ type PageProps = {
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
   const errorBanner =
     typeof ctx.query.error === 'string' ? ctx.query.error : undefined;
+  // Derive the public feed URL from POC_ADMIN_URL by swapping the
+  // trailing /admin segment for /feed. Avoids a second env var.
+  const adminUrl = process.env.POC_ADMIN_URL ?? 'http://localhost:3001/admin';
+  const feedUrl = adminUrl.replace(/\/admin\/?$/, '/feed');
   return {
     props: {
       errorBanner,
-      pocAdminUrl: process.env.POC_ADMIN_URL ?? 'http://localhost:3001/admin',
+      pocAdminUrl: adminUrl,
+      pocFeedUrl: feedUrl,
       platforms: [
         {
           key: 'facebook',
@@ -81,7 +87,7 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
   };
 };
 
-export default function Index({ platforms, pocAdminUrl, errorBanner }: PageProps) {
+export default function Index({ platforms, pocAdminUrl, pocFeedUrl, errorBanner }: PageProps) {
   return (
     <div className="v-canvas">
       <div className="v-shell">
@@ -108,6 +114,9 @@ export default function Index({ platforms, pocAdminUrl, errorBanner }: PageProps
 
         <footer className="v-footer">
           <span className="v-meta">Connected accounts live at</span>
+          <Link className="v-pill-outline-mint" href={pocFeedUrl}>
+            Public feed →
+          </Link>
           <Link className="v-pill-outline-mint" href={pocAdminUrl}>
             POC admin →
           </Link>

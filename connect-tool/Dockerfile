@@ -36,6 +36,9 @@ RUN addgroup --system --gid 1001 nodejs \
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Static `public/` files (e.g. favicon) are NOT bundled into the
+# standalone output by default. Copy explicitly so /favicon.svg works.
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
 EXPOSE 3002

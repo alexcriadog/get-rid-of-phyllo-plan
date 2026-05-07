@@ -1397,16 +1397,20 @@ function abbreviateInt(n: number): string {
 
 function GenderDonut({ entries }: { entries: Distribution }) {
   const [hover, setHover] = useState<string | null>(null);
-  if (!entries.length) return null;
-  const total = sum(entries);
-  if (!total) return null;
   const radius = 60;
   const stroke = 18;
   const size = 180;
   const center = size / 2;
   const c = 2 * Math.PI * radius;
+  const total = sum(entries);
 
+  // Hooks must run unconditionally on every render — switching tabs
+  // (Followers ↔ Engaged) flips entries between populated and empty
+  // depending on whether Meta returned breakdowns or only errors.
+  // Computing slices unconditionally and short-circuiting later keeps
+  // the hook count stable.
   const slices = useMemo(() => {
+    if (!total) return [];
     let offset = 0;
     return entries.map((e) => {
       const frac = e.value / total;
@@ -1427,6 +1431,8 @@ function GenderDonut({ entries }: { entries: Distribution }) {
       return slice;
     });
   }, [entries, total, c]);
+
+  if (!entries.length || !total) return null;
 
   const hoveredSlice = hover ? slices.find((s) => s.rawLabel === hover) : null;
   const centerValue = hoveredSlice ? hoveredSlice.value : total;

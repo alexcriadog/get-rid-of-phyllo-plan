@@ -21,6 +21,12 @@
 		reverse_proxy web:3001
 	}
 
+	# Public feed (alias of web's `/`, exposed under a unique path so it
+	# doesn't collide with connect-tool's `/`).
+	handle /feed* {
+		reverse_proxy web:3001
+	}
+
 	# Internal admin web API (Mongo-proxy for comments).
 	handle /api/comments* {
 		reverse_proxy web:3001

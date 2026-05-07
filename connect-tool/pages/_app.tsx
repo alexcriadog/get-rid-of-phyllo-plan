@@ -9,6 +9,9 @@ export default function App({ Component, pageProps }: AppProps) {
         <title>Connect — Camaleonic POC</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="noindex,nofollow" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="mask-icon" href="/favicon.svg" color="#3cffd0" />
+        <meta name="theme-color" content="#0e0e0e" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
