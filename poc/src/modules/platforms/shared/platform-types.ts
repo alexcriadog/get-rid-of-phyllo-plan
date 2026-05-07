@@ -37,6 +37,9 @@ export interface DemographicBreakdownError {
   subcode?: number;
 }
 
+/** Window keys IG Graph v22 accepts on `*_audience_demographics` insights. */
+export type DemographicTimeframe = 'this_week' | 'this_month' | 'prev_month';
+
 export interface DemographicDistributions {
   genderDistribution?: DistributionBucket[];
   ageDistribution?: DistributionBucket[];
@@ -44,6 +47,14 @@ export interface DemographicDistributions {
   cityDistribution?: DistributionBucket[];
   /** Per-breakdown errors when the platform refused (permissions, audience size, etc.). */
   errors?: DemographicBreakdownError[];
+  /**
+   * When the adapter fetches multiple Graph timeframes (Instagram does this
+   * for reached/engaged demographics so the UI can pivot between them), each
+   * variant lands here. Top-level fields hold a sensible default (typically
+   * `prev_month` — the largest fully-accumulated window) for code paths that
+   * pre-date this map.
+   */
+  byTimeframe?: Partial<Record<DemographicTimeframe, DemographicDistributions>>;
 }
 
 /** Common shape of `(date, value)` daily series. */

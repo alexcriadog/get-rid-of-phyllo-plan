@@ -17,6 +17,7 @@ import type {
   AccountInsightsData,
   AudienceData,
   DemographicDistributions,
+  DemographicTimeframe,
 } from '../../shared/platform-types';
 import { buildInstagramContext } from '../instagram.context';
 import { INSTAGRAM_GRAPH_CLIENT } from '../instagram.tokens';
@@ -48,8 +49,9 @@ export class InstagramAudienceFetcher {
       accountId,
     );
 
-    // 2. Reached-audience demographics (4 more per-breakdown calls).
-    const reached = await this.fetchDemographics(
+    // 2. Reached-audience demographics across all 3 supported windows
+    //    (4 breakdowns × 3 timeframes = 12 calls).
+    const reached = await this.fetchDemographicsAcrossWindows(
       'reached_audience_demographics',
       accessToken,
       canonicalId,
@@ -57,8 +59,8 @@ export class InstagramAudienceFetcher {
       accountId,
     );
 
-    // 3. Engaged-audience demographics (4 more).
-    const engaged = await this.fetchDemographics(
+    // 3. Engaged-audience demographics, same 3-window fan-out.
+    const engaged = await this.fetchDemographicsAcrossWindows(
       'engaged_audience_demographics',
       accessToken,
       canonicalId,
@@ -92,6 +94,7 @@ export class InstagramAudienceFetcher {
     canonicalId: string,
     context: PlatformAdapterContext,
     accountId: bigint | undefined,
+    timeframe?: DemographicTimeframe,
   ): Promise<DemographicDistributions> {
     const breakdowns: Array<'age' | 'gender' | 'country' | 'city'> = [
       'age',
@@ -106,7 +109,6 @@ export class InstagramAudienceFetcher {
     // are derived over a window and REQUIRE `timeframe` (Graph error #100
     // otherwise). v20+ retired last_14_days / last_30_days / last_90_days;
     // current valid values are `this_week`, `this_month`, `prev_month`.
-    const needsTimeframe = metric !== 'follower_demographics';
     for (const breakdown of breakdowns) {
       try {
         const body = await this.client.call<{ data?: GraphInsight[] }>({
@@ -116,7 +118,7 @@ export class InstagramAudienceFetcher {
             period: 'lifetime',
             metric_type: 'total_value',
             breakdown,
-            ...(needsTimeframe ? { timeframe: 'this_month' } : {}),
+            ...(timeframe ? { timeframe } : {}),
           },
           accessToken,
           context,
@@ -130,13 +132,57 @@ export class InstagramAudienceFetcher {
       } catch (err) {
         const detail = extractGraphError(err);
         this.logger.debug(
-          `${metric} breakdown=${breakdown} failed: ${detail.message}`,
+          `${metric} timeframe=${timeframe ?? 'lifetime'} breakdown=${breakdown} failed: ${detail.message}`,
         );
         errors.push({ breakdown, ...detail });
       }
     }
     if (errors.length > 0) out.errors = errors;
     return out;
+  }
+
+  /**
+   * For metrics that REQUIRE a `timeframe` param, fan out across all three
+   * windows accepted by Graph v22 (`this_week`, `this_month`, `prev_month`)
+   * so the UI can pivot between them. Each window has its own per-breakdown
+   * results / errors. Top-level fields receive the "best populated" window
+   * (prev_month → this_month → this_week) so legacy consumers still work.
+   */
+  private async fetchDemographicsAcrossWindows(
+    metric: string,
+    accessToken: string,
+    canonicalId: string,
+    context: PlatformAdapterContext,
+    accountId: bigint | undefined,
+  ): Promise<DemographicDistributions> {
+    const windows: DemographicTimeframe[] = ['this_week', 'this_month', 'prev_month'];
+    const byTimeframe: Partial<Record<DemographicTimeframe, DemographicDistributions>> = {};
+    for (const tf of windows) {
+      byTimeframe[tf] = await this.fetchDemographics(
+        metric,
+        accessToken,
+        canonicalId,
+        context,
+        accountId,
+        tf,
+      );
+    }
+
+    const hasDistributions = (g?: DemographicDistributions) =>
+      !!g &&
+      ((g.genderDistribution?.length ?? 0) > 0 ||
+        (g.ageDistribution?.length ?? 0) > 0 ||
+        (g.countryDistribution?.length ?? 0) > 0 ||
+        (g.cityDistribution?.length ?? 0) > 0);
+
+    const preferred =
+      windows.find((w) => hasDistributions(byTimeframe[w])) ?? 'prev_month';
+    const head = byTimeframe[preferred] ?? {};
+
+    return {
+      ...head,
+      byTimeframe,
+    };
   }
 
   /**

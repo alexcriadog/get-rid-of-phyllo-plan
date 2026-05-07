@@ -35,12 +35,26 @@ type DemographicBreakdownError = {
   subcode?: number;
 };
 
+type DemographicTimeframe = 'this_week' | 'this_month' | 'prev_month';
+
 type DemographicGroup = {
   genderDistribution?: Distribution;
   ageDistribution?: Distribution;
   countryDistribution?: Distribution;
   cityDistribution?: Distribution;
   errors?: DemographicBreakdownError[];
+  /**
+   * IG fetches reached/engaged demographics across all 3 Graph windows
+   * (`this_week`, `this_month`, `prev_month`). When present, the UI
+   * shows a sub-selector and reads from this map.
+   */
+  byTimeframe?: Partial<Record<DemographicTimeframe, DemographicGroup>>;
+};
+
+const TIMEFRAME_LABELS: Record<DemographicTimeframe, string> = {
+  this_week: 'This week',
+  this_month: 'This month',
+  prev_month: 'Prev month',
 };
 
 type AccountInsights = {
@@ -1029,6 +1043,7 @@ function PanelDemographics({
   platform?: string;
 }) {
   const [scope, setScope] = useState<'followers' | 'reached' | 'engaged'>('followers');
+  const [timeframe, setTimeframe] = useState<DemographicTimeframe>('prev_month');
   const isFacebook = platform === 'facebook';
   if (!aud) {
     return (
@@ -1108,11 +1123,17 @@ function PanelDemographics({
     );
   }
 
+  // Pick the active scope's group and, when the adapter populated
+  // `byTimeframe`, drill into the selected window. Falls back to the
+  // top-level fields for legacy snapshots without `byTimeframe`.
+  const pickWindow = (g?: DemographicGroup): DemographicGroup =>
+    g?.byTimeframe ? g.byTimeframe[timeframe] ?? {} : g ?? {};
+
   const source: DemographicGroup =
     scope === 'reached'
-      ? aud.reachedDemographics ?? {}
+      ? pickWindow(aud.reachedDemographics)
       : scope === 'engaged'
-      ? aud.engagedDemographics ?? {}
+      ? pickWindow(aud.engagedDemographics)
       : {
           genderDistribution: aud.genderDistribution,
           ageDistribution: aud.ageDistribution,
@@ -1127,14 +1148,34 @@ function PanelDemographics({
       (g.countryDistribution?.length ?? 0) > 0 ||
       (g.cityDistribution?.length ?? 0) > 0);
 
-  const reachedErrors = aud.reachedDemographics?.errors;
-  const engagedErrors = aud.engagedDemographics?.errors;
-  const hasReached = hasDistribution(aud.reachedDemographics) || !!reachedErrors?.length;
-  const hasEngaged = hasDistribution(aud.engagedDemographics) || !!engagedErrors?.length;
+  const reachedErrors =
+    aud.reachedDemographics?.byTimeframe?.[timeframe]?.errors ??
+    aud.reachedDemographics?.errors;
+  const engagedErrors =
+    aud.engagedDemographics?.byTimeframe?.[timeframe]?.errors ??
+    aud.engagedDemographics?.errors;
+  // For tab availability, treat ANY timeframe (or legacy single-shape) as
+  // a signal that the scope is meaningful — otherwise switching tabs to
+  // just see "Not enough users" is annoying.
+  const reachedHasAnyData = (() => {
+    const tf = aud.reachedDemographics?.byTimeframe;
+    if (tf) return Object.values(tf).some((g) => hasDistribution(g) || !!g?.errors?.length);
+    return hasDistribution(aud.reachedDemographics) || !!aud.reachedDemographics?.errors?.length;
+  })();
+  const engagedHasAnyData = (() => {
+    const tf = aud.engagedDemographics?.byTimeframe;
+    if (tf) return Object.values(tf).some((g) => hasDistribution(g) || !!g?.errors?.length);
+    return hasDistribution(aud.engagedDemographics) || !!aud.engagedDemographics?.errors?.length;
+  })();
+  const hasReached = reachedHasAnyData;
+  const hasEngaged = engagedHasAnyData;
   const showReachedError =
-    scope === 'reached' && !hasDistribution(aud.reachedDemographics) && !!reachedErrors?.length;
+    scope === 'reached' && !hasDistribution(source) && !!reachedErrors?.length;
   const showEngagedError =
-    scope === 'engaged' && !hasDistribution(aud.engagedDemographics) && !!engagedErrors?.length;
+    scope === 'engaged' && !hasDistribution(source) && !!engagedErrors?.length;
+  const activeScopeHasTimeframes =
+    (scope === 'reached' && !!aud.reachedDemographics?.byTimeframe) ||
+    (scope === 'engaged' && !!aud.engagedDemographics?.byTimeframe);
   // Threads packs the per-breakdown errors (e.g. "needs 100 followers") into
   // `reachedDemographics.errors` because there's no native "followers errors"
   // slot on AudienceData. Surface them under the Followers scope when no
@@ -1190,6 +1231,28 @@ function PanelDemographics({
           />
         </div>
       </div>
+
+      {activeScopeHasTimeframes && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 16,
+            marginTop: -8,
+          }}
+        >
+          <span className="v-meta">Window</span>
+          {(['this_week', 'this_month', 'prev_month'] as DemographicTimeframe[]).map((tf) => (
+            <ScopeTab
+              key={tf}
+              label={TIMEFRAME_LABELS[tf]}
+              active={timeframe === tf}
+              onClick={() => setTimeframe(tf)}
+            />
+          ))}
+        </div>
+      )}
 
       <div
         className="grid"
