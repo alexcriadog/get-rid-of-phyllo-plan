@@ -57,6 +57,15 @@ const TIMEFRAME_LABELS: Record<DemographicTimeframe, string> = {
   prev_month: 'Prev month',
 };
 
+// Meta documents these as ROLLING windows, not calendar week/month —
+// surfaced as tooltips so the operator isn't confused on the 7th of
+// the month wondering whether `this_month` means May 1-7 or Apr 7-May 7.
+const TIMEFRAME_TOOLTIPS: Record<DemographicTimeframe, string> = {
+  this_week: 'Last 7 days (rolling)',
+  this_month: 'Last 30 days (rolling)',
+  prev_month: '30 to 60 days ago (the 30 days before "This month")',
+};
+
 type AccountInsights = {
   periodDays?: number;
   reach?: number;
@@ -1238,19 +1247,33 @@ function PanelDemographics({
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            marginBottom: 16,
+            marginBottom: 4,
             marginTop: -8,
+            flexWrap: 'wrap',
           }}
         >
-          <span className="v-meta">Window</span>
+          <span
+            className="v-meta"
+            title="Meta IG Graph treats these as rolling windows, not calendar week/month."
+            style={{ cursor: 'help' }}
+          >
+            Window ⓘ
+          </span>
           {(['this_week', 'this_month', 'prev_month'] as DemographicTimeframe[]).map((tf) => (
             <ScopeTab
               key={tf}
               label={TIMEFRAME_LABELS[tf]}
               active={timeframe === tf}
               onClick={() => setTimeframe(tf)}
+              title={TIMEFRAME_TOOLTIPS[tf]}
             />
           ))}
+          <span
+            className="v-meta"
+            style={{ marginLeft: 4, fontSize: 10, color: 'rgba(255,255,255,0.55)' }}
+          >
+            {TIMEFRAME_TOOLTIPS[timeframe]}
+          </span>
         </div>
       )}
 
@@ -1320,16 +1343,19 @@ function ScopeTab({
   active,
   disabled,
   onClick,
+  title,
 }: {
   label: string;
   active: boolean;
   disabled?: boolean;
   onClick: () => void;
+  title?: string;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       style={{
         all: 'unset',
         cursor: disabled ? 'not-allowed' : 'pointer',
