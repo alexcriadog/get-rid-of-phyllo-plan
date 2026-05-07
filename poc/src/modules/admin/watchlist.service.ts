@@ -265,11 +265,16 @@ export class WatchlistService {
     const snap: WatchlistSnapshot = this.shape(meta, posts, now);
 
     const col = this.mongo.getCollection(MONGO_COLLECTIONS.publicPageSnapshots);
+    // Mongo refuses if the same field appears in $set and $setOnInsert.
+    // tracked_at MUST come from $setOnInsert (first track only); strip it
+    // from the wider $set payload built by `shape()`.
+    const { tracked_at: _omit, ...rest } = snap;
+    void _omit;
     await col.updateOne(
       { page_id: snap.page_id },
       {
         $set: {
-          ...snap,
+          ...rest,
           captured_at: now,
           owner_account_id: null,
         },
