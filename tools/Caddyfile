@@ -1,7 +1,7 @@
 # Caddy config for the EC2 deploy. Auto-obtains a Let's Encrypt cert via
 # HTTP-01 challenge for the AWS hostname; renews automatically.
 
-3-89-195-248.nip.io {
+smconnector.camaleonicanalytics.com {
 	encode gzip
 
 	# POC backend exposed under /api/poc — bearer-guarded by ConnectToolGuard

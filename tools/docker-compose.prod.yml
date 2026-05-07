@@ -33,8 +33,8 @@ services:
         # Inlined into the JS bundle by `next build` — must be set HERE,
         # not below in `environment:` (compose env applies at runtime,
         # too late for Next).
-        NEXT_PUBLIC_CONNECTOR_API_URL: "https://3-89-195-248.nip.io/api/poc"
-        NEXT_PUBLIC_CONNECT_TOOL_URL: "https://3-89-195-248.nip.io/"
+        NEXT_PUBLIC_CONNECTOR_API_URL: "https://smconnector.camaleonicanalytics.com/api/poc"
+        NEXT_PUBLIC_CONNECT_TOOL_URL: "https://smconnector.camaleonicanalytics.com/"
     image: poc-web
     container_name: poc-web
     environment:
@@ -59,12 +59,12 @@ services:
         # Inlined into the JS bundle by `next build` — runtime env vars
         # are too late. Used by pages/success.tsx for the "See accounts
         # in POC" link.
-        NEXT_PUBLIC_POC_ADMIN_URL: "https://3-89-195-248.nip.io/admin"
+        NEXT_PUBLIC_POC_ADMIN_URL: "https://smconnector.camaleonicanalytics.com/admin"
     environment:
       POC_API_URL: "http://api:3000"
-      PUBLIC_BASE_URL: "https://3-89-195-248.nip.io"
-      POC_ADMIN_URL: "https://3-89-195-248.nip.io/admin"
-      NEXT_PUBLIC_POC_ADMIN_URL: "https://3-89-195-248.nip.io/admin"
+      PUBLIC_BASE_URL: "https://smconnector.camaleonicanalytics.com"
+      POC_ADMIN_URL: "https://smconnector.camaleonicanalytics.com/admin"
+      NEXT_PUBLIC_POC_ADMIN_URL: "https://smconnector.camaleonicanalytics.com/admin"
       NODE_ENV: production
     # We deliberately do NOT override ports here. The base file maps
     # 3002:3002 on 0.0.0.0; AWS Security Group blocks 3002 inbound, so
