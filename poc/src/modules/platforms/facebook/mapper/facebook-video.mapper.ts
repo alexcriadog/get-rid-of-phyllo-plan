@@ -70,7 +70,13 @@ export function mergeVideoInsights(item: ContentData, data: GraphInsight[]): voi
       insight.name === 'total_video_impressions' &&
       typeof first === 'number'
     ) {
-      item.metrics.impressions = first;
+      // Meta retired post_impressions and rebranded as "Views".
+      // total_video_views already maps to `views` above; only fall
+      // back to total_video_impressions when total_video_views was
+      // absent for this video.
+      if (item.metrics.views === undefined) {
+        item.metrics.views = first;
+      }
     } else if (
       insight.name === 'total_video_reactions_by_type_total' &&
       first !== null &&

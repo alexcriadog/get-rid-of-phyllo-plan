@@ -49,10 +49,9 @@ export function extractPostMetrics(post: FacebookPost): ContentMetrics {
   if (typeof reactionsTotal === 'number') out.likes = reactionsTotal;
   for (const insight of post.insights?.data ?? []) {
     const first = insight.values?.[0]?.value;
-    if (insight.name === 'post_impressions' && typeof first === 'number') {
-      out.impressions = first;
-      out.reach = out.reach ?? first;
-    } else if (
+    // post_impressions retired 2025-11-15. Replacement post_media_view
+    // is handled in mergePostInsights → metrics.views (not here).
+    if (
       insight.name === 'post_reactions_by_type_total' &&
       first !== null &&
       typeof first === 'object'

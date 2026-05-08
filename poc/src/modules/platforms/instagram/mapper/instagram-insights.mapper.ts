@@ -87,9 +87,8 @@ export function mapInsightsData(
       case 'views':
         out.views = first;
         break;
-      case 'impressions':
-        out.impressions = first;
-        break;
+      // IG retired post-level `impressions` in v22 — rebranded as
+      // "Views" (handled above). Legacy case removed.
       default:
         extra[entry.name] = first;
     }

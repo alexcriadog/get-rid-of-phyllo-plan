@@ -249,9 +249,9 @@ export class InstagramAudienceFetcher {
           case 'reach':
             out.reach = v;
             break;
-          case 'impressions':
-            out.impressions = v;
-            break;
+          // IG retired `impressions` in v22 (#100 metric[i] errors).
+          // Replacement is `views` — already in totalMetrics and
+          // mapped below. Dead case removed.
           case 'accounts_engaged':
             out.accountsEngaged = v;
             break;

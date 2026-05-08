@@ -91,7 +91,10 @@ export interface AccountInsightsData {
   periodDays?: number;
   // Total-value scalars (sum across the period).
   reach?: number;
-  impressions?: number;
+  // `impressions` removed — Meta retired page_impressions on
+  // 2025-11-15 and rebranded the replacement as "Views". Use the
+  // `views` field. Meta Ads API still has an `impressions` field
+  // for paid ads — surfaced separately by facebook-extras.service.
   accountsEngaged?: number;
   totalInteractions?: number;
   likes?: number;
@@ -170,7 +173,10 @@ export interface ContentMetrics {
   comments?: number;
   shares?: number;
   saves?: number;
-  impressions?: number;
+  // `impressions` removed — Meta retired post_impressions on
+  // 2025-11-15 and rebranded the replacement as "Views". Use
+  // `views` field. Ads API still surfaces impressions for paid ads
+  // separately (see facebook-extras.service ad_insights output).
   reach?: number;
   views?: number;
   /** Platform-specific metrics the canonical shape doesn't cover. */

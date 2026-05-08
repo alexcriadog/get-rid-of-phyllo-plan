@@ -55,12 +55,12 @@ export function mapStoryInsights(data: GraphInsight[]): Partial<ContentMetrics> 
       insight.values?.[0]?.value;
     if (typeof v !== 'number') continue;
     switch (insight.name) {
-      case 'page_story_impressions_by_story_id':
-        out.impressions = v;
-        break;
       case 'page_story_impressions_by_story_id_unique':
         out.reach = v;
         break;
+      // page_story_impressions_by_story_id (legacy "impressions"):
+      // falls through to extra. Canonical views come from
+      // story_media_view below.
       case 'pages_fb_story_shares':
         out.shares = v;
         break;
