@@ -312,6 +312,7 @@ export default function AccountDetail({ id, identity, audience, posts }: PagePro
 
             {aud?.accountInsights && (
               <PanelAccountInsights
+                platform={identity.platform}
                 insights={aud.accountInsights}
                 followersCount={
                   typeof identity.data?.followersCount === 'number'
@@ -533,9 +534,11 @@ function HeroStat({ label, value }: { label: string; value: string }) {
 }
 
 function PanelAccountInsights({
+  platform,
   insights,
   followersCount,
 }: {
+  platform: string;
   insights: AccountInsights;
   followersCount?: number;
 }) {
@@ -544,7 +547,7 @@ function PanelAccountInsights({
   // below). Page-level insights now surface via `views` / `reach` /
   // `accountsEngaged`.
   //
-  // Phase F: keys match `lib/instagram-metric-catalog.ts`. <MetricTile />
+  // Phase F: keys match `lib/metric-catalog.ts`. <MetricTile />
   // looks up the descriptor (label + tooltip body) by metricKey. Adding
   // a tile = adding a row to the catalog + adding a row here.
   const tiles: Array<{ metricKey: string; value: number | undefined }> = [
@@ -608,6 +611,7 @@ function PanelAccountInsights({
           {visibleTiles.map((t) => (
             <MetricTile
               key={t.metricKey}
+              platform={platform}
               metricKey={t.metricKey}
               value={t.value as number}
             />
@@ -660,6 +664,7 @@ function PanelAccountInsights({
               // we haven't catalogued yet.
               <MetricTile
                 key={k}
+                platform={platform}
                 metricKey={k}
                 value={v}
                 subtle

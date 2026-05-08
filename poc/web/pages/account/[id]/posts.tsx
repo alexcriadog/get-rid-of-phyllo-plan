@@ -1031,6 +1031,7 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
                 metricsList.map(([k, value]) => (
                   <MetricTile
                     key={k}
+                    platform={post.platform}
                     metricKey={k}
                     value={value as number}
                     labelOverride={prettyMetricLabel(k)}

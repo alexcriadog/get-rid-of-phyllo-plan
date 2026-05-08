@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { lookupMetric } from '@/lib/instagram-metric-catalog';
+import { lookupMetric } from '@/lib/metric-catalog';
 import { cn } from '@/lib/utils';
 
 type FieldSupport = 'supported' | 'empty_possible' | 'not_supported' | string;
@@ -167,10 +167,9 @@ function SupportRow({
         ? 'border-l-warn'
         : 'border-l-danger';
 
-  // Tooltip de catálogo solo para IG por ahora — el catálogo es
-  // IG-specific. Otras plataformas recuperan su tooltip cuando
-  // tengan su propio catálogo.
-  const meta = platform === 'instagram' ? lookupMetric(field) : undefined;
+  // Lookup multi-plataforma — el catálogo cubre IG, FB, YT, TT y
+  // Threads. El que no tenga descriptor cae al fallback sin tooltip.
+  const meta = lookupMetric(platform, field);
 
   const row = (
     <div

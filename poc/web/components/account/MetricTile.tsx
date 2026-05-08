@@ -23,9 +23,16 @@ import { fmtNumber } from '@/lib/format';
 import {
   type MetricDescriptor,
   lookupMetric,
-} from '@/lib/instagram-metric-catalog';
+} from '@/lib/metric-catalog';
 
 interface MetricTileProps {
+  /**
+   * Platform that owns this metric (instagram | facebook | youtube |
+   * tiktok | threads). Required so the catalog lookup picks the right
+   * descriptor — the same `metricKey` ('reach', 'views', …) means
+   * different things across platforms.
+   */
+  platform?: string;
   /** Catalog key (matches metrics.<key> in Mongo). */
   metricKey: string;
   /**
@@ -42,6 +49,7 @@ interface MetricTileProps {
 }
 
 export function MetricTile({
+  platform,
   metricKey,
   value,
   subtle,
@@ -49,7 +57,7 @@ export function MetricTile({
 }: MetricTileProps) {
   if (typeof value !== 'number') return null;
 
-  const meta = lookupMetric(metricKey);
+  const meta = lookupMetric(platform, metricKey);
   // Catalog label wins when present — that's the curated copy. Only fall
   // back to the caller's override (typically a `prettyLabel` of the raw
   // Mongo key) when the catalog has nothing.
