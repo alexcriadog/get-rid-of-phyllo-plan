@@ -167,20 +167,30 @@ function SupportRow({
         ? 'border-l-warn'
         : 'border-l-danger';
 
-  // Lookup multi-plataforma — el catálogo cubre IG, FB, YT, TT y
-  // Threads. El que no tenga descriptor cae al fallback sin tooltip.
+  // Multi-platform lookup — the catalog covers IG, FB, YT, TT and
+  // Threads. Fields without a descriptor render with no tooltip and
+  // no surface chips.
   const meta = lookupMetric(platform, field);
 
   const row = (
     <div
       className={cn(
-        'flex items-center justify-between gap-2 rounded-md border-l-[3px] bg-secondary/40 px-2.5 py-1.5',
+        'flex flex-col gap-1 rounded-md border-l-[3px] bg-secondary/40 px-2.5 py-1.5',
         accentClass,
         meta && 'cursor-help',
       )}
     >
-      <span className="font-mono text-xs text-foreground">{field}</span>
-      <Badge variant={tone}>{humanizeSupport(support)}</Badge>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-xs text-foreground">{field}</span>
+        <Badge variant={tone}>{humanizeSupport(support)}</Badge>
+      </div>
+      {meta && meta.availableOn.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {meta.availableOn.map((surface) => (
+            <SurfaceChip key={surface} surface={surface} />
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -194,14 +204,44 @@ function SupportRow({
           <div className="font-semibold">{meta.label}</div>
           <div className="opacity-90">{meta.description}</div>
           <div className="opacity-60">
-            Ventana: {meta.windowSummary} · Scope: <code>{meta.scope}</code>
+            Applies to: {meta.availableOn.join(' · ')}
+          </div>
+          <div className="opacity-60">
+            Window: {meta.windowSummary} · Scope: <code>{meta.scope}</code>
           </div>
           {meta.availableSince && (
-            <div className="opacity-60">Disponible desde: {meta.availableSince}</div>
+            <div className="opacity-60">Available since: {meta.availableSince}</div>
           )}
         </div>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/**
+ * Compact pill that shows which content surface a metric applies to.
+ * Color-coded so the eye picks up patterns (e.g. "all the green chips
+ * are reels-only metrics") without reading every label.
+ */
+function SurfaceChip({ surface }: { surface: string }) {
+  const tone: Record<string, string> = {
+    account: 'bg-info/15 text-info border-info/30',
+    feed: 'bg-primary/15 text-primary border-primary/30',
+    reels: 'bg-ok/15 text-ok border-ok/30',
+    story: 'bg-warn/15 text-warn border-warn/30',
+    video: 'bg-secondary/40 text-foreground border-border',
+    carousel: 'bg-muted-foreground/10 text-muted-foreground border-muted-foreground/30',
+  };
+  const klass = tone[surface] ?? 'bg-secondary/40 text-foreground border-border';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-sm border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em]',
+        klass,
+      )}
+    >
+      {surface}
+    </span>
   );
 }
 
