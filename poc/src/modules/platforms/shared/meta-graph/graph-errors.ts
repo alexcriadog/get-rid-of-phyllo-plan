@@ -93,7 +93,21 @@ export const EXPECTED_GRAPH_SUBCODES: ReadonlySet<number> = new Set([
 export function isExpectedGraphFailure(body: unknown): boolean {
   const e = graphErrorFromBody(body);
   if (!e) return false;
-  return e.subcode !== undefined && EXPECTED_GRAPH_SUBCODES.has(e.subcode);
+  if (e.subcode !== undefined && EXPECTED_GRAPH_SUBCODES.has(e.subcode)) {
+    return true;
+  }
+  // (#3) "Application does not have the data permission to make this API
+  // call." — Meta's silent gate on /post/insights and /story/insights
+  // for BC-managed pages where the BM owner hasn't assigned our app as
+  // a Data Source. The page/post still syncs (counts ride free on the
+  // /posts list); only the insights overlay is missing. Treat as
+  // expected so we don't tank the dashboard's success rate every cycle
+  // — the underlying gap is a config decision the page owner has to
+  // make, not a bug in our code.
+  if (e.code === 3 && /data permission/i.test(e.message)) {
+    return true;
+  }
+  return false;
 }
 
 function graphErrorFromBody(body: unknown): GraphError | null {
