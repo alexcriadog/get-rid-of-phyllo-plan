@@ -45,8 +45,9 @@ export interface MetricSpec {
  * wire order — snapshot tests in __tests__/instagram-insights.mapper.spec.ts
  * pin per-type sequences derived from this table.
  *
- * Phase A scope: only the metrics that already ship in production. Phase B/C
- * append new entries (the snapshot test catches the diff in review).
+ * Phase A: shipping baseline.
+ * Phase B: appends the metrics confirmed by docs/ig-probe-results.md against
+ * Camaleonic Analytics on Graph v22.
  */
 export const IG_MEDIA_METRICS: ReadonlyArray<MetricSpec> = [
   // `reach` is universally valid and serves as the fallback in
@@ -58,9 +59,20 @@ export const IG_MEDIA_METRICS: ReadonlyArray<MetricSpec> = [
   { name: 'comments', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'REELS'], feature: 'core' },
   { name: 'shares', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'REELS', 'STORY'], feature: 'core' },
   { name: 'total_interactions', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'REELS', 'STORY'], feature: 'core' },
-  { name: 'views', appliesTo: ['VIDEO', 'REELS'], feature: 'core' },
+  // Phase B: probe confirmed FEED CAROUSEL also accepts `views` (returned
+  // 120 on a real post). Old spec restricted this to VIDEO/REELS only.
+  { name: 'views', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'REELS'], feature: 'core' },
   { name: 'follows', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'STORY'], feature: 'core' },
   { name: 'profile_visits', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'STORY'], feature: 'core' },
+  // Phase B (REELS-only). Probe confirmed all three return real numbers.
+  // Land in metrics.extra (no canonical promotion) — non-numeric values
+  // are dropped by mapInsightsData's typeof check.
+  //   ig_reels_avg_watch_time       — average watch time per view (ms)
+  //   ig_reels_video_view_total_time — total watch time across all views (ms)
+  //   reels_skip_rate                — % viewers who skipped (0-100)
+  { name: 'ig_reels_avg_watch_time', appliesTo: ['REELS'], feature: 'core' },
+  { name: 'ig_reels_video_view_total_time', appliesTo: ['REELS'], feature: 'core' },
+  { name: 'reels_skip_rate', appliesTo: ['REELS'], feature: 'core' },
 ];
 
 export function bucketFor(media: GraphMedia): IgMediaBucket {

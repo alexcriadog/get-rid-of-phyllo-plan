@@ -54,6 +54,15 @@ export class InstagramContentFetcher {
     // Impressions-class metrics aren't here: those require the per-media
     // /insights endpoint (1 extra call per post) and are intentionally
     // opt-in. See fetchContentInsights() for that path.
+    //
+    // Phase B.2 additions (probe-confirmed, see docs/ig-probe-results.md):
+    //   shares_count, reposts_count, saved_count, total_like_count,
+    //   total_comments_count, total_views_count, boost_ads_list,
+    //   boost_eligibility_info, legacy_instagram_media_id.
+    // Probe-rejected on our scope set, kept out:
+    //   view_count (#36104 BD-only), copyright_check_information
+    //   (video-only — re-probe later), branded_content_partner (#100
+    //   retired by Meta), shopping_product_tag_eligibility (#10).
     let nextEndpoint = `/${canonicalId}/media`;
     let nextParams: Record<string, string | number | undefined> = {
       fields: [
@@ -74,6 +83,16 @@ export class InstagramContentFetcher {
         'owner{id,username}',
         'collaborators{id,username}',
         'children{id,media_type,media_url,thumbnail_url,permalink}',
+        // Phase B.2 — free on the same /media call.
+        'shares_count',
+        'reposts_count',
+        'saved_count',
+        'total_like_count',
+        'total_comments_count',
+        'total_views_count',
+        'boost_ads_list',
+        'boost_eligibility_info',
+        'legacy_instagram_media_id',
       ].join(','),
       limit: Math.min(limit, DEFAULT_PAGE_SIZE),
     };

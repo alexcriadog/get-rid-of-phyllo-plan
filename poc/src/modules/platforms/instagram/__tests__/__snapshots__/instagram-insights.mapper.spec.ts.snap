@@ -74,6 +74,8 @@ exports[`Instagram insights mapper (pinning) IG_MEDIA_METRICS spec table matches
   },
   {
     "appliesTo": [
+      "IMAGE",
+      "CAROUSEL_ALBUM",
       "VIDEO",
       "REELS",
     ],
@@ -100,6 +102,27 @@ exports[`Instagram insights mapper (pinning) IG_MEDIA_METRICS spec table matches
     "feature": "core",
     "name": "profile_visits",
   },
+  {
+    "appliesTo": [
+      "REELS",
+    ],
+    "feature": "core",
+    "name": "ig_reels_avg_watch_time",
+  },
+  {
+    "appliesTo": [
+      "REELS",
+    ],
+    "feature": "core",
+    "name": "ig_reels_video_view_total_time",
+  },
+  {
+    "appliesTo": [
+      "REELS",
+    ],
+    "feature": "core",
+    "name": "reels_skip_rate",
+  },
 ]
 `;
 
@@ -111,6 +134,7 @@ exports[`Instagram insights mapper (pinning) insightMetricsForMedia CAROUSEL_ALB
   "comments",
   "shares",
   "total_interactions",
+  "views",
   "follows",
   "profile_visits",
 ]
@@ -124,6 +148,7 @@ exports[`Instagram insights mapper (pinning) insightMetricsForMedia IMAGE 1`] = 
   "comments",
   "shares",
   "total_interactions",
+  "views",
   "follows",
   "profile_visits",
 ]
@@ -138,6 +163,9 @@ exports[`Instagram insights mapper (pinning) insightMetricsForMedia REELS 1`] = 
   "shares",
   "total_interactions",
   "views",
+  "ig_reels_avg_watch_time",
+  "ig_reels_video_view_total_time",
+  "reels_skip_rate",
 ]
 `;
 
@@ -185,6 +213,7 @@ exports[`Instagram insights mapper (pinning) insightMetricsForMedia unknown medi
   "comments",
   "shares",
   "total_interactions",
+  "views",
   "follows",
   "profile_visits",
 ]

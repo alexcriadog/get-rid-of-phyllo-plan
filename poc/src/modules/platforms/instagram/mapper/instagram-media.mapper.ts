@@ -64,8 +64,28 @@ export function mediaToContent(media: GraphMedia): ContentData {
 
 export function extractMetrics(media: GraphMedia): ContentMetrics {
   // v22 scalar fields live on the media object itself.
+  //
+  // Phase B.2: counts ride free on the /media call. fetchContentInsights()
+  // may overwrite shares/saves later via the per-media /insights endpoint
+  // (those numbers are typically equal to the free fields, but insights
+  // includes attribution detail). Setting them here means a token without
+  // `instagram_manage_insights` still produces non-zero shares/saves.
   const out: ContentMetrics = {};
   if (typeof media.like_count === 'number') out.likes = media.like_count;
   if (typeof media.comments_count === 'number') out.comments = media.comments_count;
+  if (typeof media.shares_count === 'number') out.shares = media.shares_count;
+  if (typeof media.saved_count === 'number') out.saves = media.saved_count;
+
+  // Numeric overflow fields → metrics.extra. Non-numeric overflow fields
+  // (boost_ads_list array, boost_eligibility_info object,
+  // legacy_instagram_media_id string) live only in the rawResponse blob;
+  // metrics.extra is Record<string, number> by contract.
+  const extra: Record<string, number> = {};
+  if (typeof media.reposts_count === 'number') extra.reposts = media.reposts_count;
+  if (typeof media.total_like_count === 'number') extra.total_like_count = media.total_like_count;
+  if (typeof media.total_comments_count === 'number') extra.total_comments_count = media.total_comments_count;
+  if (typeof media.total_views_count === 'number') extra.total_views_count = media.total_views_count;
+  if (Object.keys(extra).length > 0) out.extra = extra;
+
   return out;
 }

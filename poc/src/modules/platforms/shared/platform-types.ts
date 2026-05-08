@@ -18,6 +18,16 @@ export interface ProfileData {
   website?: string | null;
   category?: string | null;
   shoppingReviewStatus?: string | null;
+  /**
+   * Phase B (IG only). All optional and platform-specific.
+   *   isPublished — whether the account is published / visible.
+   *   hasProfilePic — `false` for fresh accounts that haven't set an avatar.
+   *   legacyInstagramUserId — pre-v2 IG ID; useful when migrating data
+   *     from legacy IG Graph API integrations.
+   */
+  isPublished?: boolean | null;
+  hasProfilePic?: boolean | null;
+  legacyInstagramUserId?: string | null;
   fetchedAt: Date;
 }
 

@@ -23,11 +23,16 @@ export class InstagramProfileFetcher {
     // `shopping_review_status` return 400 for any account not enrolled
     // in IG Shopping, and one bad field invalidates the whole call —
     // so we skip them. `website` is universally available.
+    //
+    // Phase B additions (probe-confirmed against Camaleonic):
+    //   is_published, has_profile_pic, legacy_instagram_user_id.
+    // shopping_product_tag_eligibility was probe-rejected (#10
+    // permission) on our scope set — kept out.
     const body = await this.client.call<Record<string, unknown>>({
       endpoint: `/${canonicalId}`,
       params: {
         fields:
-          'id,username,name,biography,profile_picture_url,followers_count,follows_count,media_count,website',
+          'id,username,name,biography,profile_picture_url,followers_count,follows_count,media_count,website,is_published,has_profile_pic,legacy_instagram_user_id',
       },
       accessToken,
       context: buildInstagramContext(accessToken, canonicalId, metadata),
@@ -47,6 +52,14 @@ export class InstagramProfileFetcher {
       verified: null,
       accountType: null,
       website: (body.website as string) ?? null,
+      isPublished:
+        typeof body.is_published === 'boolean' ? body.is_published : null,
+      hasProfilePic:
+        typeof body.has_profile_pic === 'boolean' ? body.has_profile_pic : null,
+      legacyInstagramUserId:
+        typeof body.legacy_instagram_user_id === 'string'
+          ? body.legacy_instagram_user_id
+          : null,
       fetchedAt: new Date(),
     };
   }

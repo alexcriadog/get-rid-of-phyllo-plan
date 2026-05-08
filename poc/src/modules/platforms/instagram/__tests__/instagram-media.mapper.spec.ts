@@ -136,5 +136,53 @@ describe('Instagram media mapper (pinning)', () => {
     it('neither present returns empty', () => {
       expect(extractMetrics({ id: 'x' })).toEqual({});
     });
+
+    it('Phase B.2: shares_count + saved_count promote to canonical', () => {
+      expect(
+        extractMetrics({
+          id: 'x',
+          like_count: 50,
+          comments_count: 4,
+          shares_count: 12,
+          saved_count: 7,
+        }),
+      ).toEqual({ likes: 50, comments: 4, shares: 12, saves: 7 });
+    });
+
+    it('Phase B.2: numeric overflow fields land in extra', () => {
+      expect(
+        extractMetrics({
+          id: 'x',
+          like_count: 1,
+          reposts_count: 3,
+          total_like_count: 50,
+          total_comments_count: 8,
+          total_views_count: 220,
+        }),
+      ).toEqual({
+        likes: 1,
+        extra: {
+          reposts: 3,
+          total_like_count: 50,
+          total_comments_count: 8,
+          total_views_count: 220,
+        },
+      });
+    });
+
+    it('Phase B.2: non-numeric overflow fields are ignored (stay in raw)', () => {
+      // boost_eligibility_info (object), boost_ads_list (array),
+      // legacy_instagram_media_id (string) must NOT leak into extra,
+      // which is contracted as Record<string, number>.
+      expect(
+        extractMetrics({
+          id: 'x',
+          like_count: 1,
+          boost_eligibility_info: { eligible_to_boost: true },
+          boost_ads_list: [],
+          legacy_instagram_media_id: '123',
+        }),
+      ).toEqual({ likes: 1 });
+    });
   });
 });
