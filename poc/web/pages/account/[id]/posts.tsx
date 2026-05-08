@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GetServerSideProps } from 'next';
 import { getDb } from '../../../lib/mongo';
 import { fmtRelative, fmtNumber, fmtDateTime, truncate } from '../../../lib/format';
+import { MetricTile } from '../../../components/account/MetricTile';
 import { RelativeTime } from '../../../components/RelativeTime';
 
 type PostMetrics = {
@@ -741,14 +742,18 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
   // Top-level scalar metrics + entries from metrics.extra flattened.
   // `extra` holds platform-native names like `total_interactions`,
   // `navigation`, `replies`, `profile_visits`, `ig_reels_*`.
+  // We pass the raw key to <MetricTile />; the catalog resolves the
+  // Spanish label + tooltip body. `prettyMetricLabel` lives on as the
+  // labelOverride so uncatalogued keys still render with a humanized
+  // label (no tooltip in that fallback).
   const metricsList: Array<[string, number]> = [];
   for (const [k, v] of Object.entries(metrics)) {
     if (k === 'extra') continue;
-    if (typeof v === 'number') metricsList.push([prettyMetricLabel(k), v]);
+    if (typeof v === 'number') metricsList.push([k, v]);
   }
   if (metrics.extra && typeof metrics.extra === 'object') {
     for (const [k, v] of Object.entries(metrics.extra)) {
-      if (typeof v === 'number') metricsList.push([prettyMetricLabel(k), v]);
+      if (typeof v === 'number') metricsList.push([k, v]);
     }
   }
 
@@ -1023,8 +1028,13 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
                   No metrics captured yet.
                 </div>
               ) : (
-                metricsList.map(([label, value]) => (
-                  <MetricTile key={label} label={label} value={fmtNumber(value as number)} />
+                metricsList.map(([k, value]) => (
+                  <MetricTile
+                    key={k}
+                    metricKey={k}
+                    value={value as number}
+                    labelOverride={prettyMetricLabel(k)}
+                  />
                 ))
               )}
             </div>
@@ -2218,33 +2228,6 @@ function RawDetailsBlock({ post }: { post: Post }) {
           {JSON.stringify(post, null, 2)}
         </pre>
       </details>
-    </div>
-  );
-}
-
-function MetricTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        background: '#2d2d2d',
-        borderRadius: 20,
-        padding: 16,
-      }}
-    >
-      <div className="v-meta" style={{ fontSize: 10 }}>
-        {label}
-      </div>
-      <div
-        className="v-display"
-        style={{
-          fontSize: 26,
-          lineHeight: 1,
-          marginTop: 6,
-          color: '#ffffff',
-        }}
-      >
-        {value}
-      </div>
     </div>
   );
 }

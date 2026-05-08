@@ -7,6 +7,8 @@ import { Empty } from '@/components/admin/empty';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { lookupMetric } from '@/lib/instagram-metric-catalog';
 import { cn } from '@/lib/utils';
 
 type FieldSupport = 'supported' | 'empty_possible' | 'not_supported' | string;
@@ -106,16 +108,23 @@ function PlatformGrid({
   return (
     <div className="grid gap-5 [grid-template-columns:repeat(auto-fill,minmax(320px,1fr))]">
       {products.map(([product, fields]) => (
-        <ProductPanel key={product} product={product} fields={fields} />
+        <ProductPanel
+          key={product}
+          platform={platform}
+          product={product}
+          fields={fields}
+        />
       ))}
     </div>
   );
 }
 
 function ProductPanel({
+  platform,
   product,
   fields,
 }: {
+  platform: string;
   product: string;
   fields: Record<string, FieldSupport>;
 }) {
@@ -129,14 +138,27 @@ function ProductPanel({
       </CardHeader>
       <CardContent className="flex flex-col gap-1.5 pt-0">
         {entries.map(([field, support]) => (
-          <SupportRow key={field} field={field} support={support} />
+          <SupportRow
+            key={field}
+            platform={platform}
+            field={field}
+            support={support}
+          />
         ))}
       </CardContent>
     </Card>
   );
 }
 
-function SupportRow({ field, support }: { field: string; support: FieldSupport }) {
+function SupportRow({
+  platform,
+  field,
+  support,
+}: {
+  platform: string;
+  field: string;
+  support: FieldSupport;
+}) {
   const tone = supportTone(support);
   const accentClass =
     tone === 'ok'
@@ -144,16 +166,43 @@ function SupportRow({ field, support }: { field: string; support: FieldSupport }
       : tone === 'warn'
         ? 'border-l-warn'
         : 'border-l-danger';
-  return (
+
+  // Tooltip de catálogo solo para IG por ahora — el catálogo es
+  // IG-specific. Otras plataformas recuperan su tooltip cuando
+  // tengan su propio catálogo.
+  const meta = platform === 'instagram' ? lookupMetric(field) : undefined;
+
+  const row = (
     <div
       className={cn(
         'flex items-center justify-between gap-2 rounded-md border-l-[3px] bg-secondary/40 px-2.5 py-1.5',
         accentClass,
+        meta && 'cursor-help',
       )}
     >
       <span className="font-mono text-xs text-foreground">{field}</span>
       <Badge variant={tone}>{humanizeSupport(support)}</Badge>
     </div>
+  );
+
+  if (!meta) return row;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{row}</TooltipTrigger>
+      <TooltipContent side="left" className="max-w-[280px] text-left">
+        <div className="space-y-1">
+          <div className="font-semibold">{meta.label}</div>
+          <div className="opacity-90">{meta.description}</div>
+          <div className="opacity-60">
+            Ventana: {meta.windowSummary} · Scope: <code>{meta.scope}</code>
+          </div>
+          {meta.availableSince && (
+            <div className="opacity-60">Disponible desde: {meta.availableSince}</div>
+          )}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
