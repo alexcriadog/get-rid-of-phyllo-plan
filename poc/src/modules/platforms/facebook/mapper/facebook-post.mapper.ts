@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto';
 import { MONGO_COLLECTIONS } from '@shared/database/mongo.service';
 import type {
+  ContentChild,
   ContentData,
   ContentMetrics,
   ContentType,
@@ -16,6 +17,7 @@ export function postToContent(post: FacebookPost): ContentData {
   const metrics = extractPostMetrics(post);
   const mediaUrls = extractMediaUrls(post);
   const contentType = detectPostContentType(post);
+  const children = extractCarouselChildren(post);
   const serialized = JSON.stringify(post);
   const hash = createHash('sha256').update(serialized).digest('hex');
 
@@ -29,11 +31,39 @@ export function postToContent(post: FacebookPost): ContentData {
     metrics,
     publishedAt: post.created_time ? new Date(post.created_time) : null,
     fetchedAt: new Date(),
+    children: children.length > 0 ? children : undefined,
     rawResponse: {
       collection: MONGO_COLLECTIONS.rawPlatformResponses,
       contentHash: hash,
     },
   };
+}
+
+/**
+ * Build a per-slide list for FB albums so the public UI's carousel modal
+ * can render prev/next arrows (gated on `slides.length > 1`). FB exposes
+ * carousels via the first attachment's `subattachments[]` — each one a
+ * photo or video. We map them to the canonical `ContentChild` shape that
+ * IG already populates.
+ */
+function extractCarouselChildren(post: FacebookPost): ContentChild[] {
+  const out: ContentChild[] = [];
+  const subs = post.attachments?.data?.[0]?.subattachments?.data ?? [];
+  for (const sub of subs) {
+    const mediaUrl = sub.media?.source ?? sub.media?.image?.src ?? sub.url ?? null;
+    const subType = (sub.media_type ?? sub.type ?? '').toLowerCase();
+    let kind: ContentType = 'image';
+    if (subType.includes('video')) kind = 'video';
+    else if (subType.includes('photo') || subType.includes('image')) kind = 'image';
+    out.push({
+      id: sub.target?.id ?? `${post.id}-sub-${out.length}`,
+      mediaType: kind,
+      mediaUrl,
+      thumbnailUrl: sub.media?.image?.src ?? null,
+      permalink: sub.url ?? null,
+    });
+  }
+  return out;
 }
 
 export function extractPostMetrics(post: FacebookPost): ContentMetrics {

@@ -483,35 +483,11 @@ export class AdminController {
     });
   }
 
-  // ─── YouTube OAuth helpers ────────────────────────────────────────────
-  // The POC doesn't run a full OAuth callback server (the real connector
-  // would). These two endpoints give us a manual flow:
-  //   1. GET  /admin/connect/youtube/authorize-url  → URL the user visits
-  //   2. POST /admin/connect/youtube/complete       → swap code → seed account
-
-  @Get('connect/youtube/authorize-url')
-  youtubeAuthorizeUrl(
-    @Query('include_monetary') includeMonetary?: string,
-  ): { url: string; scopes: string[] } {
-    const monetary = includeMonetary === undefined || includeMonetary === 'true';
-    return this.admin.youtubeAuthorizeUrl(monetary);
-  }
-
-  @Post('connect/youtube/complete')
-  @HttpCode(201)
-  async youtubeComplete(@Body() body: unknown): Promise<unknown> {
-    const parsed = z
-      .object({ code: z.string().min(8) })
-      .strict()
-      .safeParse(body ?? {});
-    if (!parsed.success) {
-      throw new BadRequestException({
-        message: 'Invalid youtube complete payload',
-        issues: parsed.error.issues,
-      });
-    }
-    return this.admin.youtubeCompleteOAuth(parsed.data.code);
-  }
+  // YouTube OAuth helpers used to live here. They were the manual flow
+  // for connecting a YT channel before the connect-tool went live.
+  // Removed — connect-tool now handles YT OAuth end-to-end (see
+  // connect-tool/lib/platforms.ts `youtube` PlatformDef), so the
+  // /admin/connect/youtube/* endpoints had no callers.
 
   // ─── Helpers ───────────────────────────────────────────────────────────
 

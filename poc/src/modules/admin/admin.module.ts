@@ -6,7 +6,6 @@ import { PlatformsModule } from '@modules/platforms/platforms.module';
 import { MetaGraphModule } from '@modules/platforms/shared/meta-graph/meta-graph.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
-import { OauthCallbackController } from './oauth-callback.controller';
 import { FacebookExtrasController } from './facebook-extras.controller';
 import { WatchlistController } from './watchlist.controller';
 import { WatchlistService } from './watchlist.service';
@@ -30,7 +29,6 @@ import { ConnectToolGuard } from './connect-tool.guard';
   ],
   controllers: [
     AdminController,
-    OauthCallbackController,
     FacebookExtrasController,
     WatchlistController,
   ],

@@ -5,7 +5,6 @@ import { getDb } from '../../lib/mongo';
 import { fmtNumber } from '../../lib/format';
 import { RelativeTime } from '../../components/RelativeTime';
 import { MetricTile } from '../../components/account/MetricTile';
-import { refreshAccount } from '../../lib/api';
 
 type IdentityData = {
   username?: string;
@@ -189,21 +188,9 @@ function toPlainJson(value: unknown): unknown {
 }
 
 export default function AccountDetail({ id, identity, audience, posts }: PageProps) {
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const onRefresh = async () => {
-    setRefreshing(true);
-    setError(null);
-    try {
-      const res = await refreshAccount(id);
-      if (!res.ok && res.status !== 202) throw new Error(`${res.status} ${res.statusText}`);
-      setTimeout(() => window.location.reload(), 30000);
-    } catch (e) {
-      setError((e as Error).message);
-      setRefreshing(false);
-    }
-  };
-
+  // Refresh is admin-only — see /admin/accounts → "Run now". The public
+  // page is read-only; users browse the latest snapshot the worker has
+  // produced, no manual refresh trigger from here.
   const aud = audience?.data;
 
   return (
@@ -258,43 +245,7 @@ export default function AccountDetail({ id, identity, audience, posts }: PagePro
               </Link>
             </>
           )}
-          <button className="v-pill-primary" onClick={onRefresh} disabled={refreshing}>
-            {refreshing ? 'Refreshing…' : 'Refresh now'}
-          </button>
         </header>
-
-        {error && (
-          <div
-            style={{
-              border: '1px solid #5200ff',
-              padding: 16,
-              borderRadius: 20,
-              color: '#fff',
-              marginBottom: 24,
-              fontFamily: 'var(--v-mono)',
-              fontSize: 12,
-            }}
-          >
-            ↯ refresh failed — {error}
-          </div>
-        )}
-        {refreshing && !error && (
-          <div
-            style={{
-              border: '1px solid #3cffd0',
-              padding: 16,
-              borderRadius: 20,
-              color: '#3cffd0',
-              marginBottom: 24,
-              fontFamily: 'var(--v-mono)',
-              fontSize: 12,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-            }}
-          >
-            ◉ queued — page reloads in 30s
-          </div>
-        )}
 
         {!identity ? (
           <div className="v-tile" style={{ padding: 32 }}>

@@ -46,13 +46,12 @@ exports[`Facebook post mapper (pinning) extractPostMetrics with reactions_by_typ
   "comments": 4,
   "extra": {
     "post_clicks": 75,
+    "post_impressions": 1200,
     "reaction_like": 20,
     "reaction_love": 8,
     "reaction_wow": 2,
   },
-  "impressions": 1200,
   "likes": 30,
-  "reach": 1200,
 }
 `;
 
@@ -69,8 +68,8 @@ exports[`Facebook post mapper (pinning) mergePostInsights reactions + clicks + a
     "reaction_love": 20,
     "reaction_wow": 1,
   },
-  "impressions": 5500,
   "likes": 105,
+  "views": 5500,
 }
 `;
 
@@ -80,7 +79,6 @@ exports[`Facebook post mapper (pinning) mergeVideoInsights total_video_views/_un
     "reaction_like": 100,
     "reaction_love": 40,
   },
-  "impressions": 14200,
   "likes": 140,
   "reach": 9100,
   "views": 12345,
@@ -90,6 +88,29 @@ exports[`Facebook post mapper (pinning) mergeVideoInsights total_video_views/_un
 exports[`Facebook post mapper (pinning) postToContent carousel/album post with subattachments 1`] = `
 {
   "caption": "Trip recap",
+  "children": [
+    {
+      "id": "12345_222-sub-0",
+      "mediaType": "image",
+      "mediaUrl": "https://scontent.example/c1.jpg",
+      "permalink": null,
+      "thumbnailUrl": "https://scontent.example/c1.jpg",
+    },
+    {
+      "id": "12345_222-sub-1",
+      "mediaType": "image",
+      "mediaUrl": "https://scontent.example/c2.mp4",
+      "permalink": null,
+      "thumbnailUrl": null,
+    },
+    {
+      "id": "12345_222-sub-2",
+      "mediaType": "image",
+      "mediaUrl": "https://scontent.example/c3.jpg",
+      "permalink": "https://scontent.example/c3.jpg",
+      "thumbnailUrl": null,
+    },
+  ],
   "contentType": "carousel",
   "fetchedAt": 2026-04-28T12:00:00.000Z,
   "mediaUrls": [
@@ -115,6 +136,7 @@ exports[`Facebook post mapper (pinning) postToContent carousel/album post with s
 exports[`Facebook post mapper (pinning) postToContent image post with full_picture and a single image attachment 1`] = `
 {
   "caption": "Check out this view",
+  "children": undefined,
   "contentType": "image",
   "fetchedAt": 2026-04-28T12:00:00.000Z,
   "mediaUrls": [
@@ -138,6 +160,7 @@ exports[`Facebook post mapper (pinning) postToContent image post with full_pictu
 exports[`Facebook post mapper (pinning) postToContent text-only post (no media) 1`] = `
 {
   "caption": "Just a text update.",
+  "children": undefined,
   "contentType": "other",
   "fetchedAt": 2026-04-28T12:00:00.000Z,
   "mediaUrls": [],
@@ -159,6 +182,7 @@ exports[`Facebook post mapper (pinning) postToContent text-only post (no media) 
 exports[`Facebook post mapper (pinning) postToContent video post (attachments.media_type=video, no full_picture) 1`] = `
 {
   "caption": null,
+  "children": undefined,
   "contentType": "video",
   "fetchedAt": 2026-04-28T12:00:00.000Z,
   "mediaUrls": [

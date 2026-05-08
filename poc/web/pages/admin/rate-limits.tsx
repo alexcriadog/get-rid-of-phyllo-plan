@@ -13,6 +13,7 @@ import { Section } from '@/components/admin/section';
 import { Empty } from '@/components/admin/empty';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -371,14 +372,31 @@ function BucMirrorPanel() {
       description="Live state of Meta's own rate-limit headers (X-App-Usage + X-Business-Use-Case-Usage). This is the primary gate for IG/FB calls. Threshold for deny: 75% of call_count, or any retry-after > 0."
     >
       <div className="mb-3 flex items-center gap-3">
-        <Button
-          onClick={replay}
-          disabled={busy}
-          variant="outline"
-          className="text-xs"
-        >
-          {busy ? 'Replaying…' : 'Replay last 24h from api_call_log'}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              onClick={replay}
+              disabled={busy}
+              variant="outline"
+              className="text-xs"
+            >
+              {busy ? 'Reconstruyendo…' : 'Reconstruir buckets desde logs'}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-[320px] text-left">
+            <div className="space-y-1">
+              <div className="font-semibold">¿Qué hace este botón?</div>
+              <div className="opacity-90">
+                Vuelve a calcular los rate-limit buckets de Meta (BUC) a partir
+                de los logs de llamadas API de las últimas 24 horas. Útil sólo
+                si el snapshot en Redis se perdió (ej. tras un restart del
+                contenedor) y quieres reconstruirlo sin esperar al próximo
+                sync. En operación normal no necesitas tocarlo: los buckets se
+                actualizan en cada llamada a Meta.
+              </div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
         {data?.generated_at && (
           <span className="font-mono text-[10.5px] text-muted-foreground/70">
             generated {data.generated_at}
