@@ -123,9 +123,21 @@ export class InstagramContentFetcher {
           accountId,
           media,
         );
+        // Deep-merge `extra` so Phase B.2's free /media overflow numbers
+        // (reposts, total_like_count, total_views_count, …) are preserved
+        // when enrich.extra also exists. A shallow spread would let
+        // enrich.extra clobber base.metrics.extra entirely.
+        const mergedExtra: Record<string, number> | undefined =
+          base.metrics.extra || enrich.extra
+            ? { ...(base.metrics.extra ?? {}), ...(enrich.extra ?? {}) }
+            : undefined;
         collected.push({
           ...base,
-          metrics: { ...base.metrics, ...enrich },
+          metrics: {
+            ...base.metrics,
+            ...enrich,
+            ...(mergedExtra ? { extra: mergedExtra } : {}),
+          },
         });
         if (collected.length >= limit) break;
       }
