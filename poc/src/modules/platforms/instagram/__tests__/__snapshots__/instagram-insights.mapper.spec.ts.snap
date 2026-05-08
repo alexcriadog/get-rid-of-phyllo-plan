@@ -1,5 +1,108 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`Instagram insights mapper (pinning) IG_MEDIA_METRICS spec table matches the canonical declaration (any change is intentional) 1`] = `
+[
+  {
+    "appliesTo": [
+      "IMAGE",
+      "CAROUSEL_ALBUM",
+      "VIDEO",
+      "REELS",
+      "STORY",
+    ],
+    "feature": "core",
+    "name": "reach",
+  },
+  {
+    "appliesTo": [
+      "STORY",
+    ],
+    "feature": "core",
+    "name": "replies",
+  },
+  {
+    "appliesTo": [
+      "IMAGE",
+      "CAROUSEL_ALBUM",
+      "VIDEO",
+      "REELS",
+    ],
+    "feature": "core",
+    "name": "saved",
+  },
+  {
+    "appliesTo": [
+      "IMAGE",
+      "CAROUSEL_ALBUM",
+      "VIDEO",
+      "REELS",
+    ],
+    "feature": "core",
+    "name": "likes",
+  },
+  {
+    "appliesTo": [
+      "IMAGE",
+      "CAROUSEL_ALBUM",
+      "VIDEO",
+      "REELS",
+    ],
+    "feature": "core",
+    "name": "comments",
+  },
+  {
+    "appliesTo": [
+      "IMAGE",
+      "CAROUSEL_ALBUM",
+      "VIDEO",
+      "REELS",
+      "STORY",
+    ],
+    "feature": "core",
+    "name": "shares",
+  },
+  {
+    "appliesTo": [
+      "IMAGE",
+      "CAROUSEL_ALBUM",
+      "VIDEO",
+      "REELS",
+      "STORY",
+    ],
+    "feature": "core",
+    "name": "total_interactions",
+  },
+  {
+    "appliesTo": [
+      "VIDEO",
+      "REELS",
+    ],
+    "feature": "core",
+    "name": "views",
+  },
+  {
+    "appliesTo": [
+      "IMAGE",
+      "CAROUSEL_ALBUM",
+      "VIDEO",
+      "STORY",
+    ],
+    "feature": "core",
+    "name": "follows",
+  },
+  {
+    "appliesTo": [
+      "IMAGE",
+      "CAROUSEL_ALBUM",
+      "VIDEO",
+      "STORY",
+    ],
+    "feature": "core",
+    "name": "profile_visits",
+  },
+]
+`;
+
 exports[`Instagram insights mapper (pinning) insightMetricsForMedia CAROUSEL_ALBUM 1`] = `
 [
   "reach",
@@ -89,7 +192,9 @@ exports[`Instagram insights mapper (pinning) insightMetricsForMedia unknown medi
 
 exports[`Instagram insights mapper (pinning) mapInsightsData canonical mappings (reach/saved/shares/views/impressions) 1`] = `
 {
-  "impressions": 30000,
+  "extra": {
+    "impressions": 30000,
+  },
   "reach": 12000,
   "saves": 45,
   "shares": 17,

@@ -1,69 +1,83 @@
-// Instagram insights mappers — pure functions. Phase E.
+// Instagram insights mappers — pure functions. Phase E + Phase A refactor.
 //
-// Critical: per-media-type metric sets are STRICT. Meta rejects the whole
-// batch if any metric isn't valid for the type, and breakdown-restricted
-// metrics (`profile_activity`, `navigation`) can't be combined with
-// anything else — those are fetched separately in the content fetcher.
+// Per-media metrics are declared as a single typed table (IG_MEDIA_METRICS).
+// `insightMetricsForMedia()` is a filter over that table by media bucket, so
+// adding a metric in Phase B is a one-row append. The order in the table
+// IS the wire order — snapshot tests pin per-type sequences.
+//
+// Critical Meta v22 quirks captured by the appliesTo lists:
+//   • `impressions` was REMOVED for all IG media (use `views` instead).
+//   • `saved` is valid for IMAGE/CAROUSEL/VIDEO/REELS but NOT for STORY.
+//   • `views` is valid for VIDEO/REELS, NOT IMAGE/CAROUSEL/STORY.
+//   • REELS does NOT accept `follows` / `profile_visits` / `profile_activity`.
+//   • `replies` is STORY-only.
 
 import type { ContentMetrics } from '../../shared/platform-types';
 import type { GraphMedia } from '../instagram.types';
 
-export function insightMetricsForMedia(media: GraphMedia): string[] {
-  // Graph v22 quirks:
-  //   • `impressions` was REMOVED in v22 for all IG media (use `reach` /
-  //     `views` instead).
-  //   • `saved` is valid for IMAGE/CAROUSEL/VIDEO/REELS but NOT for STORY.
-  //   • `views` is valid for VIDEO/REELS/STORY, NOT IMAGE/CAROUSEL.
-  //   • REELS does NOT accept `follows` / `profile_visits` / `profile_activity`
-  //     — those exist only on FEED and STORY.
+/**
+ * Canonical IG media bucket. Derived from `media_type` + `media_product_type`
+ * by `bucketFor()`. Used as the discriminator on every metric spec entry.
+ */
+export type IgMediaBucket =
+  | 'IMAGE'
+  | 'CAROUSEL_ALBUM'
+  | 'VIDEO'
+  | 'REELS'
+  | 'STORY';
+
+export interface MetricSpec {
+  name: string;
+  appliesTo: ReadonlyArray<IgMediaBucket>;
+  /** When set, this metric must be its own /insights call with `breakdown=…`. */
+  breakdown?: string;
+  /** When set, the call needs `metric_type=total_value`. */
+  requiresMetricType?: 'total_value';
+  /**
+   * Phase B/C maturity flag. `core` ships unconditionally; `experimental`
+   * metrics are gated behind feature flags or skipped on rejection.
+   */
+  feature?: 'core' | 'experimental';
+}
+
+/**
+ * Single source of truth for per-media insight metrics. The order is the
+ * wire order — snapshot tests in __tests__/instagram-insights.mapper.spec.ts
+ * pin per-type sequences derived from this table.
+ *
+ * Phase A scope: only the metrics that already ship in production. Phase B/C
+ * append new entries (the snapshot test catches the diff in review).
+ */
+export const IG_MEDIA_METRICS: ReadonlyArray<MetricSpec> = [
+  // `reach` is universally valid and serves as the fallback in
+  // fetchInsightsBatch when the primary set is rejected. Keep it first.
+  { name: 'reach', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'REELS', 'STORY'], feature: 'core' },
+  { name: 'replies', appliesTo: ['STORY'], feature: 'core' },
+  { name: 'saved', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'REELS'], feature: 'core' },
+  { name: 'likes', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'REELS'], feature: 'core' },
+  { name: 'comments', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'REELS'], feature: 'core' },
+  { name: 'shares', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'REELS', 'STORY'], feature: 'core' },
+  { name: 'total_interactions', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'REELS', 'STORY'], feature: 'core' },
+  { name: 'views', appliesTo: ['VIDEO', 'REELS'], feature: 'core' },
+  { name: 'follows', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'STORY'], feature: 'core' },
+  { name: 'profile_visits', appliesTo: ['IMAGE', 'CAROUSEL_ALBUM', 'VIDEO', 'STORY'], feature: 'core' },
+];
+
+export function bucketFor(media: GraphMedia): IgMediaBucket {
   const pt = (media.media_product_type ?? '').toUpperCase();
   const mt = (media.media_type ?? '').toUpperCase();
+  if (pt === 'STORY' || mt === 'STORY') return 'STORY';
+  if (pt === 'REELS') return 'REELS';
+  if (mt === 'VIDEO') return 'VIDEO';
+  if (mt === 'CAROUSEL_ALBUM') return 'CAROUSEL_ALBUM';
+  return 'IMAGE';
+}
 
-  if (pt === 'STORY' || mt === 'STORY') {
-    return [
-      'reach',
-      'replies',
-      'shares',
-      'total_interactions',
-      'follows',
-      'profile_visits',
-    ];
-  }
-  if (pt === 'REELS') {
-    return [
-      'reach',
-      'saved',
-      'likes',
-      'comments',
-      'shares',
-      'total_interactions',
-      'views',
-    ];
-  }
-  if (mt === 'VIDEO') {
-    return [
-      'reach',
-      'saved',
-      'likes',
-      'comments',
-      'shares',
-      'total_interactions',
-      'views',
-      'follows',
-      'profile_visits',
-    ];
-  }
-  // IMAGE / CAROUSEL_ALBUM / FEED
-  return [
-    'reach',
-    'saved',
-    'likes',
-    'comments',
-    'shares',
-    'total_interactions',
-    'follows',
-    'profile_visits',
-  ];
+export function insightMetricsForMedia(media: GraphMedia): string[] {
+  const bucket = bucketFor(media);
+  return IG_MEDIA_METRICS.filter(
+    (spec) => !spec.breakdown && spec.appliesTo.includes(bucket),
+  ).map((spec) => spec.name);
 }
 
 export function mapInsightsData(

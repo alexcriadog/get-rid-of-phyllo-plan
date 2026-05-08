@@ -107,6 +107,23 @@ export function isExpectedGraphFailure(body: unknown): boolean {
   if (e.code === 3 && /data permission/i.test(e.message)) {
     return true;
   }
+  // (#10) "Application does not have permission for this action" — IG/FB
+  // raise this when a scope wasn't granted on the user's token (very
+  // common when a user re-consented after we expanded the scope set, or
+  // when an agency token covers fewer permissions than ours requests).
+  // The message gate keeps token-expiry on its own path (#190 + subcode
+  // -> isTokenDeadGraphBody) so we don't risk masking those.
+  if (e.code === 10 && /permission|scope/i.test(e.message)) {
+    return true;
+  }
+  // (#200) "Permissions error" / "Instagram media manage permission
+  // required" — IG insights endpoints reject missing
+  // `instagram_manage_insights` / `instagram_manage_comments` with this
+  // code. Same reasoning as #10: scope-missing is a config decision, not
+  // a bug we should chase.
+  if (e.code === 200 && /permission|scope|insights|manage/i.test(e.message)) {
+    return true;
+  }
   return false;
 }
 

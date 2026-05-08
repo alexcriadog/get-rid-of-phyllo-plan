@@ -1,8 +1,14 @@
 /**
  * Phase E pinning tests — targets exported pure functions in
  * mapper/instagram-insights.mapper.ts.
+ *
+ * Phase A (foundation refactor) added a snapshot of the IG_MEDIA_METRICS
+ * table. The per-bucket `insightMetricsForMedia` snapshots above derive
+ * from this table; both must move together if the spec changes.
  */
 import {
+  IG_MEDIA_METRICS,
+  bucketFor,
   insightMetricsForMedia,
   mapInsightsData,
 } from '../mapper/instagram-insights.mapper';
@@ -107,6 +113,26 @@ describe('Instagram insights mapper (pinning)', () => {
       expect(
         insightMetricsForMedia({ id: 'u1', media_type: 'NEW' }),
       ).toMatchSnapshot();
+    });
+  });
+
+  describe('IG_MEDIA_METRICS spec table', () => {
+    it('matches the canonical declaration (any change is intentional)', () => {
+      expect(IG_MEDIA_METRICS).toMatchSnapshot();
+    });
+  });
+
+  describe('bucketFor', () => {
+    it.each([
+      ['STORY via product_type', { id: 'a', media_type: 'VIDEO', media_product_type: 'STORY' }, 'STORY'],
+      ['STORY via media_type', { id: 'b', media_type: 'STORY' }, 'STORY'],
+      ['REELS', { id: 'c', media_type: 'VIDEO', media_product_type: 'REELS' }, 'REELS'],
+      ['VIDEO feed', { id: 'd', media_type: 'VIDEO', media_product_type: 'FEED' }, 'VIDEO'],
+      ['IMAGE feed', { id: 'e', media_type: 'IMAGE', media_product_type: 'FEED' }, 'IMAGE'],
+      ['CAROUSEL', { id: 'f', media_type: 'CAROUSEL_ALBUM', media_product_type: 'FEED' }, 'CAROUSEL_ALBUM'],
+      ['unknown defaults to IMAGE', { id: 'g', media_type: 'NEW' }, 'IMAGE'],
+    ])('%s', (_label, media, expected) => {
+      expect(bucketFor(media)).toBe(expected);
     });
   });
 });
