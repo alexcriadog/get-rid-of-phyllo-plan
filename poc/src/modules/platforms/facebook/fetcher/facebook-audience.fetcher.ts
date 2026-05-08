@@ -57,7 +57,11 @@ export class FacebookAudienceFetcher {
     };
     const specs: MetricSpec[] = [
       { name: 'page_follows', mapTo: 'page_follows', timeSeries: true },
-      { name: 'page_media_view', mapTo: 'impressions' },
+      // v22 rebrand: page_media_view = "Views" (replaces
+      // page_impressions retired 2025-11-15).
+      // page_total_media_view_unique = "Reach" (replaces
+      // page_impressions_unique retired 2025-06-15).
+      { name: 'page_media_view', mapTo: 'views' },
       { name: 'page_total_media_view_unique', mapTo: 'reach' },
       { name: 'page_views_total', mapTo: 'profileViews' },
       { name: 'page_total_actions', mapTo: 'totalInteractions' },
@@ -93,7 +97,7 @@ export class FacebookAudienceFetcher {
     );
 
     const counters: AccountInsightsCounterMap = {
-      impressions: 0,
+      views: 0,
       reach: 0,
       profileViews: 0,
       totalInteractions: 0,
@@ -171,7 +175,7 @@ export class FacebookAudienceFetcher {
       cityDistribution,
       accountInsights: {
         periodDays: PERIOD_DAYS,
-        impressions: counters.impressions,
+        views: counters.views,
         reach: counters.reach,
         profileViews: counters.profileViews,
         totalInteractions: counters.totalInteractions,

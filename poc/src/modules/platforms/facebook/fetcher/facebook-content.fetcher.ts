@@ -263,23 +263,26 @@ export class FacebookContentFetcher {
     const isComposite = item.platformContentId.includes('_');
     if (isComposite) {
       const metrics = [
-        // Meta v22 (post-2025-11-15): post_impressions* removed,
-        // post_media_view is the replacement (rebranded "Views").
+        // Meta v22 (post-2025-11-15): post_impressions* retired.
+        // post_media_view = total views (formerly post_impressions,
+        // rebranded "Views" in Meta's UI). All post types.
         'post_media_view',
+        // post_total_media_view_unique = unique users reached
+        // (formerly post_impressions_unique, retired Jun-15-2025).
+        // Meta documents this as the canonical reach metric in v25.
+        // Returns 0 silently when read_insights scope is missing.
+        'post_total_media_view_unique',
         'post_reactions_by_type_total',
         'post_clicks_by_type',
         'post_activity_by_action_type',
         'post_video_views',
         // NB on excluded metrics:
-        //   • post_reach — verified empirically INVALID in v22 (#100
-        //     "must be a valid insights metric") even though some 2025
-        //     Meta blog posts still listed it. The whole batch fails
-        //     if a single invalid metric is included, so it would
-        //     poison every post insights call.
-        //   • post_negative_feedback / post_engaged_users are also
-        //     rejected here (documented for page-level only).
-        // Reach for FB posts is effectively gone in v22; for video
-        // posts we surface `views` from the /videos batch instead.
+        //   • post_reach / post_impressions — empirically INVALID in
+        //     v22 (#100). Including either poisons the whole batch,
+        //     so we use post_media_view + post_total_media_view_unique
+        //     above instead.
+        //   • post_negative_feedback / post_engaged_users — rejected
+        //     here (documented for page-level only).
       ].join(',');
       try {
         const body = await this.client.call<{ data?: GraphInsight[] }>({

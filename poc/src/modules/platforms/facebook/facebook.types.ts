@@ -70,7 +70,15 @@ export interface FacebookVideoMedia {
 }
 
 export type AccountInsightsCounterMap = {
-  impressions: number;
+  /**
+   * Total media views — `page_media_view` in v22 (formerly
+   * `page_impressions`, retired 2025-11-15 and rebranded as "Views").
+   */
+  views: number;
+  /**
+   * Unique users reached — `page_total_media_view_unique` in v22
+   * (formerly `page_impressions_unique`, retired 2025-06-15).
+   */
   reach: number;
   profileViews: number;
   totalInteractions: number;
