@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/router';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
 import { adminPost, CONNECTOR_API_URL } from '../../lib/api';
@@ -465,6 +466,7 @@ function ProductLegend({ products }: { products: string[] }) {
 }
 
 export default function NextRunsPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<'6h' | '24h' | '72h'>('24h');
   const horizonHours = TAB_HOURS[tab] ?? 24;
   const [runNowJob, setRunNowJob] = useState<NextRun | null>(null);
@@ -474,7 +476,14 @@ export default function NextRunsPage() {
     8000,
   );
 
-  const rows = data ?? [];
+  // Optional `?account=<id>` filter — when set (e.g. arriving from
+  // /admin/accounts → "Refresh now"), restrict the page to a single
+  // account so the operator only sees that account's sync_jobs.
+  const accountFilter =
+    typeof router.query.account === 'string' ? router.query.account : null;
+  const rows = (data ?? []).filter(
+    (r) => !accountFilter || String(r.accountId) === accountFilter,
+  );
 
   const { timelineRows, timelineEvents, startMs, endMs } = useMemo(() => {
     const now = Date.now();

@@ -179,15 +179,15 @@ export default function AccountDetailPage() {
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button
                 onClick={() =>
-                  action('refresh', () =>
-                    adminPost(`/admin/accounts/${id}/refresh-now`, {}),
-                  )
+                  // Route through /admin/next-runs?account=<id> for the
+                  // 2-step risk-check dialog (target review → risk signals
+                  // → confirm) instead of blindly POSTing refresh-now.
+                  router.push(`/admin/next-runs?account=${id}`)
                 }
-                disabled={busy === 'refresh'}
                 size="sm"
               >
-                <RefreshCw className={cn('h-4 w-4', busy === 'refresh' && 'animate-spin')} />
-                {busy === 'refresh' ? 'Refreshing…' : 'Refresh now'}
+                <RefreshCw className="h-4 w-4" />
+                Refresh now
               </Button>
               <Button
                 onClick={() =>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { Pause, Play, Plus, RefreshCw } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
@@ -53,6 +54,7 @@ const PLATFORMS = ['all', 'instagram', 'facebook'];
 const STATUSES = ['all', 'ready', 'paused', 'needs_reauth'];
 
 export default function AccountsPage() {
+  const router = useRouter();
   const { data, error, refresh } = useLive<AdminAccount[]>('/admin/accounts', 5000);
   const callsLive = useLive<ApiCall[]>('/admin/api-calls?limit=500', 5000);
   const [busy, setBusy] = useState<string | null>(null);
@@ -166,9 +168,11 @@ export default function AccountsPage() {
               recentCalls={callsByAccount.get(String(a.id)) ?? []}
               busyKey={busy}
               onRefresh={() =>
-                call(`refresh:${a.id}`, () =>
-                  adminPost(`/admin/accounts/${a.id}/refresh-now`, {}),
-                )
+                // Route through /admin/next-runs?account=<id> so the
+                // operator goes through the 2-step risk-check dialog
+                // (target review → risk signals → confirm) instead of
+                // a blind POST to refresh-now.
+                router.push(`/admin/next-runs?account=${a.id}`)
               }
               onPause={() =>
                 call(`pause:${a.id}`, () =>
