@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
 import { ArrowRight } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
-import { CONNECTOR_API_URL, adminPost } from '../../lib/api';
+import { adminPost } from '../../lib/api';
 import { fmtNumber } from '../../lib/format';
 import { Section } from '@/components/admin/section';
 import { Empty } from '@/components/admin/empty';
@@ -97,26 +96,7 @@ type SeedBody = {
 
 type DiscoverPlatform = 'facebook' | 'tiktok' | 'threads';
 
-// Result of the YouTube OAuth callback, encoded as query params on the
-// post-exchange 302 from the Nest API back to /admin/connect.
-type OauthResult =
-  | {
-      kind: 'success';
-      accountId: string;
-      channelId: string;
-      handle: string;
-      title: string;
-      subs: string;
-      videos: string;
-      views: string;
-      alreadyConnected: boolean;
-    }
-  | { kind: 'error'; message: string }
-  | null;
-
 export default function ConnectPage() {
-  const router = useRouter();
-  const [oauthResult, setOauthResult] = useState<OauthResult>(null);
   const [platform, setPlatform] = useState<DiscoverPlatform>('facebook');
   const [token, setToken] = useState('');
   const [openId, setOpenId] = useState('');
@@ -128,37 +108,6 @@ export default function ConnectPage() {
 
   const [busy, setBusy] = useState<ConnectKey | null>(null);
   const [results, setResults] = useState<Record<ConnectKey, SeedResponse | string>>({});
-
-  // YouTube OAuth callback lands back here as /admin/connect?yt=success&...
-  // (or ?yt=error&message=...). Capture the params into local state, then
-  // strip them from the URL so a refresh doesn't re-show the banner.
-  useEffect(() => {
-    if (!router.isReady) return;
-    const yt = router.query.yt;
-    if (yt === 'success') {
-      setOauthResult({
-        kind: 'success',
-        accountId: String(router.query.account_id ?? ''),
-        channelId: String(router.query.channel_id ?? ''),
-        handle: String(router.query.handle ?? ''),
-        title: String(router.query.title ?? ''),
-        subs: String(router.query.subs ?? ''),
-        videos: String(router.query.videos ?? ''),
-        views: String(router.query.views ?? ''),
-        alreadyConnected: router.query.already_connected === '1',
-      });
-      void router.replace('/admin/connect', undefined, { shallow: true });
-    } else if (yt === 'error') {
-      setOauthResult({
-        kind: 'error',
-        message: String(router.query.message ?? 'Unknown error'),
-      });
-      void router.replace('/admin/connect', undefined, { shallow: true });
-    }
-    // router.replace clears the query, which retriggers this effect with
-    // yt === undefined; the early no-op handles that case naturally.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router.isReady, router.query.yt]);
 
   const onDiscover = async () => {
     if (!token.trim()) return;
@@ -230,120 +179,6 @@ export default function ConnectPage() {
           configured bearer token. See <code>connect-tool/README.md</code> for
           the kill-switch.
         </p>
-      </Section>
-      {oauthResult?.kind === 'success' && (
-        <Section
-          title={
-            <span className="flex items-center gap-2">
-              <Badge variant="ok">
-                {oauthResult.alreadyConnected ? 'Reconnected' : 'Connected'}
-              </Badge>
-              <span>{oauthResult.title || 'YouTube channel'}</span>
-            </span>
-          }
-          description={
-            oauthResult.alreadyConnected
-              ? 'Channel was already connected — access token refreshed.'
-              : `Account ${oauthResult.accountId} seeded with 4 sync jobs (identity, audience, engagement_new, comments).`
-          }
-          actions={
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setOauthResult(null)}
-            >
-              Dismiss
-            </Button>
-          }
-        >
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
-            {[
-              ['Handle', oauthResult.handle],
-              ['Subscribers', oauthResult.subs],
-              ['Videos', oauthResult.videos],
-              ['Total views', oauthResult.views],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                  {label}
-                </dt>
-                <dd className="mt-1 font-mono text-xs">{value || '—'}</dd>
-              </div>
-            ))}
-          </dl>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {oauthResult.accountId && (
-              <Button asChild size="sm">
-                <Link href={`/admin/accounts/${oauthResult.accountId}`}>
-                  View account
-                </Link>
-              </Button>
-            )}
-            <Button asChild size="sm" variant="outline">
-              <Link href="/admin/accounts">All accounts</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/admin">Admin overview</Link>
-            </Button>
-            {oauthResult.channelId && (
-              <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-                {oauthResult.channelId}
-              </span>
-            )}
-          </div>
-        </Section>
-      )}
-
-      {oauthResult?.kind === 'error' && (
-        <Section
-          title={
-            <span className="flex items-center gap-2">
-              <Badge variant="danger">Failed</Badge>
-              <span>YouTube connection</span>
-            </span>
-          }
-          description="The OAuth callback returned an error. Check the message below and try again."
-          actions={
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setOauthResult(null)}
-            >
-              Dismiss
-            </Button>
-          }
-        >
-          <pre className="overflow-x-auto rounded-md border border-border bg-secondary/40 p-3 font-mono text-xs">
-            {oauthResult.message}
-          </pre>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Button asChild size="sm">
-              <a href={`${CONNECTOR_API_URL}/oauth/start/youtube`}>
-                Try again
-              </a>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/admin">Admin overview</Link>
-            </Button>
-          </div>
-        </Section>
-      )}
-
-      <Section
-        title="Quick connect (browser OAuth)"
-        description="One-click flow for platforms that handle OAuth in the browser. We redirect you to the provider's consent screen and seed the account + sync_jobs on return."
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <Button asChild>
-            <a href={`${CONNECTOR_API_URL}/oauth/start/youtube`}>
-              Connect YouTube
-            </a>
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Requests <code>youtube.readonly</code> + <code>yt-analytics.readonly</code> +{' '}
-            <code>yt-analytics-monetary.readonly</code>.
-          </span>
-        </div>
       </Section>
       <Section
         title="1. Discover"

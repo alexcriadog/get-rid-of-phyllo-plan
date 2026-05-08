@@ -380,19 +380,19 @@ function BucMirrorPanel() {
               variant="outline"
               className="text-xs"
             >
-              {busy ? 'Reconstruyendo…' : 'Reconstruir buckets desde logs'}
+              {busy ? 'Rebuilding…' : 'Rebuild buckets from logs'}
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-[320px] text-left">
             <div className="space-y-1">
-              <div className="font-semibold">¿Qué hace este botón?</div>
+              <div className="font-semibold">What does this button do?</div>
               <div className="opacity-90">
-                Vuelve a calcular los rate-limit buckets de Meta (BUC) a partir
-                de los logs de llamadas API de las últimas 24 horas. Útil sólo
-                si el snapshot en Redis se perdió (ej. tras un restart del
-                contenedor) y quieres reconstruirlo sin esperar al próximo
-                sync. En operación normal no necesitas tocarlo: los buckets se
-                actualizan en cada llamada a Meta.
+                Rebuilds Meta&apos;s rate-limit buckets (BUC) from the API
+                call logs of the last 24 hours. Only useful if the Redis
+                snapshot was lost (e.g. after a container restart) and you
+                want to rebuild it without waiting for the next sync. In
+                normal operation you don&apos;t need to touch it — buckets
+                update on every Meta API call.
               </div>
             </div>
           </TooltipContent>
