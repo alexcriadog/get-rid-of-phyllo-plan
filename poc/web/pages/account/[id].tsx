@@ -4,6 +4,7 @@ import type { GetServerSideProps } from 'next';
 import { getDb } from '../../lib/mongo';
 import { fmtNumber } from '../../lib/format';
 import { RelativeTime } from '../../components/RelativeTime';
+import { MetricTile } from '../../components/account/MetricTile';
 import { refreshAccount } from '../../lib/api';
 
 type IdentityData = {
@@ -542,22 +543,26 @@ function PanelAccountInsights({
   // 2025-11-15 and rebranded the replacement as "Views" (separate tile
   // below). Page-level insights now surface via `views` / `reach` /
   // `accountsEngaged`.
-  const tiles: Array<{ label: string; value: number | undefined }> = [
-    { label: 'Reach', value: insights.reach },
-    { label: 'Accounts engaged', value: insights.accountsEngaged },
-    { label: 'Total interactions', value: insights.totalInteractions },
-    { label: 'Profile views', value: insights.profileViews },
-    { label: 'Views', value: insights.views },
-    { label: 'Likes', value: insights.likes },
-    { label: 'Comments', value: insights.comments },
-    { label: 'Saves', value: insights.saves },
-    { label: 'Shares', value: insights.shares },
-    { label: 'Replies', value: insights.replies },
-    { label: 'Website clicks', value: insights.websiteClicks },
-    { label: 'Email contacts', value: insights.emailContacts },
-    { label: 'Call clicks', value: insights.phoneCallClicks },
-    { label: 'Text clicks', value: insights.textMessageClicks },
-    { label: 'Directions clicks', value: insights.getDirectionsClicks },
+  //
+  // Phase F: keys match `lib/instagram-metric-catalog.ts`. <MetricTile />
+  // looks up the descriptor (label + tooltip body) by metricKey. Adding
+  // a tile = adding a row to the catalog + adding a row here.
+  const tiles: Array<{ metricKey: string; value: number | undefined }> = [
+    { metricKey: 'reach', value: insights.reach },
+    { metricKey: 'accountsEngaged', value: insights.accountsEngaged },
+    { metricKey: 'totalInteractions', value: insights.totalInteractions },
+    { metricKey: 'profileViews', value: insights.profileViews },
+    { metricKey: 'views', value: insights.views },
+    { metricKey: 'likes', value: insights.likes },
+    { metricKey: 'comments', value: insights.comments },
+    { metricKey: 'saves', value: insights.saves },
+    { metricKey: 'shares', value: insights.shares },
+    { metricKey: 'replies', value: insights.replies },
+    { metricKey: 'websiteClicks', value: insights.websiteClicks },
+    { metricKey: 'emailContacts', value: insights.emailContacts },
+    { metricKey: 'phoneCallClicks', value: insights.phoneCallClicks },
+    { metricKey: 'textMessageClicks', value: insights.textMessageClicks },
+    { metricKey: 'getDirectionsClicks', value: insights.getDirectionsClicks },
   ];
   const visibleTiles = tiles.filter((t) => typeof t.value === 'number');
 
@@ -601,7 +606,11 @@ function PanelAccountInsights({
           }}
         >
           {visibleTiles.map((t) => (
-            <AccountKpi key={t.label} label={t.label} value={t.value as number} />
+            <MetricTile
+              key={t.metricKey}
+              metricKey={t.metricKey}
+              value={t.value as number}
+            />
           ))}
         </div>
       )}
@@ -644,7 +653,18 @@ function PanelAccountInsights({
             }}
           >
             {Object.entries(insights.extra).map(([k, v]) => (
-              <AccountKpi key={k} label={prettyLabel(k)} value={v} subtle />
+              // Phase F: MetricTile resolves catalog metadata by key when
+              // available (e.g. for the new IG metrics we add); otherwise
+              // it falls back to `labelOverride` and renders without a
+              // tooltip. Keeps the existing prettyLabel mapping for keys
+              // we haven't catalogued yet.
+              <MetricTile
+                key={k}
+                metricKey={k}
+                value={v}
+                subtle
+                labelOverride={prettyLabel(k)}
+              />
             ))}
           </div>
         </div>
@@ -653,40 +673,6 @@ function PanelAccountInsights({
   );
 }
 
-function AccountKpi({
-  label,
-  value,
-  subtle,
-}: {
-  label: string;
-  value: number;
-  subtle?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        background: subtle ? 'transparent' : '#2d2d2d',
-        border: subtle ? '1px solid rgba(255,255,255,0.15)' : 'none',
-        borderRadius: 20,
-        padding: 14,
-      }}
-    >
-      <div className="v-meta" style={{ fontSize: 10, marginBottom: 4 }}>
-        {label}
-      </div>
-      <div
-        className="v-display"
-        style={{
-          fontSize: subtle ? 22 : 28,
-          lineHeight: 1,
-          color: '#fff',
-        }}
-      >
-        {fmtNumber(value)}
-      </div>
-    </div>
-  );
-}
 
 function FollowerSparkline({
   series,
