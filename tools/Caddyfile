@@ -54,3 +54,15 @@ smconnector.camaleonicanalytics.com {
 		reverse_proxy connect-tool:3002
 	}
 }
+
+# verify-youtube — YouTube OAuth verification UI. Single-purpose throwaway
+# app served on its own subdomain (cleaner for Google's reviewer than
+# path-prefixing under smconnector.*). Tear down after Google approves:
+# remove this whole block, run `./tools/deploy.sh`, drop the DNS A record.
+yt-connector.camaleonicanalytics.com {
+	encode gzip
+
+	# All paths go to verify-youtube. The app serves its own /privacy,
+	# /terms, /verified/*, /api/oauth/*, and the favicon.
+	reverse_proxy verify-youtube:3003
+}

@@ -7,10 +7,12 @@
 node_modules/
 poc/node_modules/
 poc/web/node_modules/
+verify-youtube/node_modules/
 dist/
 poc/dist/
 poc/web/.next/
 poc/web/out/
+verify-youtube/.next/
 
 # prisma
 poc/prisma/migrations/dev.db*

@@ -2,8 +2,12 @@
 #   docker compose -f poc/docker-compose.yml -f tools/docker-compose.prod.yml up -d
 #
 # Adds:
-#   • caddy   — TLS termination + reverse proxy (host ports 80/443)
-#   • web     — POC admin dashboard (built from poc/web/Dockerfile)
+#   • caddy           — TLS termination + reverse proxy (host ports 80/443)
+#   • web             — POC admin dashboard (built from poc/web/Dockerfile)
+#   • verify-youtube  — Throwaway OAuth verification UI for Google
+#                       (yt-connector.camaleonicanalytics.com). Tear down
+#                       after verification approves: remove this service
+#                       + the Caddyfile host block.
 # Overrides:
 #   • api / worker / scheduler — run compiled JS (`node dist/src/main.js`)
 #                                instead of ts-node. ~4x less RAM.
@@ -45,6 +49,7 @@ services:
       - api
       - web
       - connect-tool
+      - verify-youtube
     restart: unless-stopped
 
   web:
@@ -94,6 +99,26 @@ services:
     # Compose merges array entries additively which would cause a "port
     # already in use" conflict if we added a 127.0.0.1:3002 mapping on
     # top of the base 0.0.0.0 one.
+
+  # ── verify-youtube — Single-purpose OAuth verification UI ──────────────
+  # Hosted at yt-connector.camaleonicanalytics.com. Only declared in this
+  # prod overlay (not in poc/docker-compose.yml) so dev/local stacks don't
+  # pull it. After Google approves the OAuth client, remove this service
+  # block and the yt-connector.* host block from tools/Caddyfile.
+  verify-youtube:
+    build:
+      context: ../verify-youtube
+      dockerfile: Dockerfile
+    image: poc-verify-youtube
+    container_name: poc-verify-youtube
+    env_file:
+      - ../verify-youtube/.env
+    environment:
+      PUBLIC_BASE_URL: "https://yt-connector.camaleonicanalytics.com"
+      NODE_ENV: production
+    expose:
+      - "3003"
+    restart: unless-stopped
 
 volumes:
   caddy_data:

@@ -1,0 +1,83 @@
+/* verify-youtube — design tokens copied from connect-tool/ so the
+   OAuth verification flow visually matches the company surface. */
+
+:root {
+  --v-canvas: #0e0e0e;
+  --v-black: #000;
+  --v-white: #ffffff;
+  --v-mint: #3cffd0;
+  --v-red: #ff3c5e;
+  --v-uv: #5200ff;
+  --v-text-muted: rgba(255, 255, 255, 0.6);
+  --v-text-subtle: rgba(255, 255, 255, 0.85);
+  --v-display: 'Anton', Impact, 'Helvetica Neue Condensed', Helvetica, sans-serif;
+  --v-sans: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --v-mono: 'Space Mono', 'IBM Plex Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--v-canvas); color: #fff; font-family: var(--v-sans); -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+
+.v-canvas { background: var(--v-canvas); min-height: 100vh; padding: 32px 16px 96px; }
+.v-shell { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.v-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.v-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 56px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.08); font-family: var(--v-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--v-text-muted); }
+.v-footer a { color: var(--v-mint); text-decoration: none; text-transform: uppercase; }
+.v-footer a:hover { text-decoration: underline; }
+
+.v-kicker { font-family: var(--v-mono); font-weight: 700; font-size: 11px; line-height: 1.2; letter-spacing: 0.16em; text-transform: uppercase; color: var(--v-text-muted); }
+.v-kicker.red { color: var(--v-red); }
+.v-kicker.mint { color: var(--v-mint); }
+.v-eyebrow { font-family: var(--v-sans); font-weight: 300; font-size: 16px; line-height: 1.2; letter-spacing: 0.1em; text-transform: uppercase; color: var(--v-text-subtle); }
+
+.v-display { font-family: var(--v-display); font-weight: 400; letter-spacing: -0.01em; line-height: 0.95; color: #fff; }
+.v-display.size-hero { font-size: clamp(48px, 7vw, 92px); margin: 0 0 16px; }
+.v-display.size-secondary { font-size: clamp(36px, 5vw, 64px); margin: 0 0 12px; }
+.v-display.size-tertiary { font-size: clamp(24px, 2.5vw, 36px); margin: 0 0 8px; }
+.v-body { font-family: var(--v-sans); font-size: 16px; line-height: 1.55; color: var(--v-text-subtle); margin: 0; }
+.v-body.muted { color: var(--v-text-muted); font-size: 14px; }
+
+.v-pill-primary, .v-pill-outline { display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: 999px; font-family: var(--v-mono); font-weight: 700; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; border: 1px solid transparent; text-decoration: none; transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease; }
+.v-pill-primary { background: var(--v-red); color: #fff; }
+.v-pill-primary:hover { background: #ff5a78; }
+.v-pill-outline { background: transparent; color: var(--v-text-subtle); border-color: rgba(255,255,255,0.18); }
+.v-pill-outline:hover { background: rgba(255,255,255,0.06); }
+
+.v-banner { padding: 12px 16px; border-radius: 12px; font-family: var(--v-mono); font-size: 12px; margin-bottom: 24px; }
+.v-banner.danger { border: 1px solid rgba(255, 60, 94, 0.5); background: rgba(255, 60, 94, 0.08); color: #ff8fa1; }
+.v-banner.info { border: 1px solid rgba(60,255,208,0.4); background: rgba(60,255,208,0.06); color: var(--v-mint); }
+
+.v-scope-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-top: 24px; }
+
+.v-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 18px; padding: 24px; }
+.v-card .v-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.v-card .v-card-scope { font-family: var(--v-mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--v-text-muted); word-break: break-all; }
+.v-card .v-card-title { font-family: var(--v-sans); font-weight: 500; font-size: 18px; color: #fff; margin: 0 0 8px; }
+.v-card .v-card-body { color: var(--v-text-subtle); font-size: 15px; line-height: 1.4; }
+
+.v-stat { display: flex; align-items: baseline; gap: 8px; margin-top: 4px; }
+.v-stat-num { font-family: var(--v-display); font-size: 36px; color: #fff; line-height: 1; }
+.v-stat-unit { font-family: var(--v-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--v-text-muted); text-transform: uppercase; }
+
+.v-table { width: 100%; border-collapse: collapse; font-family: var(--v-mono); font-size: 12px; margin-top: 8px; }
+.v-table th, .v-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.v-table th { font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--v-text-muted); }
+
+.v-user { display: flex; align-items: center; gap: 14px; }
+.v-user-avatar { width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.06); object-fit: cover; }
+.v-user-name { font-weight: 500; font-size: 17px; color: #fff; }
+.v-user-email { font-family: var(--v-mono); font-size: 12px; color: var(--v-text-muted); }
+
+.v-status { display: inline-block; padding: 3px 9px; border-radius: 999px; font-family: var(--v-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; }
+.v-status.ok { background: rgba(60,255,208,0.16); color: var(--v-mint); }
+.v-status.empty { background: rgba(255,255,255,0.06); color: var(--v-text-muted); }
+.v-status.err { background: rgba(255,60,94,0.12); color: #ff8fa1; }
+
+.v-legal-prose { max-width: 760px; margin: 0 auto; }
+.v-legal-prose h1 { font-family: var(--v-display); font-size: clamp(36px, 5vw, 64px); margin: 0 0 8px; }
+.v-legal-prose h2 { font-family: var(--v-sans); font-weight: 500; font-size: 20px; margin: 28px 0 8px; color: #fff; }
+.v-legal-prose p, .v-legal-prose li { font-family: var(--v-sans); font-size: 15px; line-height: 1.6; color: var(--v-text-subtle); }
+.v-legal-prose strong { color: #fff; }
+.v-legal-prose code { font-family: var(--v-mono); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+.v-legal-prose .v-meta-line { font-family: var(--v-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--v-text-muted); }
