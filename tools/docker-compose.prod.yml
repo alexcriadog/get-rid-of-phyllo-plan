@@ -5,10 +5,32 @@
 #   • caddy   — TLS termination + reverse proxy (host ports 80/443)
 #   • web     — POC admin dashboard (built from poc/web/Dockerfile)
 # Overrides:
+#   • api / worker / scheduler — run compiled JS (`node dist/src/main.js`)
+#                                instead of ts-node. ~4x less RAM.
 #   • connect-tool env  → uses prod base URL
 #   • connect-tool ports → bound to loopback only (Caddy reaches it via compose net)
 
 services:
+  # ── Nest services: switch from dev ts-node to compiled JS ─────────────
+  # Base compose uses ts-node + bind-mount for dev hot-reload. Prod
+  # overrides command to run the dist/ that Dockerfile produced at
+  # `npm run build` time. The base bind-mount of ./src:/app/src is harmless
+  # in prod (we read from /app/dist instead) so we leave it alone.
+  api:
+    command: ["node", "dist/src/main.js", "api"]
+    environment:
+      NODE_ENV: production
+
+  worker:
+    command: ["node", "dist/src/main.js", "worker"]
+    environment:
+      NODE_ENV: production
+
+  scheduler:
+    command: ["node", "dist/src/main.js", "scheduler"]
+    environment:
+      NODE_ENV: production
+
   caddy:
     image: caddy:2-alpine
     container_name: poc-caddy

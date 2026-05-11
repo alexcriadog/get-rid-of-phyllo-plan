@@ -1,14 +1,20 @@
 # Dockerfile for the connector PoC backend.
 #
 # ONE image, THREE services in compose (api / worker / scheduler) — they all
-# share this image and only differ in the `command:` they run inside. The
-# entry point is `node_modules/.bin/ts-node src/main.ts <mode>`.
+# share this image and only differ in the `command:` they run inside.
 #
-# Source code lives in a bind-mount in dev so editing on the host triggers
-# a fresh ts-node compile on container restart — no rebuild needed for
-# everyday work. Rebuilds are only required when:
+# Two runtime modes:
+#   • dev   — compose mounts ./src + overrides command to `ts-node src/main.ts`.
+#             Hot-reload via bind-mount; image CMD is ignored.
+#   • prod  — `tools/docker-compose.prod.yml` overrides command to
+#             `node dist/main.js <mode>`. Runs the compiled JS from `dist/`
+#             which this image builds at image-build time. ~4x less RAM than
+#             ts-node (no in-memory TS compiler / AST).
+#
+# Rebuilds are required when:
 #   - package.json / package-lock.json change   (npm ci re-runs)
 #   - prisma/schema.prisma changes              (prisma generate re-runs)
+#   - any src/** change in prod                 (npm run build re-runs)
 
 FROM node:20-alpine
 
@@ -35,14 +41,21 @@ RUN npx prisma generate
 COPY tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY src ./src
 
+# 4. Compile TypeScript → dist/. Used in prod (node dist/main.js); ignored in
+#    dev where compose overrides the command back to ts-node + bind-mount.
+RUN npm run build
+
 # Default port (api). Worker/scheduler don't bind anything.
 ENV NODE_ENV=production
 EXPOSE 3000
 
-# Use tini as PID 1 so SIGTERM propagates correctly to ts-node + Nest. That
+# Use tini as PID 1 so SIGTERM propagates correctly to Node + Nest. That
 # matters for the worker/scheduler — without it, BullMQ jobs in flight may
 # get cut without the graceful shutdown hook running.
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Default to api; compose overrides for worker/scheduler.
-CMD ["npx", "ts-node", "-r", "tsconfig-paths/register", "src/main.ts", "api"]
+# Default to api; compose overrides for worker/scheduler. Dev compose
+# overrides this entirely to use ts-node against the bind-mounted src/.
+# tsconfig.json includes prisma/seed.ts alongside src/**, so tsc preserves
+# the directory structure and emits to dist/src/main.js (not dist/main.js).
+CMD ["node", "dist/src/main.js", "api"]
