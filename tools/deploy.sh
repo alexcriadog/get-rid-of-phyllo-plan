@@ -14,7 +14,7 @@ if [[ ! -f "$PEM" ]]; then
   exit 1
 fi
 
-echo "▶ Redeploying on $HOST…"
+echo "▶ Redeploying on ${HOST}..."
 ssh -i "$PEM" -o StrictHostKeyChecking=accept-new "$HOST" \
   'bash ~/get-rid-of-phyllo/tools/redeploy.sh'
 echo "✓ Done."
