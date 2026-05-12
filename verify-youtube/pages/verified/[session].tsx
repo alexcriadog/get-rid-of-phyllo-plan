@@ -19,10 +19,17 @@ import {
   fetchMemberships,
   fetchPlaylists,
   fetchRecentVideos,
+  fetchRetentionCurve,
   fetchSubscriptions,
   fetchTopVideos28d,
   fetchTrafficSources28d,
   fetchUserinfo,
+  fetchVideoCountriesByVideo28d,
+  fetchVideoDemographicsByVideo28d,
+  fetchVideoDevicesByVideo28d,
+  fetchVideoMetricsBatch28d,
+  fetchVideoSharingByVideo28d,
+  fetchVideoTrafficByVideo28d,
   fetchViews7d,
   formatDuration,
   type ActivitySummary,
@@ -34,11 +41,18 @@ import {
   type DemographicRow,
   type DeviceRow,
   type PlaylistSummary,
+  type RetentionPoint,
   type SubscriptionSummary,
   type TopVideoRow,
   type TrafficSourceRow,
   type UserInfo,
+  type VideoCountryRow,
+  type VideoDemographicRow,
+  type VideoDeviceRow,
+  type VideoMetrics28d,
+  type VideoSharingRow,
   type VideoSummary,
+  type VideoTrafficRow,
   type ViewsByDay,
 } from '../../lib/youtube';
 import {
@@ -73,6 +87,13 @@ type PageProps = {
   geography: Outcome<CountryRow[]>;
   devices: Outcome<DeviceRow[]>;
   traffic: Outcome<TrafficSourceRow[]>;
+  videoMetricsByVideo: Outcome<Record<string, VideoMetrics28d>>;
+  videoTrafficByVideo: Outcome<Record<string, VideoTrafficRow[]>>;
+  videoCountriesByVideo: Outcome<Record<string, VideoCountryRow[]>>;
+  videoDevicesByVideo: Outcome<Record<string, VideoDeviceRow[]>>;
+  videoDemographicsByVideo: Outcome<Record<string, VideoDemographicRow[]>>;
+  videoSharingByVideo: Outcome<Record<string, VideoSharingRow[]>>;
+  topVideoRetention: Outcome<{ videoId: string; points: RetentionPoint[] } | null>;
   ads: Outcome<AdsSnapshot>;
 };
 
@@ -104,7 +125,8 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
       ? channel.data.uploadsPlaylistId
       : null;
 
-  // Second pass: everything else in parallel.
+  // Second pass: most stuff in parallel, but we need the video list first
+  // to know which IDs to batch-query for the per-video deep dive.
   const [
     videos,
     playlists,
@@ -139,6 +161,42 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
     safe(() => fetchAdsSnapshot(at), describeGoogleAdsError),
   ]);
 
+  // Third pass: per-video deep dive, batched (one call per dimension
+  // covers all videoIds via filters=video==id1,id2,...).
+  const videoIds: string[] = videos.ok ? videos.data.map((v) => v.id) : [];
+  const topVideoForRetention: string | null = topVideos.ok && topVideos.data.length > 0
+    ? topVideos.data[0].videoId
+    : videoIds[0] ?? null;
+
+  const [
+    videoMetricsByVideo,
+    videoTrafficByVideo,
+    videoCountriesByVideo,
+    videoDevicesByVideo,
+    videoDemographicsByVideo,
+    videoSharingByVideo,
+    topVideoRetention,
+  ] = await Promise.all([
+    safe(() => fetchVideoMetricsBatch28d(at, videoIds), describeGoogleError),
+    safe(() => fetchVideoTrafficByVideo28d(at, videoIds), describeGoogleError),
+    safe(() => fetchVideoCountriesByVideo28d(at, videoIds), describeGoogleError),
+    safe(() => fetchVideoDevicesByVideo28d(at, videoIds), describeGoogleError),
+    safe(() => fetchVideoDemographicsByVideo28d(at, videoIds), describeGoogleError),
+    safe(() => fetchVideoSharingByVideo28d(at, videoIds), describeGoogleError),
+    topVideoForRetention
+      ? safe(
+          async () => ({
+            videoId: topVideoForRetention,
+            points: await fetchRetentionCurve(at, topVideoForRetention),
+          }),
+          describeGoogleError,
+        )
+      : Promise.resolve<Outcome<{ videoId: string; points: RetentionPoint[] } | null>>({
+          ok: true,
+          data: null,
+        }),
+  ]);
+
   return {
     props: {
       scopesGranted: session.scopes ?? [],
@@ -157,6 +215,13 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
       geography,
       devices,
       traffic,
+      videoMetricsByVideo,
+      videoTrafficByVideo,
+      videoCountriesByVideo,
+      videoDevicesByVideo,
+      videoDemographicsByVideo,
+      videoSharingByVideo,
+      topVideoRetention,
       ads,
     },
   };
@@ -222,6 +287,16 @@ export default function Verified(props: PageProps) {
           geography={props.geography}
           devices={props.devices}
           traffic={props.traffic}
+        />
+        <PerVideoSection
+          videos={props.videos}
+          videoMetricsByVideo={props.videoMetricsByVideo}
+          videoTrafficByVideo={props.videoTrafficByVideo}
+          videoCountriesByVideo={props.videoCountriesByVideo}
+          videoDevicesByVideo={props.videoDevicesByVideo}
+          videoDemographicsByVideo={props.videoDemographicsByVideo}
+          videoSharingByVideo={props.videoSharingByVideo}
+          topVideoRetention={props.topVideoRetention}
         />
         <AdsSection ads={props.ads} />
 
@@ -895,6 +970,332 @@ function DeviceBars({ rows }: { rows: DeviceRow[] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// ─── Section: Per-video deep dive ──────────────────────────────────────
+
+function PerVideoSection(props: {
+  videos: Outcome<VideoSummary[]>;
+  videoMetricsByVideo: Outcome<Record<string, VideoMetrics28d>>;
+  videoTrafficByVideo: Outcome<Record<string, VideoTrafficRow[]>>;
+  videoCountriesByVideo: Outcome<Record<string, VideoCountryRow[]>>;
+  videoDevicesByVideo: Outcome<Record<string, VideoDeviceRow[]>>;
+  videoDemographicsByVideo: Outcome<Record<string, VideoDemographicRow[]>>;
+  videoSharingByVideo: Outcome<Record<string, VideoSharingRow[]>>;
+  topVideoRetention: Outcome<{ videoId: string; points: RetentionPoint[] } | null>;
+}) {
+  const videos = props.videos.ok ? props.videos.data : [];
+  if (videos.length === 0) {
+    return (
+      <section className="v-section">
+        <div className="v-section-head">
+          <h2 className="v-section-title">Per-video deep dive</h2>
+          <span className="v-section-scope">videos.list + analytics filters=video==…</span>
+        </div>
+        <p className="v-body muted">No videos to drill into.</p>
+      </section>
+    );
+  }
+
+  // Sort: prefer videos with 28d analytics data, otherwise keep upload order.
+  const metricsMap = props.videoMetricsByVideo.ok ? props.videoMetricsByVideo.data : {};
+  const sorted = [...videos].sort((a, b) => {
+    const va = metricsMap[a.id]?.views ?? 0;
+    const vb = metricsMap[b.id]?.views ?? 0;
+    return vb - va;
+  });
+
+  return (
+    <section className="v-section">
+      <div className="v-section-head">
+        <h2 className="v-section-title">Per-video deep dive</h2>
+        <span className="v-section-scope">
+          videos.list parts + 6 batched analytics queries (filters=video==…)
+        </span>
+      </div>
+
+      {/* Any top-level error from one of the batched calls shows once at the top. */}
+      {!props.videoMetricsByVideo.ok && (
+        <div className="v-banner danger">28d metrics: {props.videoMetricsByVideo.error}</div>
+      )}
+
+      <div className="v-scope-grid" style={{ gridTemplateColumns: '1fr', gap: 16 }}>
+        {sorted.map((v, idx) => (
+          <VideoDeepDive
+            key={v.id}
+            video={v}
+            metrics={metricsMap[v.id]}
+            traffic={props.videoTrafficByVideo.ok ? props.videoTrafficByVideo.data[v.id] : undefined}
+            countries={props.videoCountriesByVideo.ok ? props.videoCountriesByVideo.data[v.id] : undefined}
+            devices={props.videoDevicesByVideo.ok ? props.videoDevicesByVideo.data[v.id] : undefined}
+            demographics={props.videoDemographicsByVideo.ok ? props.videoDemographicsByVideo.data[v.id] : undefined}
+            sharing={props.videoSharingByVideo.ok ? props.videoSharingByVideo.data[v.id] : undefined}
+            retention={
+              idx === 0 && props.topVideoRetention.ok && props.topVideoRetention.data && props.topVideoRetention.data.videoId === v.id
+                ? props.topVideoRetention.data.points
+                : undefined
+            }
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function VideoDeepDive(props: {
+  video: VideoSummary;
+  metrics?: VideoMetrics28d;
+  traffic?: VideoTrafficRow[];
+  countries?: VideoCountryRow[];
+  devices?: VideoDeviceRow[];
+  demographics?: VideoDemographicRow[];
+  sharing?: VideoSharingRow[];
+  retention?: RetentionPoint[];
+}) {
+  const { video, metrics, traffic, countries, devices, demographics, sharing, retention } = props;
+  return (
+    <article className="v-card">
+      {/* Header */}
+      <div style={{ display: 'flex', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
+        {video.thumbnailUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={video.thumbnailUrl}
+            alt=""
+            style={{ width: 200, aspectRatio: '16/9', objectFit: 'cover', borderRadius: 8 }}
+          />
+        )}
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <h3 style={{ margin: '0 0 6px', fontSize: 18, color: '#fff' }}>{video.title}</h3>
+          <div style={{ fontFamily: 'var(--v-mono)', fontSize: 11, color: 'var(--v-text-muted)', letterSpacing: '0.08em', marginBottom: 6 }}>
+            <code>{video.id}</code> · {formatDuration(video.duration)} · {video.definition?.toUpperCase() ?? '—'} · {video.privacyStatus ?? '—'}
+            {video.publishedAt ? ` · ${formatDate(video.publishedAt)}` : ''}
+          </div>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontFamily: 'var(--v-mono)', fontSize: 12, color: 'var(--v-text-subtle)' }}>
+            <span>{formatBigNumber(video.viewCount)} views lifetime</span>
+            <span>{formatBigNumber(video.likeCount)} likes</span>
+            <span>{formatBigNumber(video.commentCount)} comments</span>
+          </div>
+          {video.tags && video.tags.length > 0 && (
+            <div className="v-tag-list" style={{ marginTop: 8 }}>
+              {video.tags.slice(0, 8).map((t) => (
+                <span key={t} className="v-tag-pill">{t}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Metadata flags + description */}
+      <dl className="v-kv-list" style={{ marginBottom: 14 }}>
+        <dt>Category</dt>
+        <dd>{video.categoryId ? <code>{video.categoryId}</code> : '—'}</dd>
+        <dt>Language</dt>
+        <dd>{video.defaultLanguage ?? '—'}{video.defaultAudioLanguage && video.defaultAudioLanguage !== video.defaultLanguage ? ` (audio: ${video.defaultAudioLanguage})` : ''}</dd>
+        <dt>Captions</dt>
+        <dd>{video.caption === 'true' ? 'Yes' : video.caption === 'false' ? 'No' : '—'}</dd>
+        <dt>Licensed</dt>
+        <dd>{video.licensedContent === undefined ? '—' : video.licensedContent ? 'Yes' : 'No'}</dd>
+        <dt>License</dt>
+        <dd>{video.license ?? '—'}</dd>
+        <dt>Embeddable</dt>
+        <dd>{video.embeddable === undefined ? '—' : video.embeddable ? 'Yes' : 'No'}</dd>
+        <dt>Public stats</dt>
+        <dd>{video.publicStatsViewable === undefined ? '—' : video.publicStatsViewable ? 'Yes' : 'No'}</dd>
+        <dt>Made for kids</dt>
+        <dd>{video.madeForKids === undefined ? '—' : video.madeForKids ? 'Yes' : 'No'}</dd>
+        <dt>Projection</dt>
+        <dd>{video.projection ?? '—'}</dd>
+        <dt>Dimension</dt>
+        <dd>{video.dimension ?? '—'}</dd>
+        <dt>Upload status</dt>
+        <dd>{video.uploadStatus ?? '—'}</dd>
+        <dt>Live state</dt>
+        <dd>{video.liveBroadcastContent ?? '—'}</dd>
+        {video.recordingDate && (<>
+          <dt>Recorded</dt>
+          <dd>{formatDate(video.recordingDate)}</dd>
+        </>)}
+        {video.recordingLocation?.latitude !== undefined && (<>
+          <dt>Location</dt>
+          <dd>
+            <code>
+              {video.recordingLocation.latitude.toFixed(4)}, {video.recordingLocation.longitude?.toFixed(4)}
+            </code>
+          </dd>
+        </>)}
+      </dl>
+
+      {video.topicCategories && video.topicCategories.length > 0 && (
+        <div className="v-tag-list" style={{ marginBottom: 14 }}>
+          {video.topicCategories.map((t) => (
+            <span key={t} className="v-tag-pill">{t.replace(/^.*\//, '')}</span>
+          ))}
+        </div>
+      )}
+
+      {video.liveStreaming && (video.liveStreaming.actualStartTime || video.liveStreaming.scheduledStartTime) && (
+        <dl className="v-kv-list" style={{ marginBottom: 14 }}>
+          {video.liveStreaming.scheduledStartTime && (<>
+            <dt>Scheduled start</dt><dd>{formatDate(video.liveStreaming.scheduledStartTime)}</dd>
+          </>)}
+          {video.liveStreaming.actualStartTime && (<>
+            <dt>Actual start</dt><dd>{formatDate(video.liveStreaming.actualStartTime)}</dd>
+          </>)}
+          {video.liveStreaming.actualEndTime && (<>
+            <dt>Actual end</dt><dd>{formatDate(video.liveStreaming.actualEndTime)}</dd>
+          </>)}
+          {video.liveStreaming.concurrentViewers && (<>
+            <dt>Concurrent viewers</dt><dd>{video.liveStreaming.concurrentViewers}</dd>
+          </>)}
+        </dl>
+      )}
+
+      {/* 28-day analytics grid */}
+      {metrics ? (
+        <>
+          <h4 style={{ fontFamily: 'var(--v-mono)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--v-text-muted)', margin: '4px 0 8px' }}>
+            Analytics — last 28 days
+          </h4>
+          <div className="v-totals-grid">
+            <Totals label="Views" value={metrics.views} />
+            <Totals label="Engaged views" value={metrics.engagedViews} />
+            <Totals label="Watch (min)" value={metrics.estimatedMinutesWatched} />
+            <Totals label="Avg view (s)" value={Math.round(metrics.averageViewDuration)} />
+            <Totals label="Avg view %" value={Math.round(metrics.averageViewPercentage)} />
+            <Totals label="Likes" value={metrics.likes} />
+            <Totals label="Dislikes" value={metrics.dislikes} />
+            <Totals label="Comments" value={metrics.comments} />
+            <Totals label="Shares" value={metrics.shares} />
+            <Totals label="Subs gained" value={metrics.subscribersGained} />
+            <Totals label="Subs lost" value={metrics.subscribersLost} />
+            <Totals label="Added to playlists" value={metrics.videosAddedToPlaylists} />
+            <Totals label="Removed from playlists" value={metrics.videosRemovedFromPlaylists} />
+            <Totals label="Card impressions" value={metrics.cardImpressions} />
+            <Totals label="Card clicks" value={metrics.cardClicks} />
+            <Totals label="Card CTR %" value={Math.round(metrics.cardClickRate * 100) / 100} />
+            <Totals label="Teaser impressions" value={metrics.cardTeaserImpressions} />
+            <Totals label="Teaser clicks" value={metrics.cardTeaserClicks} />
+            <Totals label="Teaser CTR %" value={Math.round(metrics.cardTeaserClickRate * 100) / 100} />
+            <Totals label="Annotation impressions" value={metrics.annotationImpressions} />
+            <Totals label="Annotation clicks" value={metrics.annotationClicks} />
+            <Totals label="Annotation CTR %" value={Math.round(metrics.annotationClickThroughRate * 100) / 100} />
+          </div>
+        </>
+      ) : (
+        <p className="v-body muted" style={{ marginBottom: 14 }}>
+          No 28-day analytics data for this video yet.
+        </p>
+      )}
+
+      {/* Multi-column: traffic / countries / devices */}
+      {(traffic?.length || countries?.length || devices?.length) ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginTop: 14 }}>
+          {traffic && traffic.length > 0 && (
+            <div>
+              <h4 style={{ fontFamily: 'var(--v-mono)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--v-text-muted)', margin: '0 0 6px' }}>Traffic sources</h4>
+              {traffic.slice(0, 6).map((t) => (
+                <div className="v-list-row" key={t.source} style={{ padding: '4px 0' }}>
+                  <div className="v-list-body">
+                    <div className="v-list-title" style={{ fontSize: 12 }}>{t.source}</div>
+                  </div>
+                  <span className="v-list-num">{t.views.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {countries && countries.length > 0 && (
+            <div>
+              <h4 style={{ fontFamily: 'var(--v-mono)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--v-text-muted)', margin: '0 0 6px' }}>Top countries</h4>
+              {countries.slice(0, 6).map((c) => (
+                <div className="v-list-row" key={c.country} style={{ padding: '4px 0' }}>
+                  <div className="v-list-body">
+                    <div className="v-list-title" style={{ fontSize: 12 }}>{c.country}</div>
+                  </div>
+                  <span className="v-list-num">{c.views.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {devices && devices.length > 0 && (
+            <div>
+              <h4 style={{ fontFamily: 'var(--v-mono)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--v-text-muted)', margin: '0 0 6px' }}>Devices</h4>
+              {devices.map((d) => (
+                <div className="v-list-row" key={d.deviceType} style={{ padding: '4px 0' }}>
+                  <div className="v-list-body">
+                    <div className="v-list-title" style={{ fontSize: 12 }}>{d.deviceType}</div>
+                  </div>
+                  <span className="v-list-num">{d.views.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {sharing && sharing.length > 0 && (
+            <div>
+              <h4 style={{ fontFamily: 'var(--v-mono)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--v-text-muted)', margin: '0 0 6px' }}>Sharing services</h4>
+              {sharing.slice(0, 6).map((s) => (
+                <div className="v-list-row" key={s.service} style={{ padding: '4px 0' }}>
+                  <div className="v-list-body">
+                    <div className="v-list-title" style={{ fontSize: 12 }}>{s.service}</div>
+                  </div>
+                  <span className="v-list-num">{s.shares.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {/* Demographics */}
+      {demographics && demographics.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <h4 style={{ fontFamily: 'var(--v-mono)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--v-text-muted)', margin: '0 0 6px' }}>Audience demographics</h4>
+          <DemographicsBars rows={demographics} />
+        </div>
+      )}
+
+      {/* Retention curve (only for the top video) */}
+      {retention && retention.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <h4 style={{ fontFamily: 'var(--v-mono)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--v-text-muted)', margin: '0 0 6px' }}>
+            Audience retention (audienceWatchRatio · 90d)
+          </h4>
+          <RetentionChart points={retention} />
+        </div>
+      )}
+    </article>
+  );
+}
+
+function RetentionChart({ points }: { points: RetentionPoint[] }) {
+  const W = 560;
+  const H = 100;
+  const padding = 4;
+  const max = Math.max(...points.map((p) => p.audienceWatchRatio), 1);
+  const pathD = points
+    .map((p, i) => {
+      const x = padding + p.elapsedRatio * (W - padding * 2);
+      const y = H - padding - (p.audienceWatchRatio / max) * (H - padding * 2);
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  // Simple area fill underneath the line for readability.
+  const areaD =
+    pathD +
+    ` L${(W - padding).toFixed(1)},${(H - padding).toFixed(1)} L${padding.toFixed(1)},${(H - padding).toFixed(1)} Z`;
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      style={{ width: '100%', height: H, display: 'block', background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}
+      preserveAspectRatio="none"
+    >
+      <path d={areaD} fill="rgba(60,255,208,0.12)" />
+      <path d={pathD} fill="none" stroke="var(--v-mint)" strokeWidth="1.5" />
+      {/* Axis labels */}
+      <text x={padding} y={H - 1} fontSize="9" fill="rgba(255,255,255,0.4)" fontFamily="var(--v-mono)">0%</text>
+      <text x={W - 22} y={H - 1} fontSize="9" fill="rgba(255,255,255,0.4)" fontFamily="var(--v-mono)">100%</text>
+    </svg>
   );
 }
 

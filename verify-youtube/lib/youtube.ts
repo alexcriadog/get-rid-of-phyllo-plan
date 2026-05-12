@@ -240,15 +240,35 @@ export interface VideoSummary {
   publishedAt?: string;
   duration?: string;
   definition?: string;
+  dimension?: string;
+  caption?: string;
+  licensedContent?: boolean;
+  projection?: string;
   privacyStatus?: string;
+  uploadStatus?: string;
+  embeddable?: boolean;
+  license?: string;
+  publicStatsViewable?: boolean;
   madeForKids?: boolean;
   tags?: string[];
   categoryId?: string;
   defaultLanguage?: string;
+  defaultAudioLanguage?: string;
+  liveBroadcastContent?: string;
   viewCount?: string;
   likeCount?: string;
   commentCount?: string;
   favoriteCount?: string;
+  topicCategories?: string[];
+  recordingDate?: string;
+  recordingLocation?: { latitude?: number; longitude?: number; altitude?: number };
+  liveStreaming?: {
+    actualStartTime?: string;
+    actualEndTime?: string;
+    scheduledStartTime?: string;
+    scheduledEndTime?: string;
+    concurrentViewers?: string;
+  };
 }
 
 /**
@@ -288,19 +308,47 @@ export async function fetchRecentVideos(
         tags?: string[];
         categoryId?: string;
         defaultLanguage?: string;
+        defaultAudioLanguage?: string;
+        liveBroadcastContent?: string;
       };
-      contentDetails?: { duration?: string; definition?: string };
+      contentDetails?: {
+        duration?: string;
+        definition?: string;
+        dimension?: string;
+        caption?: string;
+        licensedContent?: boolean;
+        projection?: string;
+      };
       statistics?: {
         viewCount?: string;
         likeCount?: string;
         commentCount?: string;
         favoriteCount?: string;
       };
-      status?: { privacyStatus?: string; madeForKids?: boolean };
+      status?: {
+        uploadStatus?: string;
+        privacyStatus?: string;
+        license?: string;
+        embeddable?: boolean;
+        publicStatsViewable?: boolean;
+        madeForKids?: boolean;
+      };
+      topicDetails?: { topicCategories?: string[] };
+      recordingDetails?: {
+        recordingDate?: string;
+        location?: { latitude?: number; longitude?: number; altitude?: number };
+      };
+      liveStreamingDetails?: {
+        actualStartTime?: string;
+        actualEndTime?: string;
+        scheduledStartTime?: string;
+        scheduledEndTime?: string;
+        concurrentViewers?: string;
+      };
     }>;
   }>(`${YOUTUBE_DATA}/videos`, {
     params: {
-      part: 'snippet,contentDetails,statistics,status',
+      part: 'snippet,contentDetails,statistics,status,topicDetails,recordingDetails,liveStreamingDetails',
       id: ids.join(','),
     },
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -316,15 +364,29 @@ export async function fetchRecentVideos(
     publishedAt: v.snippet?.publishedAt,
     duration: v.contentDetails?.duration,
     definition: v.contentDetails?.definition,
+    dimension: v.contentDetails?.dimension,
+    caption: v.contentDetails?.caption,
+    licensedContent: v.contentDetails?.licensedContent,
+    projection: v.contentDetails?.projection,
     privacyStatus: v.status?.privacyStatus,
+    uploadStatus: v.status?.uploadStatus,
+    embeddable: v.status?.embeddable,
+    license: v.status?.license,
+    publicStatsViewable: v.status?.publicStatsViewable,
     madeForKids: v.status?.madeForKids,
     tags: v.snippet?.tags,
     categoryId: v.snippet?.categoryId,
     defaultLanguage: v.snippet?.defaultLanguage,
+    defaultAudioLanguage: v.snippet?.defaultAudioLanguage,
+    liveBroadcastContent: v.snippet?.liveBroadcastContent,
     viewCount: v.statistics?.viewCount,
     likeCount: v.statistics?.likeCount,
     commentCount: v.statistics?.commentCount,
     favoriteCount: v.statistics?.favoriteCount,
+    topicCategories: v.topicDetails?.topicCategories,
+    recordingDate: v.recordingDetails?.recordingDate,
+    recordingLocation: v.recordingDetails?.location,
+    liveStreaming: v.liveStreamingDetails,
   }));
 }
 
@@ -868,6 +930,352 @@ export async function fetchChannelTotals28d(
     videosAddedToPlaylists: num('videosAddedToPlaylists'),
     videosRemovedFromPlaylists: num('videosRemovedFromPlaylists'),
   };
+}
+
+// ─── yt-analytics.readonly: per-video deep dive (batched) ──────────────
+//
+// Each fetcher takes a list of video IDs and returns a map keyed by
+// videoId. The Analytics API accepts up to 500 IDs in `filters=video==`
+// (comma-separated, no braces) so we never need to paginate.
+
+export interface VideoMetrics28d {
+  views: number;
+  estimatedMinutesWatched: number;
+  averageViewDuration: number;
+  averageViewPercentage: number;
+  likes: number;
+  dislikes: number;
+  comments: number;
+  shares: number;
+  subscribersGained: number;
+  subscribersLost: number;
+  videosAddedToPlaylists: number;
+  videosRemovedFromPlaylists: number;
+  engagedViews: number;
+  cardImpressions: number;
+  cardClicks: number;
+  cardClickRate: number;
+  cardTeaserImpressions: number;
+  cardTeaserClicks: number;
+  cardTeaserClickRate: number;
+  annotationImpressions: number;
+  annotationClicks: number;
+  annotationClickThroughRate: number;
+}
+
+const VIDEO_METRICS_28D = [
+  'views',
+  'estimatedMinutesWatched',
+  'averageViewDuration',
+  'averageViewPercentage',
+  'likes',
+  'dislikes',
+  'comments',
+  'shares',
+  'subscribersGained',
+  'subscribersLost',
+  'videosAddedToPlaylists',
+  'videosRemovedFromPlaylists',
+  'engagedViews',
+  'cardImpressions',
+  'cardClicks',
+  'cardClickRate',
+  'cardTeaserImpressions',
+  'cardTeaserClicks',
+  'cardTeaserClickRate',
+  'annotationImpressions',
+  'annotationClicks',
+  'annotationClickThroughRate',
+] as const;
+
+export async function fetchVideoMetricsBatch28d(
+  accessToken: string,
+  videoIds: string[],
+): Promise<Record<string, VideoMetrics28d>> {
+  if (videoIds.length === 0) return {};
+  const { startDate, endDate } = lastNDays(28);
+  const res = await axios.get<{
+    rows?: Array<Array<string | number>>;
+    columnHeaders?: Array<{ name: string }>;
+  }>(`${YOUTUBE_ANALYTICS}/reports`, {
+    params: {
+      ids: 'channel==MINE',
+      startDate,
+      endDate,
+      metrics: VIDEO_METRICS_28D.join(','),
+      dimensions: 'video',
+      filters: `video==${videoIds.join(',')}`,
+    },
+    headers: { Authorization: `Bearer ${accessToken}` },
+    timeout: 20_000,
+  });
+  const headers = (res.data.columnHeaders ?? []).map((h) => h.name);
+  const idx = (name: string): number => headers.indexOf(name);
+  const out: Record<string, VideoMetrics28d> = {};
+  for (const row of res.data.rows ?? []) {
+    const vid = String(row[idx('video')] ?? '');
+    if (!vid) continue;
+    const num = (name: string): number => {
+      const i = idx(name);
+      return i >= 0 ? Number(row[i] ?? 0) : 0;
+    };
+    out[vid] = {
+      views: num('views'),
+      estimatedMinutesWatched: num('estimatedMinutesWatched'),
+      averageViewDuration: num('averageViewDuration'),
+      averageViewPercentage: num('averageViewPercentage'),
+      likes: num('likes'),
+      dislikes: num('dislikes'),
+      comments: num('comments'),
+      shares: num('shares'),
+      subscribersGained: num('subscribersGained'),
+      subscribersLost: num('subscribersLost'),
+      videosAddedToPlaylists: num('videosAddedToPlaylists'),
+      videosRemovedFromPlaylists: num('videosRemovedFromPlaylists'),
+      engagedViews: num('engagedViews'),
+      cardImpressions: num('cardImpressions'),
+      cardClicks: num('cardClicks'),
+      cardClickRate: num('cardClickRate'),
+      cardTeaserImpressions: num('cardTeaserImpressions'),
+      cardTeaserClicks: num('cardTeaserClicks'),
+      cardTeaserClickRate: num('cardTeaserClickRate'),
+      annotationImpressions: num('annotationImpressions'),
+      annotationClicks: num('annotationClicks'),
+      annotationClickThroughRate: num('annotationClickThroughRate'),
+    };
+  }
+  return out;
+}
+
+export interface VideoTrafficRow {
+  source: string;
+  views: number;
+  estimatedMinutesWatched: number;
+}
+
+export async function fetchVideoTrafficByVideo28d(
+  accessToken: string,
+  videoIds: string[],
+): Promise<Record<string, VideoTrafficRow[]>> {
+  if (videoIds.length === 0) return {};
+  const { startDate, endDate } = lastNDays(28);
+  const res = await axios.get<{
+    rows?: Array<[string, string, number, number]>;
+  }>(`${YOUTUBE_ANALYTICS}/reports`, {
+    params: {
+      ids: 'channel==MINE',
+      startDate,
+      endDate,
+      metrics: 'views,estimatedMinutesWatched',
+      dimensions: 'video,insightTrafficSourceType',
+      filters: `video==${videoIds.join(',')}`,
+      sort: '-views',
+      maxResults: 200,
+    },
+    headers: { Authorization: `Bearer ${accessToken}` },
+    timeout: 20_000,
+  });
+  const out: Record<string, VideoTrafficRow[]> = {};
+  for (const [video, source, views, minutes] of res.data.rows ?? []) {
+    const vid = String(video);
+    (out[vid] ?? (out[vid] = [])).push({
+      source: String(source),
+      views: Number(views ?? 0),
+      estimatedMinutesWatched: Number(minutes ?? 0),
+    });
+  }
+  return out;
+}
+
+export interface VideoCountryRow {
+  country: string;
+  views: number;
+  estimatedMinutesWatched: number;
+}
+
+export async function fetchVideoCountriesByVideo28d(
+  accessToken: string,
+  videoIds: string[],
+): Promise<Record<string, VideoCountryRow[]>> {
+  if (videoIds.length === 0) return {};
+  const { startDate, endDate } = lastNDays(28);
+  const res = await axios.get<{
+    rows?: Array<[string, string, number, number]>;
+  }>(`${YOUTUBE_ANALYTICS}/reports`, {
+    params: {
+      ids: 'channel==MINE',
+      startDate,
+      endDate,
+      metrics: 'views,estimatedMinutesWatched',
+      dimensions: 'video,country',
+      filters: `video==${videoIds.join(',')}`,
+      sort: '-views',
+      maxResults: 200,
+    },
+    headers: { Authorization: `Bearer ${accessToken}` },
+    timeout: 20_000,
+  });
+  const out: Record<string, VideoCountryRow[]> = {};
+  for (const [video, country, views, minutes] of res.data.rows ?? []) {
+    const vid = String(video);
+    (out[vid] ?? (out[vid] = [])).push({
+      country: String(country),
+      views: Number(views ?? 0),
+      estimatedMinutesWatched: Number(minutes ?? 0),
+    });
+  }
+  return out;
+}
+
+export interface VideoDeviceRow {
+  deviceType: string;
+  views: number;
+  estimatedMinutesWatched: number;
+}
+
+export async function fetchVideoDevicesByVideo28d(
+  accessToken: string,
+  videoIds: string[],
+): Promise<Record<string, VideoDeviceRow[]>> {
+  if (videoIds.length === 0) return {};
+  const { startDate, endDate } = lastNDays(28);
+  const res = await axios.get<{
+    rows?: Array<[string, string, number, number]>;
+  }>(`${YOUTUBE_ANALYTICS}/reports`, {
+    params: {
+      ids: 'channel==MINE',
+      startDate,
+      endDate,
+      metrics: 'views,estimatedMinutesWatched',
+      dimensions: 'video,deviceType',
+      filters: `video==${videoIds.join(',')}`,
+      sort: '-views',
+      maxResults: 200,
+    },
+    headers: { Authorization: `Bearer ${accessToken}` },
+    timeout: 20_000,
+  });
+  const out: Record<string, VideoDeviceRow[]> = {};
+  for (const [video, deviceType, views, minutes] of res.data.rows ?? []) {
+    const vid = String(video);
+    (out[vid] ?? (out[vid] = [])).push({
+      deviceType: String(deviceType),
+      views: Number(views ?? 0),
+      estimatedMinutesWatched: Number(minutes ?? 0),
+    });
+  }
+  return out;
+}
+
+export interface VideoDemographicRow {
+  ageGroup: string;
+  gender: string;
+  viewerPercentage: number;
+}
+
+export async function fetchVideoDemographicsByVideo28d(
+  accessToken: string,
+  videoIds: string[],
+): Promise<Record<string, VideoDemographicRow[]>> {
+  if (videoIds.length === 0) return {};
+  const { startDate, endDate } = lastNDays(28);
+  const res = await axios.get<{
+    rows?: Array<[string, string, string, number]>;
+  }>(`${YOUTUBE_ANALYTICS}/reports`, {
+    params: {
+      ids: 'channel==MINE',
+      startDate,
+      endDate,
+      metrics: 'viewerPercentage',
+      dimensions: 'video,ageGroup,gender',
+      filters: `video==${videoIds.join(',')}`,
+    },
+    headers: { Authorization: `Bearer ${accessToken}` },
+    timeout: 20_000,
+  });
+  const out: Record<string, VideoDemographicRow[]> = {};
+  for (const [video, ageGroup, gender, percent] of res.data.rows ?? []) {
+    const vid = String(video);
+    (out[vid] ?? (out[vid] = [])).push({
+      ageGroup: String(ageGroup),
+      gender: String(gender),
+      viewerPercentage: Number(percent ?? 0),
+    });
+  }
+  return out;
+}
+
+export interface VideoSharingRow {
+  service: string;
+  shares: number;
+}
+
+export async function fetchVideoSharingByVideo28d(
+  accessToken: string,
+  videoIds: string[],
+): Promise<Record<string, VideoSharingRow[]>> {
+  if (videoIds.length === 0) return {};
+  const { startDate, endDate } = lastNDays(28);
+  const res = await axios.get<{ rows?: Array<[string, string, number]> }>(
+    `${YOUTUBE_ANALYTICS}/reports`,
+    {
+      params: {
+        ids: 'channel==MINE',
+        startDate,
+        endDate,
+        metrics: 'shares',
+        dimensions: 'video,sharingService',
+        filters: `video==${videoIds.join(',')}`,
+        sort: '-shares',
+        maxResults: 200,
+      },
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 20_000,
+    },
+  );
+  const out: Record<string, VideoSharingRow[]> = {};
+  for (const [video, service, shares] of res.data.rows ?? []) {
+    const vid = String(video);
+    (out[vid] ?? (out[vid] = [])).push({
+      service: String(service),
+      shares: Number(shares ?? 0),
+    });
+  }
+  return out;
+}
+
+export interface RetentionPoint {
+  elapsedRatio: number;
+  audienceWatchRatio: number;
+  relativeRetentionPerformance: number;
+}
+
+export async function fetchRetentionCurve(
+  accessToken: string,
+  videoId: string,
+): Promise<RetentionPoint[]> {
+  const { startDate, endDate } = lastNDays(90);
+  const res = await axios.get<{ rows?: Array<[number, number, number]> }>(
+    `${YOUTUBE_ANALYTICS}/reports`,
+    {
+      params: {
+        ids: 'channel==MINE',
+        startDate,
+        endDate,
+        metrics: 'audienceWatchRatio,relativeRetentionPerformance',
+        dimensions: 'elapsedVideoTimeRatio',
+        filters: `video==${videoId};audienceType==ORGANIC`,
+        sort: 'elapsedVideoTimeRatio',
+      },
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 20_000,
+    },
+  );
+  return (res.data.rows ?? []).map(([elapsed, watch, perf]) => ({
+    elapsedRatio: Number(elapsed),
+    audienceWatchRatio: Number(watch ?? 0),
+    relativeRetentionPerformance: Number(perf ?? 0),
+  }));
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────
