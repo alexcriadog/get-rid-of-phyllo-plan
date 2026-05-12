@@ -263,11 +263,82 @@ const FB_SCOPES = [
   'read_insights',
 ];
 
+// Per-platform default product lists. Must mirror accounts.service.ts
+// `PRODUCTS_BY_PLATFORM` — kept here so the seed has zero dependency on
+// the Nest module graph. When a new product is added, update both files.
+const PRODUCTS_BY_PLATFORM_FOR_BACKFILL: Record<string, string[]> = {
+  instagram: ['identity', 'audience', 'engagement_new', 'stories'],
+  facebook: [
+    'identity',
+    'audience',
+    'engagement_new',
+    'stories',
+    'mentions',
+    'comments',
+    'ratings',
+    'ads',
+  ],
+  tiktok: ['identity', 'audience', 'engagement_new', 'comments'],
+  threads: ['identity', 'audience', 'engagement_new', 'comments', 'mentions'],
+  youtube: [
+    'identity',
+    'audience',
+    'engagement_new',
+    'engagement_deep',
+    'comments',
+    'ads',
+  ],
+};
+
+/**
+ * Backfill SyncJob rows for accounts that pre-date a product addition.
+ * Idempotent — uses prisma.syncJob.upsert against the (accountId, product)
+ * composite unique. Safe to run on every deploy.
+ */
+async function backfillSyncJobs(): Promise<{ created: number; existing: number }> {
+  const now = new Date();
+  let created = 0;
+  let existing = 0;
+  const accounts = await prisma.account.findMany({
+    select: { id: true, platform: true },
+  });
+  for (const acc of accounts) {
+    const products = PRODUCTS_BY_PLATFORM_FOR_BACKFILL[acc.platform];
+    if (!products) continue;
+    for (const product of products) {
+      const exists = await prisma.syncJob.findUnique({
+        where: { accountId_product: { accountId: acc.id, product } },
+        select: { id: true },
+      });
+      if (exists) {
+        existing += 1;
+        continue;
+      }
+      await prisma.syncJob.create({
+        data: {
+          accountId: acc.id,
+          product,
+          status: 'idle',
+          priority: 'NORMAL',
+          nextRunAt: now,
+        },
+      });
+      created += 1;
+    }
+  }
+  return { created, existing };
+}
+
 async function main(): Promise<void> {
   console.log('[seed] Starting Prisma seed (PoC Day 1)…');
 
   const cadenceCount = await seedCadences();
   console.log(`[seed] Upserted ${cadenceCount} cadence rows.`);
+
+  const backfill = await backfillSyncJobs();
+  console.log(
+    `[seed] SyncJob backfill: created ${backfill.created} new, ${backfill.existing} already existed.`,
+  );
 
   const seedPlatform = (process.env.SEED_PLATFORM ?? '').toLowerCase();
 

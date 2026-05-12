@@ -28,6 +28,14 @@ log "Reconciling Prisma schema…"
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
   npx prisma db push --accept-data-loss 2>&1 | tail -3 || true
 
+# Apply data seed (Cadence defaults + SyncJob backfill for new products).
+# Idempotent via upserts; safe to run on every deploy. Without this step
+# new products like engagement_deep / ads never get cadence rows in prod
+# and the scheduler can't pick them up.
+log "Running Prisma seed (cadences + sync_jobs backfill)…"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
+  npm run seed 2>&1 | tail -10 || true
+
 # Caddy bind-mounts the Caddyfile but doesn't auto-reload on file changes.
 # `docker compose up -d` won't restart the container unless its compose
 # definition changed. Force a restart so Caddyfile edits propagate.
