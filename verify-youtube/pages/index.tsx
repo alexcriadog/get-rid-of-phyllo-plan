@@ -82,8 +82,11 @@ export default function Index({ errorBanner, ready }: PageProps) {
               content.
             </li>
             <li>
-              <strong>Monetization metrics</strong> (estimated revenue, CPM, ad
-              impressions) — to show you the revenue side of your own content.
+              <strong>YouTube ad campaigns</strong> (video views, view rate,
+              cost-per-view, spend) — to show the performance of the YouTube
+              video advertising campaigns you yourself run, via the Google
+              Ads API. Read-only — we cannot create, modify, or pause
+              campaigns.
             </li>
             <li>
               <strong>Your Google email and basic profile</strong> — to identify

@@ -1,5 +1,5 @@
 // Página que enseña al revisor de Google que cada scope solicitado se
-// usa de verdad. SSR llama a los 4 endpoints en paralelo con el
+// usa de verdad. SSR llama a cada endpoint en paralelo con el
 // access_token recién obtenido. Si algún scope falla, lo reportamos en
 // la tarjeta correspondiente sin tirar la página entera.
 
@@ -10,25 +10,36 @@ import { getSession } from '../../lib/session';
 import {
   describeGoogleError,
   fetchChannel,
-  fetchRevenue7d,
   fetchUserinfo,
   fetchViews7d,
   type ChannelSnapshot,
-  type RevenueSummary,
   type UserInfo,
   type ViewsByDay,
 } from '../../lib/youtube';
+import {
+  describeGoogleAdsError,
+  fetchAccessibleCustomers,
+  fetchVideoCampaigns30d,
+  type AccessibleCustomer,
+  type VideoCampaignReport,
+} from '../../lib/google-ads';
 
 type Outcome<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
+
+interface AdsSnapshot {
+  customers: AccessibleCustomer[];
+  /** First customer's video campaign report, null if no customers. */
+  primary: VideoCampaignReport | null;
+}
 
 type PageProps = {
   scopesGranted: string[];
   userinfo: Outcome<UserInfo>;
   channel: Outcome<ChannelSnapshot | null>;
   views: Outcome<ViewsByDay>;
-  revenue: Outcome<RevenueSummary>;
+  ads: Outcome<AdsSnapshot>;
 };
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
@@ -47,11 +58,11 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
   }
 
   const accessToken = session.accessToken;
-  const [userinfo, channel, views, revenue] = await Promise.all([
-    safe(() => fetchUserinfo(accessToken)),
-    safe(() => fetchChannel(accessToken)),
-    safe(() => fetchViews7d(accessToken)),
-    safe(() => fetchRevenue7d(accessToken)),
+  const [userinfo, channel, views, ads] = await Promise.all([
+    safe(() => fetchUserinfo(accessToken), describeGoogleError),
+    safe(() => fetchChannel(accessToken), describeGoogleError),
+    safe(() => fetchViews7d(accessToken), describeGoogleError),
+    safe(() => fetchAdsSnapshot(accessToken), describeGoogleAdsError),
   ]);
 
   // We don't drop the session here — the reviewer may want to refresh the
@@ -63,17 +74,31 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
       userinfo,
       channel,
       views,
-      revenue,
+      ads,
     },
   };
 };
 
-async function safe<T>(fn: () => Promise<T>): Promise<Outcome<T>> {
+async function safe<T>(
+  fn: () => Promise<T>,
+  describe: (err: unknown) => string,
+): Promise<Outcome<T>> {
   try {
     return { ok: true, data: await fn() };
   } catch (err) {
-    return { ok: false, error: describeGoogleError(err) };
+    return { ok: false, error: describe(err) };
   }
+}
+
+async function fetchAdsSnapshot(accessToken: string): Promise<AdsSnapshot> {
+  const customers = await fetchAccessibleCustomers(accessToken);
+  if (customers.length === 0) {
+    return { customers, primary: null };
+  }
+  // Demo: query the first accessible customer. Real product would let
+  // the user pick which account to view.
+  const primary = await fetchVideoCampaigns30d(accessToken, customers[0].id);
+  return { customers, primary };
 }
 
 export default function Verified({
@@ -81,7 +106,7 @@ export default function Verified({
   userinfo,
   channel,
   views,
-  revenue,
+  ads,
 }: PageProps) {
   return (
     <div className="v-canvas">
@@ -189,6 +214,11 @@ export default function Verified({
             status={
               views.ok ? (views.data.rows.length > 0 ? 'ok' : 'empty') : 'err'
             }
+            statusLabel={
+              views.ok && views.data.rows.length === 0
+                ? 'No views'
+                : undefined
+            }
           >
             {!views.ok && <ErrorBlock message={views.error} />}
             {views.ok && views.data.rows.length === 0 && (
@@ -224,53 +254,100 @@ export default function Verified({
             )}
           </ScopeDemoCard>
 
-          {/* yt-analytics-monetary.readonly */}
+          {/* adwords — Google Ads API */}
           <ScopeDemoCard
-            title="Revenue — last 7 days"
-            scope="https://www.googleapis.com/auth/yt-analytics-monetary.readonly"
+            title="YouTube ad campaigns — last 30 days"
+            scope="https://www.googleapis.com/auth/adwords"
             status={
-              revenue.ok
-                ? revenue.data.hasMonetizationData
+              ads.ok
+                ? ads.data.primary && ads.data.primary.rows.length > 0
                   ? 'ok'
                   : 'empty'
                 : 'err'
             }
             statusLabel={
-              revenue.ok && !revenue.data.hasMonetizationData
-                ? 'Not monetized'
-                : undefined
+              ads.ok && ads.data.customers.length === 0
+                ? 'No Ads accounts'
+                : ads.ok &&
+                    ads.data.primary &&
+                    ads.data.primary.rows.length === 0
+                  ? 'No video campaigns'
+                  : undefined
             }
           >
-            {!revenue.ok && <ErrorBlock message={revenue.error} />}
-            {revenue.ok && !revenue.data.hasMonetizationData && (
+            {!ads.ok && <ErrorBlock message={ads.error} />}
+            {ads.ok && ads.data.customers.length === 0 && (
               <p className="v-body muted">
-                Channel is not in the YouTube Partner Program, or has no
-                monetization data in the window. The endpoint returned 200
-                with an empty body, which confirms the scope is granted.
+                This Google account has no Google Ads accounts associated.
+                The <code>listAccessibleCustomers</code> call returned an
+                empty list — which confirms the <code>adwords</code> scope
+                is granted and the developer token is valid.
               </p>
             )}
-            {revenue.ok && revenue.data.hasMonetizationData && (
-              <>
-                <div className="v-stat">
-                  <span className="v-stat-num">
-                    {revenue.data.estimatedRevenue.toFixed(2)}
-                  </span>
-                  <span className="v-stat-unit">USD est. · 7d</span>
-                </div>
-                <p className="v-body muted" style={{ marginTop: 6 }}>
-                  {revenue.data.averageCpm !== null
-                    ? `CPM ${revenue.data.averageCpm.toFixed(2)} USD · `
-                    : ''}
-                  {revenue.data.monetizedPlaybacks !== null
-                    ? `${revenue.data.monetizedPlaybacks.toLocaleString()} monetized playbacks · `
-                    : ''}
-                  {revenue.data.adImpressions !== null
-                    ? `${revenue.data.adImpressions.toLocaleString()} ad impressions`
-                    : ''}
+            {ads.ok &&
+              ads.data.customers.length > 0 &&
+              ads.data.primary &&
+              ads.data.primary.rows.length === 0 && (
+                <p className="v-body muted">
+                  Connected to Google Ads customer{' '}
+                  <code>{ads.data.primary.customerId}</code>. No video
+                  campaigns served in the last 30 days. (
+                  {ads.data.customers.length}{' '}
+                  {ads.data.customers.length === 1 ? 'account' : 'accounts'}{' '}
+                  accessible.)
                 </p>
-              </>
-            )}
+              )}
+            {ads.ok &&
+              ads.data.primary &&
+              ads.data.primary.rows.length > 0 && (
+                <>
+                  <p className="v-body muted" style={{ marginBottom: 6 }}>
+                    Customer <code>{ads.data.primary.customerId}</code>
+                    {ads.data.customers.length > 1
+                      ? ` · ${ads.data.customers.length} accounts accessible`
+                      : ''}
+                  </p>
+                  <div className="v-stat">
+                    <span className="v-stat-num">
+                      {ads.data.primary.totalViews.toLocaleString()}
+                    </span>
+                    <span className="v-stat-unit">video views · 30d</span>
+                  </div>
+                  <p className="v-body muted" style={{ marginTop: 4 }}>
+                    Spend: ${ads.data.primary.totalCostUsd.toFixed(2)} USD
+                  </p>
+                  <table className="v-table">
+                    <thead>
+                      <tr>
+                        <th>Campaign</th>
+                        <th style={{ textAlign: 'right' }}>Views</th>
+                        <th style={{ textAlign: 'right' }}>Avg CPV</th>
+                        <th style={{ textAlign: 'right' }}>Spend</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ads.data.primary.rows.slice(0, 10).map((c) => (
+                        <tr key={c.campaignId}>
+                          <td title={c.status}>{c.campaignName}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            {c.videoViews.toLocaleString()}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {c.averageCpvUsd !== null
+                              ? `$${c.averageCpvUsd.toFixed(3)}`
+                              : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            ${c.costUsd.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
           </ScopeDemoCard>
+
         </section>
 
         <footer className="v-footer">

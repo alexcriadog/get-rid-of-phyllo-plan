@@ -14,6 +14,9 @@ poc/web/.next/
 poc/web/out/
 verify-youtube/.next/
 
+# Generated PDFs (regenerate from .md with `npx md-to-pdf`)
+verify-youtube/docs/*.pdf
+
 # prisma
 poc/prisma/migrations/dev.db*
 *.sqlite

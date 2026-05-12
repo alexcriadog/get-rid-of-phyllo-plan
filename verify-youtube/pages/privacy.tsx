@@ -62,9 +62,11 @@ export default function Privacy() {
               audience demographics, traffic sources).
             </li>
             <li>
-              <code>yt-analytics-monetary.readonly</code> — to read revenue
-              metrics for the connected channel&rsquo;s own content (estimated
-              revenue, CPM, monetized playbacks, ad impressions).
+              <code>adwords</code> (Google Ads API) — to read the connected
+              user&rsquo;s <strong>video advertising campaigns on YouTube</strong>{' '}
+              (campaign name, video views, view rate, average cost-per-view,
+              total spend) for the campaigns the user themselves runs. We do
+              not create, modify, or pause campaigns.
             </li>
           </ul>
           <p>

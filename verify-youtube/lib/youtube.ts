@@ -21,7 +21,9 @@ export const YT_SCOPES = [
   'https://www.googleapis.com/auth/userinfo.profile',
   'https://www.googleapis.com/auth/youtube.readonly',
   'https://www.googleapis.com/auth/yt-analytics.readonly',
-  'https://www.googleapis.com/auth/yt-analytics-monetary.readonly',
+  // Google Ads — lets us read the connected user's video campaign metrics.
+  // Requires GOOGLE_ADS_DEVELOPER_TOKEN to actually make API calls.
+  'https://www.googleapis.com/auth/adwords',
 ] as const;
 
 // ─── Authorize URL ─────────────────────────────────────────────────────
@@ -199,58 +201,6 @@ export async function fetchViews7d(accessToken: string): Promise<ViewsByDay> {
   }));
   const totalViews = rows.reduce((acc, r) => acc + r.views, 0);
   return { rows, totalViews };
-}
-
-// ─── yt-analytics-monetary.readonly: revenue last 7 days ───────────────
-
-export interface RevenueSummary {
-  estimatedRevenue: number;
-  averageCpm: number | null;
-  monetizedPlaybacks: number | null;
-  adImpressions: number | null;
-  /** Channels without monetization return empty rows; we keep that signal. */
-  hasMonetizationData: boolean;
-}
-
-export async function fetchRevenue7d(
-  accessToken: string,
-): Promise<RevenueSummary> {
-  const { startDate, endDate } = lastNDays(7);
-  const res = await axios.get<{
-    rows?: Array<number[]>;
-    columnHeaders?: Array<{ name: string }>;
-  }>(`${YOUTUBE_ANALYTICS}/reports`, {
-    params: {
-      ids: 'channel==MINE',
-      startDate,
-      endDate,
-      metrics:
-        'estimatedRevenue,cpm,monetizedPlaybacks,adImpressions',
-    },
-    headers: { Authorization: `Bearer ${accessToken}` },
-    timeout: 15_000,
-  });
-  const headers = (res.data.columnHeaders ?? []).map((h) => h.name);
-  const row = res.data.rows?.[0];
-  if (!row) {
-    return {
-      estimatedRevenue: 0,
-      averageCpm: null,
-      monetizedPlaybacks: null,
-      adImpressions: null,
-      hasMonetizationData: false,
-    };
-  }
-  const idx = (name: string): number => headers.indexOf(name);
-  const num = (i: number): number | null =>
-    i >= 0 && row[i] !== undefined ? Number(row[i]) : null;
-  return {
-    estimatedRevenue: num(idx('estimatedRevenue')) ?? 0,
-    averageCpm: num(idx('cpm')),
-    monetizedPlaybacks: num(idx('monetizedPlaybacks')),
-    adImpressions: num(idx('adImpressions')),
-    hasMonetizationData: true,
-  };
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────
