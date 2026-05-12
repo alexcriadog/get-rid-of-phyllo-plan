@@ -248,6 +248,7 @@ async function fetchAdsSnapshot(accessToken: string): Promise<AdsSnapshot> {
 // ─── Page component ────────────────────────────────────────────────────
 
 export default function Verified(props: PageProps) {
+  const diag = computeDiagnostics(props);
   return (
     <div className="v-canvas">
       <div className="v-shell">
@@ -259,8 +260,10 @@ export default function Verified(props: PageProps) {
         <h1 className="v-display size-secondary">You&rsquo;re connected.</h1>
         <p className="v-body" style={{ maxWidth: 720 }}>
           Live snapshot of every data surface unlocked by the OAuth scopes
-          you just granted. Each card maps to a specific scope and exercises
-          its endpoints end-to-end.
+          you just granted. Each card exercises its endpoints end-to-end —
+          when one says &ldquo;no data&rdquo; it means Google returned 200 with an
+          empty body (small audience, no monetisation, no test token, etc.).
+          Use the &ldquo;Show raw&rdquo; toggles below to inspect the actual payloads.
         </p>
 
         {props.scopesGranted.length > 0 && (
@@ -269,6 +272,16 @@ export default function Verified(props: PageProps) {
           </div>
         )}
 
+        <nav className="v-nav" style={{ marginTop: 24 }}>
+          <a href="#diagnostics">Diagnostics</a>
+          <a href="#identity">Identity</a>
+          <a href="#youtube">YouTube</a>
+          <a href="#analytics">Analytics</a>
+          <a href="#per-video">Per-video</a>
+          <a href="#ads">Google Ads</a>
+        </nav>
+
+        <DiagnosticsSection diag={diag} />
         <IdentitySection userinfo={props.userinfo} />
         <YouTubeSection
           channel={props.channel}
@@ -320,11 +333,106 @@ export default function Verified(props: PageProps) {
   );
 }
 
+// ─── Section: Diagnostics ──────────────────────────────────────────────
+
+interface DiagEntry {
+  label: string;
+  endpoint: string;
+  status: 'ok' | 'empty' | 'err';
+  count: number;
+  error?: string;
+}
+
+function computeDiagnostics(p: PageProps): DiagEntry[] {
+  const e = <T,>(
+    out: Outcome<T>,
+    label: string,
+    endpoint: string,
+    counter: (data: T) => number,
+  ): DiagEntry => {
+    if (!out.ok) return { label, endpoint, status: 'err', count: 0, error: out.error };
+    const count = counter(out.data);
+    return { label, endpoint, status: count > 0 ? 'ok' : 'empty', count };
+  };
+  return [
+    e(p.userinfo, 'Identity', 'openidconnect/v1/userinfo', () => 1),
+    e(p.channel, 'Channel', 'channels.list?mine=true', (c) => (c ? 1 : 0)),
+    e(p.videos, 'Recent videos', 'playlistItems + videos.list', (v) => v.length),
+    e(p.playlists, 'Playlists', 'playlists.list?mine=true', (v) => v.length),
+    e(p.subscriptions, 'Subscriptions', 'subscriptions.list?mine=true', (v) => v.length),
+    e(p.broadcasts, 'Live broadcasts', 'liveBroadcasts.list?mine=true', (v) => v.length),
+    e(p.memberships, 'Memberships', 'membershipsLevels + members', (m) =>
+      m.enabled ? m.memberCount + m.levels.length : 0,
+    ),
+    e(p.activities, 'Activities', 'activities.list?mine=true', (v) => v.length),
+    e(p.totals28d, 'Channel totals 28d', 'analytics:reports (10 metrics)', (t) => (t.views > 0 ? 1 : 0)),
+    e(p.views, 'Views 7d', 'analytics:reports?dim=day', (v) => v.rows.length),
+    e(p.topVideos, 'Top videos 28d', 'analytics:reports?dim=video', (v) => v.length),
+    e(p.demographics, 'Demographics 28d', 'analytics:reports?dim=ageGroup,gender', (v) => v.length),
+    e(p.geography, 'Geography 28d', 'analytics:reports?dim=country', (v) => v.length),
+    e(p.devices, 'Devices 28d', 'analytics:reports?dim=deviceType', (v) => v.length),
+    e(p.traffic, 'Traffic sources 28d', 'analytics:reports?dim=insightTrafficSourceType', (v) => v.length),
+    e(p.videoMetricsByVideo, 'Per-video metrics 28d', 'analytics:reports?dim=video filters=...', (m) => Object.keys(m).length),
+    e(p.videoTrafficByVideo, 'Per-video traffic', 'analytics:reports?dim=video,trafficSource', (m) => Object.keys(m).length),
+    e(p.videoCountriesByVideo, 'Per-video countries', 'analytics:reports?dim=video,country', (m) => Object.keys(m).length),
+    e(p.videoDevicesByVideo, 'Per-video devices', 'analytics:reports?dim=video,deviceType', (m) => Object.keys(m).length),
+    e(p.videoDemographicsByVideo, 'Per-video demographics', 'analytics:reports?dim=video,ageGroup,gender', (m) => Object.keys(m).length),
+    e(p.videoSharingByVideo, 'Per-video sharing', 'analytics:reports?dim=video,sharingService', (m) => Object.keys(m).length),
+    e(p.topVideoRetention, 'Retention curve (top video)', 'analytics:reports?dim=elapsedVideoTimeRatio', (r) => (r ? r.points.length : 0)),
+    e(p.ads, 'Google Ads campaigns', 'listAccessibleCustomers + googleAds:search', (a) =>
+      a.primary ? a.primary.rows.length : a.customers.length,
+    ),
+  ];
+}
+
+function DiagnosticsSection({ diag }: { diag: DiagEntry[] }) {
+  const ok = diag.filter((d) => d.status === 'ok').length;
+  const empty = diag.filter((d) => d.status === 'empty').length;
+  const err = diag.filter((d) => d.status === 'err').length;
+  return (
+    <section id="diagnostics" className="v-section">
+      <div className="v-section-head">
+        <h2 className="v-section-title">Diagnostics</h2>
+        <span className="v-section-scope">
+          {ok} returned data · {empty} returned empty · {err} errored
+        </span>
+      </div>
+      <div className="v-scope-grid">
+        <div className="v-card">
+          <div className="v-card-body">
+            <p className="v-body muted" style={{ marginBottom: 12 }}>
+              Every endpoint we hit on your behalf, what it returned, and
+              the row count. Empty entries are <strong>not bugs</strong> —
+              they mean the API responded 200 with zero rows. Common
+              reasons: channel is too small for audience aggregates,
+              feature not enabled (memberships, monetisation), or no
+              activity in the time window.
+            </p>
+            <div className="v-diag">
+              {diag.map((d) => (
+                <div className="v-diag-row" key={d.label} title={d.error ?? d.endpoint}>
+                  <span className={`v-diag-icon ${d.status}`}>
+                    {d.status === 'ok' ? '✓' : d.status === 'empty' ? '○' : '!'}
+                  </span>
+                  <span className="v-diag-label">{d.label}</span>
+                  <span className="v-diag-count">
+                    {d.status === 'err' ? 'error' : `${d.count} ${d.count === 1 ? 'row' : 'rows'}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ─── Section: Identity (OIDC) ──────────────────────────────────────────
 
 function IdentitySection({ userinfo }: { userinfo: Outcome<UserInfo> }) {
   return (
-    <section className="v-section">
+    <section id="identity" className="v-section">
       <div className="v-section-head">
         <h2 className="v-section-title">Identity</h2>
         <span className="v-section-scope">openid · userinfo.email · userinfo.profile</span>
@@ -387,7 +495,7 @@ function YouTubeSection(props: {
 }) {
   const { channel, videos, playlists, subscriptions, broadcasts, memberships, activities } = props;
   return (
-    <section className="v-section">
+    <section id="youtube" className="v-section">
       <div className="v-section-head">
         <h2 className="v-section-title">YouTube channel</h2>
         <span className="v-section-scope">youtube.readonly</span>
@@ -704,7 +812,7 @@ function AnalyticsSection(props: {
 }) {
   const { totals28d, views, topVideos, demographics, geography, devices, traffic } = props;
   return (
-    <section className="v-section">
+    <section id="analytics" className="v-section">
       <div className="v-section-head">
         <h2 className="v-section-title">YouTube Analytics</h2>
         <span className="v-section-scope">yt-analytics.readonly</span>
@@ -988,7 +1096,7 @@ function PerVideoSection(props: {
   const videos = props.videos.ok ? props.videos.data : [];
   if (videos.length === 0) {
     return (
-      <section className="v-section">
+      <section id="per-video" className="v-section">
         <div className="v-section-head">
           <h2 className="v-section-title">Per-video deep dive</h2>
           <span className="v-section-scope">videos.list + analytics filters=video==…</span>
@@ -1007,7 +1115,7 @@ function PerVideoSection(props: {
   });
 
   return (
-    <section className="v-section">
+    <section id="per-video" className="v-section">
       <div className="v-section-head">
         <h2 className="v-section-title">Per-video deep dive</h2>
         <span className="v-section-scope">
@@ -1020,10 +1128,11 @@ function PerVideoSection(props: {
         <div className="v-banner danger">28d metrics: {props.videoMetricsByVideo.error}</div>
       )}
 
-      <div className="v-scope-grid" style={{ gridTemplateColumns: '1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
         {sorted.map((v, idx) => (
           <VideoDeepDive
             key={v.id}
+            defaultOpen={idx === 0}
             video={v}
             metrics={metricsMap[v.id]}
             traffic={props.videoTrafficByVideo.ok ? props.videoTrafficByVideo.data[v.id] : undefined}
@@ -1044,6 +1153,7 @@ function PerVideoSection(props: {
 }
 
 function VideoDeepDive(props: {
+  defaultOpen?: boolean;
   video: VideoSummary;
   metrics?: VideoMetrics28d;
   traffic?: VideoTrafficRow[];
@@ -1053,39 +1163,62 @@ function VideoDeepDive(props: {
   sharing?: VideoSharingRow[];
   retention?: RetentionPoint[];
 }) {
-  const { video, metrics, traffic, countries, devices, demographics, sharing, retention } = props;
+  const { defaultOpen, video, metrics, traffic, countries, devices, demographics, sharing, retention } = props;
+  const hasAnalytics =
+    !!metrics ||
+    !!(traffic && traffic.length) ||
+    !!(countries && countries.length) ||
+    !!(devices && devices.length) ||
+    !!(demographics && demographics.length) ||
+    !!(sharing && sharing.length) ||
+    !!(retention && retention.length);
   return (
-    <article className="v-card">
-      {/* Header */}
-      <div style={{ display: 'flex', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
-        {video.thumbnailUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={video.thumbnailUrl}
-            alt=""
-            style={{ width: 200, aspectRatio: '16/9', objectFit: 'cover', borderRadius: 8 }}
-          />
-        )}
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <h3 style={{ margin: '0 0 6px', fontSize: 18, color: '#fff' }}>{video.title}</h3>
-          <div style={{ fontFamily: 'var(--v-mono)', fontSize: 11, color: 'var(--v-text-muted)', letterSpacing: '0.08em', marginBottom: 6 }}>
-            <code>{video.id}</code> · {formatDuration(video.duration)} · {video.definition?.toUpperCase() ?? '—'} · {video.privacyStatus ?? '—'}
-            {video.publishedAt ? ` · ${formatDate(video.publishedAt)}` : ''}
-          </div>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontFamily: 'var(--v-mono)', fontSize: 12, color: 'var(--v-text-subtle)' }}>
-            <span>{formatBigNumber(video.viewCount)} views lifetime</span>
-            <span>{formatBigNumber(video.likeCount)} likes</span>
-            <span>{formatBigNumber(video.commentCount)} comments</span>
-          </div>
-          {video.tags && video.tags.length > 0 && (
-            <div className="v-tag-list" style={{ marginTop: 8 }}>
-              {video.tags.slice(0, 8).map((t) => (
-                <span key={t} className="v-tag-pill">{t}</span>
-              ))}
-            </div>
+    <details className="v-detail" open={defaultOpen}>
+      <summary>
+        <div className="v-video-summary">
+          {video.thumbnailUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={video.thumbnailUrl} alt="" className="v-video-summary-thumb" />
           )}
+          <div className="v-video-summary-info">
+            <div className="v-video-summary-title">{video.title}</div>
+            <div className="v-video-summary-meta">
+              <span>{formatDuration(video.duration)}</span>
+              <span>{video.privacyStatus ?? '—'}</span>
+              {video.publishedAt && <span>{formatDate(video.publishedAt)}</span>}
+              <span style={{ color: hasAnalytics ? 'var(--v-mint)' : 'var(--v-text-muted)' }}>
+                {hasAnalytics ? 'has 28d analytics' : 'no 28d data'}
+              </span>
+            </div>
+          </div>
+          <div className="v-video-summary-stats">
+            <span>
+              <span className="label">Views (lifetime)</span>
+              <span className="value">{formatBigNumber(video.viewCount)}</span>
+            </span>
+            <span>
+              <span className="label">28d views</span>
+              <span className="value">{metrics ? metrics.views.toLocaleString() : '—'}</span>
+            </span>
+            <span>
+              <span className="label">Likes</span>
+              <span className="value">{formatBigNumber(video.likeCount)}</span>
+            </span>
+            <span>
+              <span className="label">Comments</span>
+              <span className="value">{formatBigNumber(video.commentCount)}</span>
+            </span>
+          </div>
         </div>
-      </div>
+      </summary>
+      <div className="v-detail-body">
+      {video.tags && video.tags.length > 0 && (
+        <div className="v-tag-list" style={{ marginBottom: 14 }}>
+          {video.tags.slice(0, 12).map((t) => (
+            <span key={t} className="v-tag-pill">{t}</span>
+          ))}
+        </div>
+      )}
 
       {/* Metadata flags + description */}
       <dl className="v-kv-list" style={{ marginBottom: 14 }}>
@@ -1264,7 +1397,28 @@ function VideoDeepDive(props: {
           <RetentionChart points={retention} />
         </div>
       )}
-    </article>
+
+      {/* Raw API data — proves what came back from Google for this video. */}
+      <details className="v-raw">
+        <summary>Show raw API data for this video</summary>
+        <pre>{JSON.stringify(
+          {
+            videoSummary: video,
+            metrics28d: metrics ?? null,
+            traffic: traffic ?? [],
+            countries: countries ?? [],
+            devices: devices ?? [],
+            demographics: demographics ?? [],
+            sharing: sharing ?? [],
+            retention: retention ?? null,
+          },
+          null,
+          2,
+        )}</pre>
+      </details>
+
+      </div>
+    </details>
   );
 }
 
@@ -1303,7 +1457,7 @@ function RetentionChart({ points }: { points: RetentionPoint[] }) {
 
 function AdsSection({ ads }: { ads: Outcome<AdsSnapshot> }) {
   return (
-    <section className="v-section">
+    <section id="ads" className="v-section">
       <div className="v-section-head">
         <h2 className="v-section-title">Google Ads</h2>
         <span className="v-section-scope">adwords · Google Ads API v24</span>
