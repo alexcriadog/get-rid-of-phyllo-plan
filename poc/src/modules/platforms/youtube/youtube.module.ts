@@ -11,6 +11,7 @@
 import { Module } from '@nestjs/common';
 import { YoutubeApiModule } from '../shared/youtube-api/youtube-api.module';
 import { YoutubeClient } from '../shared/youtube-api/youtube-client';
+import { GoogleAdsApiModule } from '../shared/google-ads-api/google-ads-api.module';
 import { YoutubeAdapter } from './youtube.adapter';
 import { YoutubeRateLimitStrategy } from './youtube.rate-limit.strategy';
 import { YOUTUBE_API_CLIENT } from './youtube.tokens';
@@ -18,9 +19,11 @@ import { YoutubeProfileFetcher } from './fetcher/youtube-profile.fetcher';
 import { YoutubeContentFetcher } from './fetcher/youtube-content.fetcher';
 import { YoutubeAudienceFetcher } from './fetcher/youtube-audience.fetcher';
 import { YoutubeCommentsFetcher } from './fetcher/youtube-comments.fetcher';
+import { YoutubeEngagementDeepFetcher } from './fetcher/youtube-engagement-deep.fetcher';
+import { YoutubeAdsFetcher } from './fetcher/youtube-ads.fetcher';
 
 @Module({
-  imports: [YoutubeApiModule],
+  imports: [YoutubeApiModule, GoogleAdsApiModule],
   providers: [
     YoutubeAdapter,
     YoutubeRateLimitStrategy,
@@ -28,6 +31,8 @@ import { YoutubeCommentsFetcher } from './fetcher/youtube-comments.fetcher';
     YoutubeContentFetcher,
     YoutubeAudienceFetcher,
     YoutubeCommentsFetcher,
+    YoutubeEngagementDeepFetcher,
+    YoutubeAdsFetcher,
     {
       provide: YOUTUBE_API_CLIENT,
       useFactory: (client: YoutubeClient, strategy: YoutubeRateLimitStrategy) =>

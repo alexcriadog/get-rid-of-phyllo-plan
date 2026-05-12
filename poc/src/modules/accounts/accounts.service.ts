@@ -64,7 +64,16 @@ const PRODUCTS_BY_PLATFORM: Record<Platform, ReadonlyArray<string>> = {
   // Threads has no stories. /me/mentioned_threads is the mentions surface.
   threads: ['identity', 'audience', 'engagement_new', 'comments', 'mentions'],
   // YouTube: no stories, no mentions surface in the public API.
-  youtube: ['identity', 'audience', 'engagement_new', 'comments'],
+  // engagement_deep: per-video Analytics drill-down + retention curve.
+  // ads: Google Ads campaigns (requires GOOGLE_ADS_DEVELOPER_TOKEN).
+  youtube: [
+    'identity',
+    'audience',
+    'engagement_new',
+    'engagement_deep',
+    'comments',
+    'ads',
+  ],
 };
 
 @Injectable()

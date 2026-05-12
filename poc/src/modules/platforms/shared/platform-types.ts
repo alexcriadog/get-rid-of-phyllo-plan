@@ -28,6 +28,21 @@ export interface ProfileData {
   isPublished?: boolean | null;
   hasProfilePic?: boolean | null;
   legacyInstagramUserId?: string | null;
+  /**
+   * Optional enriched channel/page metadata. Populated by adapters that
+   * surface platform-native settings (YouTube brandingSettings, status,
+   * topicDetails, etc.). All optional and platform-specific.
+   */
+  bannerUrl?: string | null;
+  keywords?: string | null;
+  topicCategories?: string[] | null;
+  privacyStatus?: string | null;
+  longUploadsStatus?: string | null;
+  madeForKids?: boolean | null;
+  defaultLanguage?: string | null;
+  country?: string | null;
+  publishedAt?: string | null;
+  hiddenSubscriberCount?: boolean | null;
   fetchedAt: Date;
 }
 
@@ -255,6 +270,57 @@ export interface ContentData {
   isSharedToFeed?: boolean | null;
   /** Poster's handle (useful when the post comes from a different owner). */
   ownerHandle?: string | null;
+  /** Tag / keyword strings the author put on the content. */
+  tags?: string[] | null;
+  /** YouTube videoCategoryId, IG content category, TikTok video category, etc. */
+  categoryId?: string | null;
+  /** Primary language declared on the content. */
+  defaultLanguage?: string | null;
+  /** Audio language when different from default. */
+  defaultAudioLanguage?: string | null;
+  /** Definition / quality marker (hd / sd, 1080p, etc.). */
+  definition?: string | null;
+  /** 2d / 3d (YouTube). */
+  dimension?: string | null;
+  /** Whether captions are available (YouTube returns "true"/"false"). */
+  hasCaptions?: string | null;
+  /** Whether the content is licensed material (YouTube). */
+  licensedContent?: boolean | null;
+  /** Publisher-declared license (creativeCommon / youtube). */
+  license?: string | null;
+  /** Whether the content can be embedded by third parties. */
+  embeddable?: boolean | null;
+  /** Whether public stats (likes/views) are visible. */
+  publicStatsViewable?: boolean | null;
+  /** Made for kids self-declaration. */
+  madeForKids?: boolean | null;
+  /** Privacy state (public / unlisted / private / scheduled). */
+  privacyStatus?: string | null;
+  /** Live state when applicable: none / upcoming / live. */
+  liveBroadcastContent?: string | null;
+  /** Upload status (uploaded / processed / failed / rejected). */
+  uploadStatus?: string | null;
+  /** ISO 8601 duration when the content has one (YouTube PT4M13S). */
+  duration?: string | null;
+  /** Topic categories / Wikipedia URLs the platform classified the content under. */
+  topicCategories?: string[] | null;
+  /** Recording timestamp when the content carries one. */
+  recordingDate?: string | null;
+  /** GPS coordinates if the content carries them. */
+  recordingLocation?: {
+    latitude?: number;
+    longitude?: number;
+    altitude?: number;
+  } | null;
+  /** Live broadcast window + concurrent viewers. */
+  liveStreamingDetails?: {
+    actualStartTime?: string | null;
+    actualEndTime?: string | null;
+    scheduledStartTime?: string | null;
+    scheduledEndTime?: string | null;
+    concurrentViewers?: string | null;
+    activeLiveChatId?: string | null;
+  } | null;
   /**
    * Reference (hash / object id) to the raw blob stored in Mongo
    * `raw_platform_responses`. Not the blob itself — keep canonical records
@@ -299,6 +365,92 @@ export interface CommentData {
     collection: string;
     contentHash: string;
   };
+}
+
+/**
+ * Per-content deep analytics snapshot. Cross-platform shape filled by the
+ * `engagement_deep` product. Each item is one piece of content with its
+ * windowed metrics and several cross-tab breakdowns. Platform adapters that
+ * don't expose this surface simply don't implement `fetchEngagementDeep`.
+ *
+ * Conceptually distinct from `engagement_new` (Data-API-style lifetime
+ * counts refreshed often) — `engagement_deep` is the Analytics layer,
+ * windowed and sliced per-content, refreshed less frequently because the
+ * underlying numbers move slowly.
+ */
+export interface EngagementDeepItem {
+  contentId: string;
+  /** Free-form metric bag — adapter decides which keys. Keys are camelCase. */
+  metrics: Record<string, number>;
+  trafficSources?: Array<{ source: string; views: number; minutes: number }>;
+  countries?: Array<{ country: string; views: number; minutes: number }>;
+  devices?: Array<{ deviceType: string; views: number; minutes: number }>;
+  demographics?: Array<{
+    ageGroup: string;
+    gender: string;
+    viewerPercentage: number;
+  }>;
+  sharing?: Array<{ service: string; shares: number }>;
+}
+
+export interface RetentionCurve {
+  /** Content the curve belongs to (top viewed video in the window). */
+  contentId: string;
+  /** Window the curve was computed over (lookback days). */
+  periodDays: number;
+  /** Sorted by elapsedRatio ascending. */
+  points: Array<{
+    elapsedRatio: number;
+    audienceWatchRatio: number;
+    relativeRetentionPerformance: number;
+  }>;
+}
+
+export interface EngagementDeepSnapshot {
+  periodDays: number;
+  items: EngagementDeepItem[];
+  /** Retention curve for the top-views item, when available. */
+  retention?: RetentionCurve | null;
+  /** Per-call error messages when one of the batched sub-queries failed. */
+  errors?: Array<{ bucket: string; message: string }>;
+  fetchedAt: Date;
+}
+
+/**
+ * Ads campaigns snapshot — the advertising side. Generic shape so other
+ * platforms (Meta Ads, TikTok Ads) can fill it. YouTube populates this via
+ * the Google Ads API (`adwords` scope).
+ */
+export interface AdsCustomerSummary {
+  /** Customer ID with no hyphens. */
+  id: string;
+  /** Original resource name from the API: "customers/1234567890". */
+  resourceName: string;
+}
+
+export interface AdsCampaignRow {
+  campaignId: string;
+  campaignName: string;
+  status: string;
+  channelType?: string;
+  videoViews?: number;
+  videoViewRate?: number | null;
+  averageCpvUsd?: number | null;
+  costUsd?: number;
+  impressions?: number;
+}
+
+export interface AdsSnapshot {
+  /** Accessible customer (advertiser) accounts the connected user can act on. */
+  customers: AdsCustomerSummary[];
+  /** Campaign rows fetched against the primary customer. */
+  primaryCustomerId?: string | null;
+  campaigns: AdsCampaignRow[];
+  totalViews: number;
+  totalCostUsd: number;
+  /** Adapter-controlled diagnostics surfaced for the dashboard. */
+  notes?: string[];
+  fetchedAt: Date;
 }
 
 export type SupportState = 'supported' | 'empty_possible' | 'not_supported';

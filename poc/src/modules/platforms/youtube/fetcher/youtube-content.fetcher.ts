@@ -30,6 +30,8 @@ const VIDEO_PARTS = [
   'contentDetails',
   'status',
   'liveStreamingDetails',
+  'topicDetails',
+  'recordingDetails',
 ];
 const VIDEOS_BATCH = 50;
 const DEFAULT_LIMIT = 50;

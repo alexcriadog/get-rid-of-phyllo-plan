@@ -68,4 +68,23 @@ export const YOUTUBE_SUPPORT_MATRIX: SupportMatrix = {
     likes: 'supported',
     pinned: 'not_supported',
   },
+  engagement_deep: {
+    perVideoMetrics: 'supported',
+    trafficSources: 'supported',
+    countries: 'supported',
+    devices: 'supported',
+    demographics: 'empty_possible',
+    sharing: 'empty_possible',
+    retentionCurve: 'empty_possible',
+    cards: 'supported',
+    annotations: 'empty_possible',
+  },
+  ads: {
+    accessibleCustomers: 'supported',
+    videoCampaigns: 'supported',
+    videoViews: 'supported',
+    averageCpv: 'supported',
+    costMicros: 'supported',
+    videoViewRate: 'supported',
+  },
 };

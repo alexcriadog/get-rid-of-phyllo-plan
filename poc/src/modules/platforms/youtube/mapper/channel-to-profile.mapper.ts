@@ -16,6 +16,8 @@ export function channelToProfile(channel: YoutubeChannel): ProfileData {
   const snippet = channel.snippet ?? {};
   const stats = channel.statistics ?? {};
   const branding = channel.brandingSettings?.channel ?? {};
+  const brandingImage = channel.brandingSettings?.image;
+  const status = channel.status ?? {};
 
   const customUrl = snippet.customUrl ?? null;
   const username = customUrl ? customUrl.replace(/^@+/, '') : null;
@@ -45,6 +47,20 @@ export function channelToProfile(channel: YoutubeChannel): ProfileData {
     website: null,
     category:
       channel.topicDetails?.topicCategories?.[0]?.split('/').pop() ?? null,
+    bannerUrl: brandingImage?.bannerExternalUrl ?? null,
+    keywords: branding.keywords ?? null,
+    topicCategories: channel.topicDetails?.topicCategories ?? null,
+    privacyStatus: status.privacyStatus ?? null,
+    longUploadsStatus: status.longUploadsStatus ?? null,
+    madeForKids:
+      typeof status.madeForKids === 'boolean' ? status.madeForKids : null,
+    defaultLanguage: snippet.defaultLanguage ?? null,
+    country: branding.country ?? snippet.country ?? null,
+    publishedAt: snippet.publishedAt ?? null,
+    hiddenSubscriberCount:
+      typeof stats.hiddenSubscriberCount === 'boolean'
+        ? stats.hiddenSubscriberCount
+        : null,
     fetchedAt: new Date(),
   };
 }

@@ -117,6 +117,12 @@ const CADENCE_DEFAULTS: CadenceRow[] = [
   { platform: 'youtube', product: 'audience', defaultIntervalSeconds: 86400 },
   { platform: 'youtube', product: 'engagement_new', defaultIntervalSeconds: 14400 },
   { platform: 'youtube', product: 'comments', defaultIntervalSeconds: 43200 },
+  // Per-video Analytics drill-down + retention curve. 6h cadence — data
+  // moves slowly and the batched fan-out costs 7 Analytics units per sync.
+  { platform: 'youtube', product: 'engagement_deep', defaultIntervalSeconds: 21600 },
+  // Google Ads campaigns (advertiser side). 6h cadence; expects a Basic
+  // developer token via GOOGLE_ADS_DEVELOPER_TOKEN.
+  { platform: 'youtube', product: 'ads', defaultIntervalSeconds: 21600 },
 ];
 
 async function seedCadences(): Promise<number> {

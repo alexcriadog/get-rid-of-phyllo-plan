@@ -21,8 +21,10 @@ import {
 } from '@modules/platforms/platforms.module';
 import type {
   PlatformAdapter,
+  AdsSnapshot,
   CommentData,
   ContentData,
+  EngagementDeepSnapshot,
   ProfileData,
   AudienceData,
 } from '@modules/platforms/shared/platform-adapter.port';
@@ -90,6 +92,7 @@ type ProductType =
   | 'identity'
   | 'audience'
   | 'engagement_new'
+  | 'engagement_deep'
   | 'stories'
   | 'comments'
   | 'mentions'
@@ -105,6 +108,8 @@ type FetchResultKind =
   | 'audience'
   | 'content'
   | 'comments'
+  | 'engagement_deep'
+  | 'ads'
   | 'noop';
 
 interface FetchResult {
@@ -114,6 +119,8 @@ interface FetchResult {
     | AudienceData
     | ContentData[]
     | CommentData[]
+    | EngagementDeepSnapshot
+    | AdsSnapshot
     | Record<string, unknown>;
 }
 
@@ -437,6 +444,15 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         );
         return { kind: 'content', data };
       }
+      case 'engagement_deep': {
+        if (!adapter.fetchEngagementDeep) return null;
+        const data = await adapter.fetchEngagementDeep(
+          accessToken,
+          canonicalId,
+          context,
+        );
+        return { kind: 'engagement_deep', data };
+      }
       case 'stories': {
         if (!adapter.fetchStories) return null;
         const data = await adapter.fetchStories(accessToken, canonicalId, context);
@@ -475,14 +491,19 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         return { kind: 'noop', data: { ...result } };
       }
       case 'ads': {
-        // FB-only side-channel: ads_read on /me/adaccounts + insights.
-        // Service writes to `ad_insights`; worker records success only.
-        if (adapter.platform !== 'facebook') return null;
-        const result = await this.facebookExtras.syncAdInsights(
-          context.accountId,
-          accessToken,
-        );
-        return { kind: 'noop', data: { ...result } };
+        // Facebook: side-channel writes to `ad_insights` via FacebookExtrasService.
+        // YouTube + future platforms: adapter.fetchAds returns a canonical
+        // AdsSnapshot that we persist to the generic `ads_campaigns` collection.
+        if (adapter.platform === 'facebook') {
+          const result = await this.facebookExtras.syncAdInsights(
+            context.accountId,
+            accessToken,
+          );
+          return { kind: 'noop', data: { ...result } };
+        }
+        if (!adapter.fetchAds) return null;
+        const data = await adapter.fetchAds(accessToken, canonicalId, context);
+        return { kind: 'ads', data };
       }
       default: {
         this.logger.warn(`Unknown product: ${product}`);
@@ -526,6 +547,42 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
       const col = this.mongo.getCollection('audience_snapshots');
       await col.updateOne(
         { account_id: accountIdStr },
+        {
+          $set: {
+            account_id: accountIdStr,
+            platform,
+            data: result.data,
+            updated_at: now,
+          },
+          $setOnInsert: { created_at: now },
+        },
+        { upsert: true },
+      );
+      return;
+    }
+
+    if (result.kind === 'engagement_deep') {
+      const col = this.mongo.getCollection('engagement_deep_snapshots');
+      await col.updateOne(
+        { account_id: accountIdStr, platform },
+        {
+          $set: {
+            account_id: accountIdStr,
+            platform,
+            data: result.data,
+            updated_at: now,
+          },
+          $setOnInsert: { created_at: now },
+        },
+        { upsert: true },
+      );
+      return;
+    }
+
+    if (result.kind === 'ads') {
+      const col = this.mongo.getCollection('ads_campaigns');
+      await col.updateOne(
+        { account_id: accountIdStr, platform },
         {
           $set: {
             account_id: accountIdStr,
@@ -626,6 +683,8 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
     if (result.kind === 'identity') return 'profile.updated';
     if (result.kind === 'audience') return 'audience.updated';
     if (result.kind === 'comments') return 'comment.added';
+    if (result.kind === 'engagement_deep') return 'engagement_deep.updated';
+    if (result.kind === 'ads') return 'ads.updated';
     if (result.kind === 'noop') {
       if (product === 'ratings') return 'rating.captured';
       if (product === 'ads') return 'ad_insight.captured';

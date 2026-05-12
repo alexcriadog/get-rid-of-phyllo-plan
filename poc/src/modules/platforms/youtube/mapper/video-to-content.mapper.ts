@@ -68,6 +68,7 @@ export function videoToContent(
       parseIntSafe(video.liveStreamingDetails.concurrentViewers) ?? 0;
   }
 
+  const status = video.status ?? {};
   return {
     platformContentId: id,
     contentType,
@@ -81,6 +82,32 @@ export function videoToContent(
     fetchedAt: new Date(),
     mediaProductType: contentType === 'reel' ? 'SHORTS' : 'VIDEO',
     shortcode: id || null,
+    tags: snippet.tags ?? null,
+    categoryId: snippet.categoryId ?? null,
+    defaultLanguage: snippet.defaultLanguage ?? null,
+    defaultAudioLanguage: snippet.defaultAudioLanguage ?? null,
+    definition: details.definition ?? null,
+    dimension: details.dimension ?? null,
+    hasCaptions: details.caption ?? null,
+    licensedContent:
+      typeof details.licensedContent === 'boolean' ? details.licensedContent : null,
+    license: status.license ?? null,
+    embeddable:
+      typeof status.embeddable === 'boolean' ? status.embeddable : null,
+    publicStatsViewable:
+      typeof status.publicStatsViewable === 'boolean'
+        ? status.publicStatsViewable
+        : null,
+    madeForKids:
+      typeof status.madeForKids === 'boolean' ? status.madeForKids : null,
+    privacyStatus: status.privacyStatus ?? null,
+    liveBroadcastContent: snippet.liveBroadcastContent ?? null,
+    uploadStatus: status.uploadStatus ?? null,
+    duration: details.duration ?? null,
+    topicCategories: video.topicDetails?.topicCategories ?? null,
+    recordingDate: video.recordingDetails?.recordingDate ?? null,
+    recordingLocation: video.recordingDetails?.location ?? null,
+    liveStreamingDetails: video.liveStreamingDetails ?? null,
     rawResponse,
   };
 }

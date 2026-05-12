@@ -28,6 +28,7 @@ export interface YoutubeChannelSnippet {
   publishedAt?: string | null;
   thumbnails?: YoutubeThumbnailSet;
   country?: string | null;
+  defaultLanguage?: string | null;
 }
 
 export interface YoutubeChannelStatistics {
@@ -43,10 +44,19 @@ export interface YoutubeChannelContentDetails {
 
 export interface YoutubeChannelBranding {
   channel?: { keywords?: string | null; country?: string | null };
+  image?: { bannerExternalUrl?: string | null };
 }
 
 export interface YoutubeChannelTopicDetails {
   topicCategories?: string[];
+}
+
+export interface YoutubeChannelStatus {
+  privacyStatus?: string | null;
+  madeForKids?: boolean;
+  selfDeclaredMadeForKids?: boolean;
+  longUploadsStatus?: string | null;
+  isLinked?: boolean;
 }
 
 export interface YoutubeChannel {
@@ -56,7 +66,7 @@ export interface YoutubeChannel {
   contentDetails?: YoutubeChannelContentDetails;
   brandingSettings?: YoutubeChannelBranding;
   topicDetails?: YoutubeChannelTopicDetails;
-  status?: { privacyStatus?: string | null; madeForKids?: boolean };
+  status?: YoutubeChannelStatus;
 }
 
 export interface YoutubePlaylistItemSnippet {
@@ -112,6 +122,12 @@ export interface YoutubeVideoStatus {
   privacyStatus?: 'public' | 'unlisted' | 'private' | string | null;
   madeForKids?: boolean;
   selfDeclaredMadeForKids?: boolean;
+  license?: string | null;
+  embeddable?: boolean;
+  publicStatsViewable?: boolean;
+  failureReason?: string | null;
+  rejectionReason?: string | null;
+  publishAt?: string | null;
 }
 
 export interface YoutubeLiveStreamingDetails {
@@ -123,6 +139,20 @@ export interface YoutubeLiveStreamingDetails {
   activeLiveChatId?: string | null;
 }
 
+export interface YoutubeVideoTopicDetails {
+  topicCategories?: string[];
+}
+
+export interface YoutubeVideoRecordingDetails {
+  recordingDate?: string | null;
+  location?: {
+    latitude?: number;
+    longitude?: number;
+    altitude?: number;
+  };
+  locationDescription?: string | null;
+}
+
 export interface YoutubeVideo {
   id?: string | null;
   snippet?: YoutubeVideoSnippet;
@@ -130,6 +160,8 @@ export interface YoutubeVideo {
   contentDetails?: YoutubeVideoContentDetails;
   status?: YoutubeVideoStatus;
   liveStreamingDetails?: YoutubeLiveStreamingDetails;
+  topicDetails?: YoutubeVideoTopicDetails;
+  recordingDetails?: YoutubeVideoRecordingDetails;
 }
 
 export interface YoutubeCommentSnippet {

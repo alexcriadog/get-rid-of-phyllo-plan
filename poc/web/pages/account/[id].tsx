@@ -5,6 +5,14 @@ import { getDb } from '../../lib/mongo';
 import { fmtNumber } from '../../lib/format';
 import { RelativeTime } from '../../components/RelativeTime';
 import { MetricTile } from '../../components/account/MetricTile';
+import {
+  EngagementDeepSection,
+  type EngagementDeepSnapshot,
+} from '../../components/account/EngagementDeepSection';
+import {
+  AdsSection,
+  type AdsSnapshot,
+} from '../../components/account/AdsSection';
 
 type IdentityData = {
   username?: string;
@@ -124,11 +132,27 @@ type Post = {
   data?: PostData;
 };
 
+type EngagementDeepDoc = {
+  account_id: string;
+  platform: string;
+  data?: EngagementDeepSnapshot;
+  updated_at?: string;
+};
+
+type AdsDoc = {
+  account_id: string;
+  platform: string;
+  data?: AdsSnapshot;
+  updated_at?: string;
+};
+
 type PageProps = {
   id: string;
   identity: IdentitySnapshot | null;
   audience: AudienceSnapshot | null;
   posts: Post[];
+  engagementDeep: EngagementDeepDoc | null;
+  ads: AdsDoc | null;
 };
 
 // Platforms whose adapters implement `fetchMentions` and surface mentions
@@ -145,28 +169,50 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
   try {
     const db = await getDb();
     const filters = [{ account_id: id }, { account_id: Number(id) || id }];
-    const [identityDoc, audienceDoc, postDocs] = await Promise.all([
-      db.collection('identity_snapshots').findOne({ $or: filters }),
-      db.collection('audience_snapshots').findOne({ $or: filters }, { sort: { captured_at: -1 } }),
-      db
-        .collection('posts')
-        .find({ $or: filters })
-        .sort({ 'data.publishedAt': -1, updated_at: -1 })
-        .limit(8)
-        .toArray(),
-    ]);
+    const [identityDoc, audienceDoc, postDocs, engagementDeepDoc, adsDoc] =
+      await Promise.all([
+        db.collection('identity_snapshots').findOne({ $or: filters }),
+        db
+          .collection('audience_snapshots')
+          .findOne({ $or: filters }, { sort: { captured_at: -1 } }),
+        db
+          .collection('posts')
+          .find({ $or: filters })
+          .sort({ 'data.publishedAt': -1, updated_at: -1 })
+          .limit(8)
+          .toArray(),
+        db
+          .collection('engagement_deep_snapshots')
+          .findOne({ $or: filters }, { sort: { updated_at: -1 } }),
+        db
+          .collection('ads_campaigns')
+          .findOne({ $or: filters }, { sort: { updated_at: -1 } }),
+      ]);
     return {
       props: {
         id,
         identity: identityDoc ? (toPlainJson(identityDoc) as IdentitySnapshot) : null,
         audience: audienceDoc ? (toPlainJson(audienceDoc) as AudienceSnapshot) : null,
         posts: postDocs.map((p) => toPlainJson(p) as Post),
+        engagementDeep: engagementDeepDoc
+          ? (toPlainJson(engagementDeepDoc) as EngagementDeepDoc)
+          : null,
+        ads: adsDoc ? (toPlainJson(adsDoc) as AdsDoc) : null,
       },
     };
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(err);
-    return { props: { id, identity: null, audience: null, posts: [] } };
+    return {
+      props: {
+        id,
+        identity: null,
+        audience: null,
+        posts: [],
+        engagementDeep: null,
+        ads: null,
+      },
+    };
   }
 };
 
@@ -187,7 +233,14 @@ function toPlainJson(value: unknown): unknown {
   return value;
 }
 
-export default function AccountDetail({ id, identity, audience, posts }: PageProps) {
+export default function AccountDetail({
+  id,
+  identity,
+  audience,
+  posts,
+  engagementDeep,
+  ads,
+}: PageProps) {
   // Refresh is admin-only — see /admin/accounts → "Run now". The public
   // page is read-only; users browse the latest snapshot the worker has
   // produced, no manual refresh trigger from here.
@@ -319,9 +372,53 @@ export default function AccountDetail({ id, identity, audience, posts }: PagePro
             </div>
           </>
         )}
+
+        {/* engagement_deep + ads sections (YouTube-only today; other
+            platforms simply render the "no snapshot yet" state until
+            their adapters implement fetchEngagementDeep / fetchAds). */}
+        {identity?.platform === 'youtube' && (
+          <>
+            <EngagementDeepSection
+              snapshot={engagementDeep?.data ?? null}
+              videoMeta={buildVideoMeta(posts)}
+              fetchedAt={engagementDeep?.updated_at}
+            />
+            <AdsSection
+              snapshot={ads?.data ?? null}
+              fetchedAt={ads?.updated_at}
+            />
+          </>
+        )}
       </div>
     </div>
   );
+}
+
+/**
+ * Build a quick lookup from videoId → metadata so EngagementDeepSection
+ * can render thumbnails, titles, and durations alongside the analytics
+ * snapshot (which only carries content IDs).
+ */
+function buildVideoMeta(
+  posts: Post[],
+): Record<string, { title?: string; thumbnailUrl?: string; duration?: string; publishedAt?: string }> {
+  const map: Record<
+    string,
+    { title?: string; thumbnailUrl?: string; duration?: string; publishedAt?: string }
+  > = {};
+  for (const p of posts) {
+    const id =
+      p.platform_content_id ?? p.data?.platformContentId ?? null;
+    if (!id) continue;
+    const title = typeof p.data?.caption === 'string' ? p.data.caption.split('\n')[0] : undefined;
+    map[id] = {
+      title,
+      thumbnailUrl: p.data?.thumbnailUrl ?? undefined,
+      duration: (p.data as { duration?: string } | undefined)?.duration ?? undefined,
+      publishedAt: p.data?.publishedAt ?? undefined,
+    };
+  }
+  return map;
 }
 
 function ProfileHero({

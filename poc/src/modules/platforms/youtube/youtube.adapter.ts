@@ -19,9 +19,11 @@ import {
   PlatformAdapterContext,
 } from '../shared/platform-adapter.port';
 import type {
+  AdsSnapshot,
   AudienceData,
   CommentData,
   ContentData,
+  EngagementDeepSnapshot,
   FetchOpts,
   ProfileData,
   SupportMatrix,
@@ -35,6 +37,8 @@ import { YoutubeProfileFetcher } from './fetcher/youtube-profile.fetcher';
 import { YoutubeContentFetcher } from './fetcher/youtube-content.fetcher';
 import { YoutubeAudienceFetcher } from './fetcher/youtube-audience.fetcher';
 import { YoutubeCommentsFetcher } from './fetcher/youtube-comments.fetcher';
+import { YoutubeEngagementDeepFetcher } from './fetcher/youtube-engagement-deep.fetcher';
+import { YoutubeAdsFetcher } from './fetcher/youtube-ads.fetcher';
 
 @Injectable()
 export class YoutubeAdapter implements PlatformAdapter {
@@ -49,6 +53,8 @@ export class YoutubeAdapter implements PlatformAdapter {
     private readonly contentFetcher: YoutubeContentFetcher,
     private readonly audienceFetcher: YoutubeAudienceFetcher,
     private readonly commentsFetcher: YoutubeCommentsFetcher,
+    private readonly engagementDeepFetcher: YoutubeEngagementDeepFetcher,
+    private readonly adsFetcher: YoutubeAdsFetcher,
   ) {
     void this.youtubeClient;
   }
@@ -107,5 +113,23 @@ export class YoutubeAdapter implements PlatformAdapter {
   ): Promise<CommentData[]> {
     const token = await this.freshToken(metadata, accessToken);
     return this.commentsFetcher.fetch(token, canonicalId, opts, metadata);
+  }
+
+  async fetchEngagementDeep(
+    accessToken: string,
+    canonicalId: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<EngagementDeepSnapshot> {
+    const token = await this.freshToken(metadata, accessToken);
+    return this.engagementDeepFetcher.fetch(token, canonicalId, metadata);
+  }
+
+  async fetchAds(
+    accessToken: string,
+    canonicalId: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<AdsSnapshot> {
+    const token = await this.freshToken(metadata, accessToken);
+    return this.adsFetcher.fetch(token, canonicalId, metadata);
   }
 }

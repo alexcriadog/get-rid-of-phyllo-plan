@@ -1,8 +1,10 @@
 import { RateLimitHint } from '@shared/redis/rate-bucket.service';
 import {
+  AdsSnapshot,
   AudienceData,
   CommentData,
   ContentData,
+  EngagementDeepSnapshot,
   FetchOpts,
   ProfileData,
   SupportMatrix,
@@ -11,9 +13,11 @@ import {
 // Re-export data DTOs so consumers can import either from `platform-types`
 // or from the port (port = single public entrypoint).
 export type {
+  AdsSnapshot,
   AudienceData,
   CommentData,
   ContentData,
+  EngagementDeepSnapshot,
   FetchOpts,
   ProfileData,
   SupportMatrix,
@@ -92,6 +96,30 @@ export interface PlatformAdapter {
     opts: FetchOpts,
     metadata?: Record<string, unknown>,
   ): Promise<ContentData[]>;
+
+  /**
+   * Per-content windowed analytics + audience retention. Distinct from
+   * `engagement_new` (Data-API-style lifetime counts that move every
+   * minute) — this is the Analytics layer, sliced by content, refreshed
+   * at a slower cadence. Returns one snapshot per call carrying every
+   * item the adapter could resolve.
+   */
+  fetchEngagementDeep?(
+    accessToken: string,
+    canonicalId: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<EngagementDeepSnapshot>;
+
+  /**
+   * Advertising-side data — campaigns the connected user runs that target
+   * THIS platform's surface (e.g. YouTube video campaigns via Google Ads).
+   * Distinct from any organic content data. Returns a single snapshot.
+   */
+  fetchAds?(
+    accessToken: string,
+    canonicalId: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<AdsSnapshot>;
 }
 
 export type AdapterRegistry = Record<string, PlatformAdapter>;
