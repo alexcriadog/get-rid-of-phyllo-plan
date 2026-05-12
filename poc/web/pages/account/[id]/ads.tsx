@@ -1,6 +1,10 @@
-// Ads insights page — surfaces /me/adaccounts spend/reach/CTR data captured
-// via the ads_read scope (admin endpoint /admin/ca/ads/sync). Reads from
-// Mongo `ad_insights` collection.
+// Ads insights page — advertiser-side data across platforms.
+//   - Facebook: surfaces /me/adaccounts spend/reach/CTR data captured via
+//     the ads_read scope (admin endpoint /admin/ca/ads/sync). Reads from
+//     Mongo `ad_insights` collection.
+//   - YouTube: surfaces Google Ads video campaigns (`adwords` scope) via
+//     the `ads` sync product. Reads from Mongo `ads_campaigns` collection.
+// Other platforms get redirected to the overview.
 
 import Link from 'next/link';
 import { useMemo } from 'react';
@@ -8,6 +12,10 @@ import type { GetServerSideProps } from 'next';
 import { getDb } from '../../../lib/mongo';
 import { fmtNumber } from '../../../lib/format';
 import { RelativeTime } from '../../../components/RelativeTime';
+import {
+  AdsSection,
+  type AdsSnapshot,
+} from '../../../components/account/AdsSection';
 
 type IdentitySnapshot = {
   account_id: string;
@@ -38,43 +46,69 @@ type InsightsRow = {
   captured_at?: string | null;
 };
 
+type YoutubeAdsDoc = {
+  account_id: string;
+  platform: string;
+  data?: AdsSnapshot;
+  updated_at?: string;
+};
+
 type PageProps = {
   id: string;
   identity: IdentitySnapshot | null;
   rows: InsightsRow[];
+  /** YouTube branch only — populated when identity.platform === 'youtube'. */
+  youtubeAds: YoutubeAdsDoc | null;
 };
+
+const SUPPORTED_PLATFORMS = new Set<string>(['facebook', 'youtube']);
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
   const id = String(ctx.params?.id || '');
   try {
     const db = await getDb();
     const filters = [{ account_id: id }, { account_id: Number(id) || id }];
-    const [identityDoc, rowDocs] = await Promise.all([
-      db.collection('identity_snapshots').findOne({ $or: filters }),
-      db
-        .collection('ad_insights')
-        .find({ account_id: id })
-        .sort({ date_stop: -1, level: 1, captured_at: -1 })
-        .limit(200)
-        .toArray(),
-    ]);
+    const identityDoc = await db
+      .collection('identity_snapshots')
+      .findOne({ $or: filters });
     const identity = identityDoc
       ? (toPlainJson(identityDoc) as IdentitySnapshot)
       : null;
-    if (identity && identity.platform !== 'facebook') {
+    if (identity && !SUPPORTED_PLATFORMS.has(identity.platform)) {
       return { redirect: { destination: `/account/${id}`, permanent: false } };
     }
+    // Branch the data load by platform so we only pay for what we render.
+    if (identity?.platform === 'youtube') {
+      const adsDoc = await db
+        .collection('ads_campaigns')
+        .findOne({ $or: filters }, { sort: { updated_at: -1 } });
+      return {
+        props: {
+          id,
+          identity,
+          rows: [],
+          youtubeAds: adsDoc ? (toPlainJson(adsDoc) as YoutubeAdsDoc) : null,
+        },
+      };
+    }
+    const rowDocs = await db
+      .collection('ad_insights')
+      .find({ account_id: id })
+      .sort({ date_stop: -1, level: 1, captured_at: -1 })
+      .limit(200)
+      .toArray();
     return {
       props: {
         id,
         identity,
         rows: rowDocs.map((d) => toPlainJson(d) as InsightsRow),
+        youtubeAds: null,
       },
     };
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(err);
-    return { props: { id, identity: null, rows: [] } };
+    return { props: { id, identity: null, rows: [], youtubeAds: null } };
   }
 };
 
@@ -95,7 +129,100 @@ function toPlainJson(value: unknown): unknown {
   return value;
 }
 
-export default function AdsPage({ id, identity, rows }: PageProps) {
+export default function AdsPage(props: PageProps) {
+  // Platform branch so the rest of this file (the original FB rendering
+  // path) stays untouched. YouTube uses the canonical AdsSnapshot shape
+  // with the dedicated section component.
+  if (props.identity?.platform === 'youtube') {
+    return <YoutubeAdsPage {...props} />;
+  }
+  return <FacebookAdsPage {...props} />;
+}
+
+function YoutubeAdsPage({ id, identity, youtubeAds }: PageProps) {
+  const ownerHandle =
+    identity?.data?.username ?? identity?.data?.displayName ?? '';
+  return (
+    <div className="v-canvas">
+      <div style={{ maxWidth: 1300, margin: '0 auto', padding: '32px 48px 96px' }}>
+        <header
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 16,
+            marginBottom: 24,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Link href={`/account/${id}`} className="v-meta">
+            ← Overview
+          </Link>
+          <Link href={`/account/${id}/engagement-deep`} className="v-meta">
+            ← Engagement deep
+          </Link>
+          <div style={{ flex: 1 }} />
+          {ownerHandle && (
+            <span
+              style={{
+                fontFamily: 'var(--v-mono)',
+                fontSize: 11,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color: 'var(--v-text-muted)',
+              }}
+            >
+              {ownerHandle}
+            </span>
+          )}
+        </header>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 16,
+            marginBottom: 16,
+          }}
+        >
+          <h1
+            className="v-display"
+            style={{ fontSize: 'clamp(36px, 5vw, 64px)', margin: 0, color: '#fff' }}
+          >
+            Google Ads
+          </h1>
+          {youtubeAds?.updated_at && (
+            <span
+              style={{
+                fontFamily: 'var(--v-mono)',
+                fontSize: 11,
+                color: 'var(--v-text-muted)',
+              }}
+            >
+              updated <RelativeTime value={youtubeAds.updated_at} />
+            </span>
+          )}
+        </div>
+
+        <p
+          className="v-body"
+          style={{ maxWidth: 720, color: 'var(--v-text-subtle)', marginBottom: 24 }}
+        >
+          YouTube video advertising campaigns the connected user runs via
+          Google Ads (<code>adwords</code> scope). Last 30 days, refreshed
+          every 6 hours by the <code>ads</code> sync product. Requires{' '}
+          <code>GOOGLE_ADS_DEVELOPER_TOKEN</code> set on the POC server.
+        </p>
+
+        <AdsSection
+          snapshot={youtubeAds?.data ?? null}
+          fetchedAt={youtubeAds?.updated_at}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FacebookAdsPage({ id, identity, rows }: PageProps) {
   const ownerHandle = identity?.data?.username ?? identity?.data?.displayName;
 
   const accountRow = useMemo(

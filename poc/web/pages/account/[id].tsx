@@ -5,14 +5,6 @@ import { getDb } from '../../lib/mongo';
 import { fmtNumber } from '../../lib/format';
 import { RelativeTime } from '../../components/RelativeTime';
 import { MetricTile } from '../../components/account/MetricTile';
-import {
-  EngagementDeepSection,
-  type EngagementDeepSnapshot,
-} from '../../components/account/EngagementDeepSection';
-import {
-  AdsSection,
-  type AdsSnapshot,
-} from '../../components/account/AdsSection';
 
 type IdentityData = {
   username?: string;
@@ -132,27 +124,11 @@ type Post = {
   data?: PostData;
 };
 
-type EngagementDeepDoc = {
-  account_id: string;
-  platform: string;
-  data?: EngagementDeepSnapshot;
-  updated_at?: string;
-};
-
-type AdsDoc = {
-  account_id: string;
-  platform: string;
-  data?: AdsSnapshot;
-  updated_at?: string;
-};
-
 type PageProps = {
   id: string;
   identity: IdentitySnapshot | null;
   audience: AudienceSnapshot | null;
   posts: Post[];
-  engagementDeep: EngagementDeepDoc | null;
-  ads: AdsDoc | null;
 };
 
 // Platforms whose adapters implement `fetchMentions` and surface mentions
@@ -163,41 +139,37 @@ const PLATFORMS_WITH_MENTIONS = new Set<string>(['tiktok', 'threads', 'facebook'
 // CA-only Meta extras (pages_read_user_content / ads_read / PPCA). Surfaced
 // only for facebook accounts since they piggy-back on those scopes.
 const PLATFORMS_WITH_CA_EXTRAS = new Set<string>(['facebook']);
+// Platforms exposing per-video Analytics drill-down + retention curve
+// via the `engagement_deep` product. Subpage at /account/:id/engagement-deep.
+const PLATFORMS_WITH_ENGAGEMENT_DEEP = new Set<string>(['youtube']);
+// Platforms exposing advertiser-side data via the `ads` product. Facebook
+// already has a route under /account/:id/ads (Meta Ads via ads_read);
+// YouTube reuses that route, branching on platform inside the subpage.
+const PLATFORMS_WITH_ADS = new Set<string>(['facebook', 'youtube']);
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
   const id = String(ctx.params?.id || '');
   try {
     const db = await getDb();
     const filters = [{ account_id: id }, { account_id: Number(id) || id }];
-    const [identityDoc, audienceDoc, postDocs, engagementDeepDoc, adsDoc] =
-      await Promise.all([
-        db.collection('identity_snapshots').findOne({ $or: filters }),
-        db
-          .collection('audience_snapshots')
-          .findOne({ $or: filters }, { sort: { captured_at: -1 } }),
-        db
-          .collection('posts')
-          .find({ $or: filters })
-          .sort({ 'data.publishedAt': -1, updated_at: -1 })
-          .limit(8)
-          .toArray(),
-        db
-          .collection('engagement_deep_snapshots')
-          .findOne({ $or: filters }, { sort: { updated_at: -1 } }),
-        db
-          .collection('ads_campaigns')
-          .findOne({ $or: filters }, { sort: { updated_at: -1 } }),
-      ]);
+    const [identityDoc, audienceDoc, postDocs] = await Promise.all([
+      db.collection('identity_snapshots').findOne({ $or: filters }),
+      db
+        .collection('audience_snapshots')
+        .findOne({ $or: filters }, { sort: { captured_at: -1 } }),
+      db
+        .collection('posts')
+        .find({ $or: filters })
+        .sort({ 'data.publishedAt': -1, updated_at: -1 })
+        .limit(8)
+        .toArray(),
+    ]);
     return {
       props: {
         id,
         identity: identityDoc ? (toPlainJson(identityDoc) as IdentitySnapshot) : null,
         audience: audienceDoc ? (toPlainJson(audienceDoc) as AudienceSnapshot) : null,
         posts: postDocs.map((p) => toPlainJson(p) as Post),
-        engagementDeep: engagementDeepDoc
-          ? (toPlainJson(engagementDeepDoc) as EngagementDeepDoc)
-          : null,
-        ads: adsDoc ? (toPlainJson(adsDoc) as AdsDoc) : null,
       },
     };
   } catch (err) {
@@ -209,8 +181,6 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
         identity: null,
         audience: null,
         posts: [],
-        engagementDeep: null,
-        ads: null,
       },
     };
   }
@@ -233,14 +203,7 @@ function toPlainJson(value: unknown): unknown {
   return value;
 }
 
-export default function AccountDetail({
-  id,
-  identity,
-  audience,
-  posts,
-  engagementDeep,
-  ads,
-}: PageProps) {
+export default function AccountDetail({ id, identity, audience, posts }: PageProps) {
   // Refresh is admin-only — see /admin/accounts → "Run now". The public
   // page is read-only; users browse the latest snapshot the worker has
   // produced, no manual refresh trigger from here.
@@ -286,17 +249,22 @@ export default function AccountDetail({
             </Link>
           )}
           {PLATFORMS_WITH_CA_EXTRAS.has(identity?.platform ?? '') && (
-            <>
-              <Link
-                href={`/account/${id}/reviews`}
-                className="v-pill-outline-mint"
-              >
-                Reviews
-              </Link>
-              <Link href={`/account/${id}/ads`} className="v-pill-outline-mint">
-                Ads
-              </Link>
-            </>
+            <Link href={`/account/${id}/reviews`} className="v-pill-outline-mint">
+              Reviews
+            </Link>
+          )}
+          {PLATFORMS_WITH_ENGAGEMENT_DEEP.has(identity?.platform ?? '') && (
+            <Link
+              href={`/account/${id}/engagement-deep`}
+              className="v-pill-outline-mint"
+            >
+              Engagement deep
+            </Link>
+          )}
+          {PLATFORMS_WITH_ADS.has(identity?.platform ?? '') && (
+            <Link href={`/account/${id}/ads`} className="v-pill-outline-mint">
+              Ads
+            </Link>
           )}
         </header>
 
@@ -372,53 +340,9 @@ export default function AccountDetail({
             </div>
           </>
         )}
-
-        {/* engagement_deep + ads sections (YouTube-only today; other
-            platforms simply render the "no snapshot yet" state until
-            their adapters implement fetchEngagementDeep / fetchAds). */}
-        {identity?.platform === 'youtube' && (
-          <>
-            <EngagementDeepSection
-              snapshot={engagementDeep?.data ?? null}
-              videoMeta={buildVideoMeta(posts)}
-              fetchedAt={engagementDeep?.updated_at}
-            />
-            <AdsSection
-              snapshot={ads?.data ?? null}
-              fetchedAt={ads?.updated_at}
-            />
-          </>
-        )}
       </div>
     </div>
   );
-}
-
-/**
- * Build a quick lookup from videoId → metadata so EngagementDeepSection
- * can render thumbnails, titles, and durations alongside the analytics
- * snapshot (which only carries content IDs).
- */
-function buildVideoMeta(
-  posts: Post[],
-): Record<string, { title?: string; thumbnailUrl?: string; duration?: string; publishedAt?: string }> {
-  const map: Record<
-    string,
-    { title?: string; thumbnailUrl?: string; duration?: string; publishedAt?: string }
-  > = {};
-  for (const p of posts) {
-    const id =
-      p.platform_content_id ?? p.data?.platformContentId ?? null;
-    if (!id) continue;
-    const title = typeof p.data?.caption === 'string' ? p.data.caption.split('\n')[0] : undefined;
-    map[id] = {
-      title,
-      thumbnailUrl: p.data?.thumbnailUrl ?? undefined,
-      duration: (p.data as { duration?: string } | undefined)?.duration ?? undefined,
-      publishedAt: p.data?.publishedAt ?? undefined,
-    };
-  }
-  return map;
 }
 
 function ProfileHero({
