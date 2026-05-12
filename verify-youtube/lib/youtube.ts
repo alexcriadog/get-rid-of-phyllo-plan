@@ -30,13 +30,19 @@ export const YT_SCOPES = [
 
 export function buildAuthorizeUrl(redirectUri: string): string {
   const clientId = requireEnv('GOOGLE_CLIENT_ID');
+  // include_granted_scopes is intentionally OMITTED here. We share this
+  // OAuth client with connect-tool (smconnector), which requests a
+  // different scope set. If `include_granted_scopes=true` were set, the
+  // consent screen would show the UNION of what verify-youtube asks for
+  // and whatever the user previously granted via connect-tool — leaking
+  // scopes we are not actually verifying. Keep the consent screen
+  // exactly equal to YT_SCOPES.
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,
     redirect_uri: redirectUri,
     access_type: 'offline',
     prompt: 'consent',
-    include_granted_scopes: 'true',
     scope: YT_SCOPES.join(' '),
   });
   return `${GOOGLE_AUTHORIZE}?${params.toString()}`;
