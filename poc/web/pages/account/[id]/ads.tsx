@@ -157,8 +157,8 @@ function YoutubeAdsPage({ id, identity, youtubeAds }: PageProps) {
           <Link href={`/account/${id}`} className="v-meta">
             ← Overview
           </Link>
-          <Link href={`/account/${id}/engagement-deep`} className="v-meta">
-            ← Engagement deep
+          <Link href={`/account/${id}/posts`} className="v-meta">
+            Posts →
           </Link>
           <div style={{ flex: 1 }} />
           {ownerHandle && (

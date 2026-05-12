@@ -6,6 +6,11 @@ import { getDb } from '../../../lib/mongo';
 import { fmtRelative, fmtNumber, fmtDateTime, truncate } from '../../../lib/format';
 import { MetricTile } from '../../../components/account/MetricTile';
 import { RelativeTime } from '../../../components/RelativeTime';
+import {
+  PostEngagementDeepInsights,
+  type EngagementDeepItem,
+  type RetentionCurve,
+} from '../../../components/account/PostEngagementDeepInsights';
 
 type PostMetrics = {
   likes?: number;
@@ -99,6 +104,16 @@ type PageProps = {
   page: number;
   pageSize: number;
   filter: DateFilter;
+  /** Per-content engagement_deep items keyed by platform_content_id.
+   *  Empty when the account's adapter doesn't produce engagement_deep
+   *  snapshots, or before the first sync runs. */
+  engagementDeepByContentId: Record<string, EngagementDeepItem>;
+  /** Snapshot-wide retention curve (one per snapshot — anchored to the
+   *  top-views video). The PostDialog renders it only when the open
+   *  post matches its contentId. */
+  engagementDeepRetention: RetentionCurve | null;
+  /** Snapshot window (days) for the context line. */
+  engagementDeepPeriodDays: number | null;
 };
 
 const PAGE_SIZE = 60;
@@ -172,7 +187,7 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
     const query = buildQuery(true);
     const ownTotalFilter = buildQuery(false);
 
-    const [raw, totalAll, totalMatching] = await Promise.all([
+    const [raw, totalAll, totalMatching, engagementDeepDoc] = await Promise.all([
       db
         .collection('posts')
         .find(query)
@@ -182,7 +197,34 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
         .toArray(),
       db.collection('posts').countDocuments(ownTotalFilter),
       db.collection('posts').countDocuments(query),
+      // Optional. Adapters that don't implement fetchEngagementDeep simply
+      // don't deposit anything here, so this lookup returns null.
+      db
+        .collection('engagement_deep_snapshots')
+        .findOne(accountFilter, { sort: { updated_at: -1 } }),
     ]);
+
+    // Build the (contentId → item) lookup once, in SSR, so the PostDialog
+    // can do a single O(1) read per open post.
+    const engagementDeepByContentId: Record<string, EngagementDeepItem> = {};
+    let engagementDeepRetention: RetentionCurve | null = null;
+    let engagementDeepPeriodDays: number | null = null;
+    if (engagementDeepDoc) {
+      const snapshot = (engagementDeepDoc as { data?: unknown }).data as
+        | {
+            periodDays?: number;
+            items?: EngagementDeepItem[];
+            retention?: RetentionCurve | null;
+          }
+        | undefined;
+      if (snapshot?.items) {
+        for (const item of snapshot.items) {
+          if (item?.contentId) engagementDeepByContentId[item.contentId] = item;
+        }
+      }
+      engagementDeepRetention = snapshot?.retention ?? null;
+      engagementDeepPeriodDays = snapshot?.periodDays ?? null;
+    }
 
     return {
       props: {
@@ -194,6 +236,13 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
         page,
         pageSize: PAGE_SIZE,
         filter,
+        engagementDeepByContentId: toPlainJson(
+          engagementDeepByContentId,
+        ) as Record<string, EngagementDeepItem>,
+        engagementDeepRetention: engagementDeepRetention
+          ? (toPlainJson(engagementDeepRetention) as RetentionCurve)
+          : null,
+        engagementDeepPeriodDays,
       },
     };
   } catch (err) {
@@ -209,6 +258,9 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
         page,
         pageSize: PAGE_SIZE,
         filter,
+        engagementDeepByContentId: {},
+        engagementDeepRetention: null,
+        engagementDeepPeriodDays: null,
       },
     };
   }
@@ -240,6 +292,9 @@ export default function AccountPosts({
   page,
   pageSize,
   filter,
+  engagementDeepByContentId,
+  engagementDeepRetention,
+  engagementDeepPeriodDays,
 }: PageProps) {
   const [selected, setSelected] = useState<Post | null>(null);
   const totalPages = Math.max(1, Math.ceil(totalMatching / pageSize));
@@ -442,7 +497,17 @@ export default function AccountPosts({
           </>
         )}
 
-        {selected && <PostDialog post={selected} onClose={() => setSelected(null)} />}
+        {selected && (
+          <PostDialog
+            post={selected}
+            onClose={() => setSelected(null)}
+            engagementDeepItem={
+              engagementDeepByContentId[selected.platform_content_id] ?? null
+            }
+            engagementDeepRetention={engagementDeepRetention}
+            engagementDeepPeriodDays={engagementDeepPeriodDays}
+          />
+        )}
       </div>
     </div>
   );
@@ -686,7 +751,19 @@ function PostCard({ post, onClick }: { post: Post; onClick: () => void }) {
 
 type DialogTab = 'stats' | 'insights' | 'comments' | 'raw';
 
-function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
+function PostDialog({
+  post,
+  onClose,
+  engagementDeepItem,
+  engagementDeepRetention,
+  engagementDeepPeriodDays,
+}: {
+  post: Post;
+  onClose: () => void;
+  engagementDeepItem?: EngagementDeepItem | null;
+  engagementDeepRetention?: RetentionCurve | null;
+  engagementDeepPeriodDays?: number | null;
+}) {
   const d = post.data;
   const children = d?.children ?? [];
   const [slideIdx, setSlideIdx] = useState(0);
@@ -1004,7 +1081,10 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
           <TabStrip
             active={activeTab}
             onChange={setActiveTab}
-            insightsAvailable={Boolean(d?.insights && hasAnyInsight(d.insights))}
+            insightsAvailable={
+              Boolean(d?.insights && hasAnyInsight(d.insights)) ||
+              Boolean(engagementDeepItem)
+            }
             commentsCount={d?.metrics?.comments}
           />
 
@@ -1042,17 +1122,37 @@ function PostDialog({ post, onClose }: { post: Post; onClose: () => void }) {
           )}
 
           {activeTab === 'insights' && (
-            d?.insights && hasAnyInsight(d.insights) ? (
-              <InsightsBlock insights={d.insights} />
-            ) : (
-              <div
-                className="v-body"
-                style={{ color: 'var(--v-text-muted)', fontSize: 13 }}
-              >
-                No per-post insights captured yet. TikTok exposes them; Meta
-                doesn&apos;t.
-              </div>
-            )
+            <>
+              {d?.insights && hasAnyInsight(d.insights) && (
+                <InsightsBlock insights={d.insights} />
+              )}
+              {engagementDeepItem && (
+                <div
+                  style={{
+                    marginTop:
+                      d?.insights && hasAnyInsight(d.insights) ? 24 : 0,
+                  }}
+                >
+                  <PostEngagementDeepInsights
+                    item={engagementDeepItem}
+                    retention={engagementDeepRetention ?? undefined}
+                    periodDays={engagementDeepPeriodDays ?? undefined}
+                  />
+                </div>
+              )}
+              {!engagementDeepItem &&
+                !(d?.insights && hasAnyInsight(d.insights)) && (
+                  <div
+                    className="v-body"
+                    style={{ color: 'var(--v-text-muted)', fontSize: 13 }}
+                  >
+                    No per-post insights captured yet. TikTok exposes them
+                    via <code>ContentInsights</code>; YouTube via the
+                    <code>engagement_deep</code> product (next sync window
+                    will populate this).
+                  </div>
+                )}
+            </>
           )}
 
           {activeTab === 'comments' && (

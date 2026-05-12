@@ -139,12 +139,14 @@ const PLATFORMS_WITH_MENTIONS = new Set<string>(['tiktok', 'threads', 'facebook'
 // CA-only Meta extras (pages_read_user_content / ads_read / PPCA). Surfaced
 // only for facebook accounts since they piggy-back on those scopes.
 const PLATFORMS_WITH_CA_EXTRAS = new Set<string>(['facebook']);
-// Platforms exposing per-video Analytics drill-down + retention curve
-// via the `engagement_deep` product. Subpage at /account/:id/engagement-deep.
-const PLATFORMS_WITH_ENGAGEMENT_DEEP = new Set<string>(['youtube']);
 // Platforms exposing advertiser-side data via the `ads` product. Facebook
 // already has a route under /account/:id/ads (Meta Ads via ads_read);
 // YouTube reuses that route, branching on platform inside the subpage.
+//
+// Per-content engagement_deep (windowed analytics + retention) is NOT a
+// separate route — it surfaces inside each post's PostDialog "Insights"
+// tab. Adapters that produce engagement_deep_snapshots are picked up
+// transparently by the posts subpage.
 const PLATFORMS_WITH_ADS = new Set<string>(['facebook', 'youtube']);
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
@@ -251,14 +253,6 @@ export default function AccountDetail({ id, identity, audience, posts }: PagePro
           {PLATFORMS_WITH_CA_EXTRAS.has(identity?.platform ?? '') && (
             <Link href={`/account/${id}/reviews`} className="v-pill-outline-mint">
               Reviews
-            </Link>
-          )}
-          {PLATFORMS_WITH_ENGAGEMENT_DEEP.has(identity?.platform ?? '') && (
-            <Link
-              href={`/account/${id}/engagement-deep`}
-              className="v-pill-outline-mint"
-            >
-              Engagement deep
             </Link>
           )}
           {PLATFORMS_WITH_ADS.has(identity?.platform ?? '') && (
