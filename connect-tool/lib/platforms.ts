@@ -14,6 +14,9 @@ const THREADS_GRAPH = 'https://graph.threads.net/v1.0';
 const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 const YOUTUBE_DATA = 'https://www.googleapis.com/youtube/v3';
+const TWITCH_AUTHORIZE = 'https://id.twitch.tv/oauth2/authorize';
+const TWITCH_TOKEN = 'https://id.twitch.tv/oauth2/token';
+const TWITCH_HELIX = 'https://api.twitch.tv/helix';
 // TikTok offers two parallel OAuth flows:
 //   1. BC / Marketing API (business-api.tiktok.com/portal/auth) — for ad
 //      accounts. Requires the user to have at least one Advertiser
@@ -80,12 +83,25 @@ const THREADS_SCOPES = [
   'threads_read_replies',
 ];
 
+// Twitch user-token scopes for the creator data surface:
+//   - user:read:email          → /helix/users with email
+//   - moderator:read:followers → /helix/channels/followers total count
+//   - channel:read:subscriptions → /helix/subscriptions list + tier
+// Helix is space-separated, not comma-separated. The consent screen will
+// re-render every requested scope individually for the broadcaster.
+const TWITCH_SCOPES = [
+  'user:read:email',
+  'moderator:read:followers',
+  'channel:read:subscriptions',
+];
+
 export type PlatformKey =
   | 'facebook'
   | 'instagram'
   | 'tiktok'
   | 'threads'
-  | 'youtube';
+  | 'youtube'
+  | 'twitch';
 
 export type CallbackResult =
   | {
@@ -527,12 +543,162 @@ const instagram: PlatformDef = {
   },
 };
 
+// ─── Twitch ────────────────────────────────────────────────────────────
+
+const twitch: PlatformDef = {
+  key: 'twitch',
+  buildAuthorizeUrl(redirectUri) {
+    const clientId = requireEnv('TWITCH_CLIENT_ID');
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      // Twitch wants space-separated scopes (URL-encoded as %20).
+      scope: TWITCH_SCOPES.join(' '),
+      state: cryptoRandomState(),
+      // `force_verify=true` would force the user to re-confirm scopes even
+      // if previously authorised. We default to false so re-connecting an
+      // existing creator is one click.
+      force_verify: 'false',
+    });
+    return `${TWITCH_AUTHORIZE}?${params.toString()}`;
+  },
+  async handleCallback(code, redirectUri) {
+    const clientId = requireEnv('TWITCH_CLIENT_ID');
+    const clientSecret = requireEnv('TWITCH_CLIENT_SECRET');
+
+    // 1. Exchange the code for access + refresh tokens.
+    const body = new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    });
+    const tokenRes = await axios.post<{
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      scope?: string[] | string;
+      token_type?: string;
+      status?: number;
+      message?: string;
+    }>(TWITCH_TOKEN, body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 15_000,
+      validateStatus: () => true,
+      // Bypass any HTTPS_PROXY env var (OrbStack injects one that doesn't
+      // CONNECT-tunnel HTTPS properly — surfaces as "plain HTTP request
+      // sent to HTTPS port" / ECONNRESET).
+      proxy: false,
+    });
+    if (
+      tokenRes.status < 200 ||
+      tokenRes.status >= 300 ||
+      !tokenRes.data.access_token
+    ) {
+      const bodyStr =
+        tokenRes.data && typeof tokenRes.data === 'object'
+          ? JSON.stringify(tokenRes.data)
+          : String(tokenRes.data);
+      throw new Error(
+        `Twitch exchange failed (HTTP ${tokenRes.status}): ${bodyStr}`,
+      );
+    }
+    const accessToken = tokenRes.data.access_token;
+    const refreshToken = tokenRes.data.refresh_token;
+    const expiresAt = tokenRes.data.expires_in
+      ? new Date(Date.now() + tokenRes.data.expires_in * 1000).toISOString()
+      : undefined;
+    const scopes = Array.isArray(tokenRes.data.scope)
+      ? tokenRes.data.scope
+      : typeof tokenRes.data.scope === 'string'
+        ? tokenRes.data.scope.split(' ')
+        : TWITCH_SCOPES;
+
+    // 2. Discover the broadcaster identity. Empty id/login means "the
+    //    authenticated user" — Helix returns a single-element array.
+    const usersRes = await axios.get<{
+      data?: Array<{
+        id: string;
+        login: string;
+        display_name: string;
+        broadcaster_type: string;
+        description: string;
+        profile_image_url: string;
+        offline_image_url: string;
+        created_at: string;
+        email?: string;
+      }>;
+    }>(`${TWITCH_HELIX}/users`, {
+      headers: {
+        'Client-Id': clientId,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      timeout: 10_000,
+      proxy: false,
+    });
+    const user = usersRes.data?.data?.[0];
+    if (!user) {
+      throw new Error(
+        'Twitch /helix/users returned no items — token may be missing user:read:email scope.',
+      );
+    }
+
+    const seedBody: SeedBody = {
+      platform: 'twitch',
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: expiresAt,
+      canonical_user_id: user.id,
+      handle: user.login,
+      metadata: {
+        broadcaster_id: user.id,
+        login: user.login,
+        display_name: user.display_name,
+        broadcaster_type: user.broadcaster_type || null,
+        profile_image_url: user.profile_image_url,
+        scopes,
+      },
+    };
+    const sessionId = putSession({
+      kind: 'simple',
+      platform: 'twitch',
+      seedBody,
+      preview: {
+        handle: user.login,
+        name: user.display_name,
+        extras: {
+          broadcaster_id: user.id,
+          broadcaster_type: user.broadcaster_type || '—',
+          scopes,
+        },
+      },
+    });
+    return {
+      kind: 'confirm',
+      platform: 'twitch',
+      sessionId,
+      preview: {
+        handle: user.login,
+        name: user.display_name,
+        extras: {
+          broadcaster_id: user.id,
+          broadcaster_type: user.broadcaster_type || '—',
+          scopes,
+        },
+      },
+    };
+  },
+};
+
 export const PLATFORMS: Record<PlatformKey, PlatformDef> = {
   facebook,
   instagram,
   tiktok,
   threads,
   youtube,
+  twitch,
 };
 
 /**

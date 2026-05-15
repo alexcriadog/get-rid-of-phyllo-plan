@@ -54,6 +54,21 @@ export const PRODUCT_CATALOG: Record<PlatformKey, ProductDef[]> = {
     { id: 'engagement_new', label: 'Videos + metrics', default: true },
     { id: 'comments', label: 'Comments on top videos', default: true },
   ],
+  twitch: [
+    {
+      id: 'identity',
+      label: 'Channel + followers + subs',
+      required: true,
+      default: true,
+      hint: 'Profile, follower count, subscriber count + tier breakdown',
+    },
+    {
+      id: 'engagement_new',
+      label: 'VODs + clips',
+      default: true,
+      hint: 'Past broadcasts and recent clips with view counts',
+    },
+  ],
 };
 
 export function defaultSelectedProducts(platform: PlatformKey): string[] {

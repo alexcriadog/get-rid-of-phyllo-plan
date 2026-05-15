@@ -7,6 +7,8 @@ import { TikTokAdapter } from './tiktok/tiktok.adapter';
 import { TikTokModule } from './tiktok/tiktok.module';
 import { ThreadsAdapter } from './threads/threads.adapter';
 import { ThreadsModule } from './threads/threads.module';
+import { TwitchAdapter } from './twitch/twitch.adapter';
+import { TwitchModule } from './twitch/twitch.module';
 import { YoutubeAdapter } from './youtube/youtube.adapter';
 import { YoutubeModule } from './youtube/youtube.module';
 import {
@@ -33,6 +35,7 @@ export type { AdapterRegistry };
     TikTokModule,
     ThreadsModule,
     YoutubeModule,
+    TwitchModule,
   ],
   providers: [
     {
@@ -43,12 +46,14 @@ export type { AdapterRegistry };
         tt: TikTokAdapter,
         th: ThreadsAdapter,
         yt: YoutubeAdapter,
+        tw: TwitchAdapter,
       ): AdapterRegistry => ({
         instagram: ig,
         facebook: fb,
         tiktok: tt,
         threads: th,
         youtube: yt,
+        twitch: tw,
       }),
       inject: [
         InstagramAdapter,
@@ -56,6 +61,7 @@ export type { AdapterRegistry };
         TikTokAdapter,
         ThreadsAdapter,
         YoutubeAdapter,
+        TwitchAdapter,
       ],
     },
   ],
@@ -66,6 +72,7 @@ export type { AdapterRegistry };
     TikTokModule,
     ThreadsModule,
     YoutubeModule,
+    TwitchModule,
   ],
 })
 export class PlatformsModule {}

@@ -39,7 +39,7 @@ export interface FbSession {
  */
 export interface SimpleSession {
   kind: 'simple';
-  platform: 'tiktok' | 'threads' | 'youtube' | 'instagram';
+  platform: 'tiktok' | 'threads' | 'youtube' | 'instagram' | 'twitch';
   seedBody: SeedBody;
   preview: {
     handle?: string;

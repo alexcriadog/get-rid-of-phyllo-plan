@@ -4,7 +4,13 @@
 import axios, { AxiosError } from 'axios';
 
 export interface SeedBody {
-  platform: 'facebook' | 'instagram' | 'tiktok' | 'threads' | 'youtube';
+  platform:
+    | 'facebook'
+    | 'instagram'
+    | 'tiktok'
+    | 'threads'
+    | 'youtube'
+    | 'twitch';
   access_token: string;
   canonical_user_id: string;
   handle?: string;
@@ -47,6 +53,11 @@ export async function postToPocSeed(body: SeedBody): Promise<SeedResponse> {
           Authorization: `Bearer ${secret}`,
           'Content-Type': 'application/json',
         },
+        // Bypass any HTTPS_PROXY env var. OrbStack injects one into every
+        // container; it bounces internal POC_API_URL hostnames (like
+        // http://api:3000) back as 502. Direct connection over the
+        // compose network is what we want here.
+        proxy: false,
       },
     );
     return res.data;

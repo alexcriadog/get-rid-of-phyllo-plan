@@ -82,6 +82,20 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
               ? 'THREADS_APP_SECRET'
               : undefined,
         },
+        {
+          key: 'twitch',
+          label: 'Twitch',
+          subtitle: 'VODs + clips + follower / sub counts',
+          accent: 'purple',
+          enabled:
+            !!process.env.TWITCH_CLIENT_ID &&
+            !!process.env.TWITCH_CLIENT_SECRET,
+          missing: !process.env.TWITCH_CLIENT_ID
+            ? 'TWITCH_CLIENT_ID'
+            : !process.env.TWITCH_CLIENT_SECRET
+              ? 'TWITCH_CLIENT_SECRET'
+              : undefined,
+        },
       ],
     },
   };

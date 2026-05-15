@@ -323,6 +323,54 @@ const THR_METRICS: MetricDescriptor[] = [
 ];
 
 // ============================================================================
+// TWITCH
+// ============================================================================
+
+const TW_SCOPE_USER = 'user:read:email';
+const TW_SCOPE_FOLLOWERS = 'moderator:read:followers';
+const TW_SCOPE_SUBS = 'channel:read:subscriptions';
+
+const TW_METRICS: MetricDescriptor[] = [
+  // Profile (identity product)
+  { key: 'username', label: 'Login', description: 'Twitch login (URL slug, always lowercase).', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'displayName', label: 'Display name', description: 'Case-preserved display name shown on the channel page.', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'biography', label: 'Description', description: 'Channel description text shown on the About panel.', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'avatarUrl', label: 'Avatar URL', description: 'profile_image_url from /helix/users.', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'profileUrl', label: 'Profile URL', description: 'Reconstructed as twitch.tv/<login>.', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'bannerUrl', label: 'Offline image', description: 'offline_image_url — banner shown when the channel is offline.', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'accountType', label: 'Broadcaster type', description: 'broadcaster_type — empty (regular), "affiliate" (monetizable) or "partner" (Twitch revenue share).', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'publishedAt', label: 'Channel created', description: 'Account creation timestamp from /helix/users.', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'defaultLanguage', label: 'Broadcaster language', description: 'broadcaster_language from /helix/channels — ISO 639-1.', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'followersCount', label: 'Followers', description: 'Total followers via /helix/channels/followers?first=1 → .total.', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_FOLLOWERS, availableOn: ['account'] },
+  { key: 'subscriberCount', label: 'Paid subscribers', description: 'Total paid subscribers (all tiers + gifts) via /helix/subscriptions aggregation. Distinct from free followers.', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_SUBS, availableOn: ['account'] },
+  { key: 'subscribersByTier', label: 'Subs by tier', description: 'Tier breakdown: tier1 ($4.99), tier2 ($9.99), tier3 ($24.99), gifts (gifted-by-others count).', period: 'realtime', windowSummary: 'Current snapshot', scope: TW_SCOPE_SUBS, availableOn: ['account'] },
+
+  // Engagement_new (VODs + clips)
+  { key: 'caption', label: 'Title', description: 'VOD or clip title.', period: 'realtime', windowSummary: 'Content snapshot', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'permalink', label: 'Permalink', description: 'twitch.tv/videos/<id> for VOD, clips.twitch.tv/<slug> for clip.', period: 'realtime', windowSummary: 'Content snapshot', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'mediaUrls', label: 'Thumbnail', description: 'thumbnail_url from Helix.', period: 'realtime', windowSummary: 'Content snapshot', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'views', label: 'Views', description: 'view_count from /helix/videos or /helix/clips. For VODs, views accumulate after the live stream ends.', period: 'realtime', windowSummary: 'Content snapshot', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'duration', label: 'Duration', description: 'Helix-format string ("3h12m4s") for VODs, integer seconds for clips.', period: 'realtime', windowSummary: 'Content snapshot', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'mutedSegmentsTotalSeconds', label: 'Muted segments', description: 'Total seconds of audio muted by DMCA on the VOD. Higher = more music-rights friction.', period: 'realtime', windowSummary: 'VOD snapshot', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'vodOffsetSeconds', label: 'VOD offset (clip)', description: 'Seconds offset into the source VOD where the clip starts. Lets the UI jump from clip → exact VOD timecode.', period: 'realtime', windowSummary: 'Clip snapshot', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'privacyStatus', label: 'Viewable', description: 'VOD privacy: "public" or "private".', period: 'realtime', windowSummary: 'VOD snapshot', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'categoryId', label: 'Game (clip)', description: 'game_id for clips — links to the game/category at clip creation time. VODs do not carry per-VOD game data.', period: 'realtime', windowSummary: 'Clip snapshot', scope: TW_SCOPE_USER, availableOn: ['video'] },
+
+  // Explicit "not available" entries so the support matrix shows them as
+  // gaps. Helps operators understand why the product surface is thinner
+  // than YouTube/IG/FB.
+  { key: 'genderDistribution', label: 'Gender distribution', description: 'Twitch does not expose audience demographics via Helix.', period: 'lifetime', windowSummary: 'Not available', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'ageDistribution', label: 'Age distribution', description: 'Twitch does not expose audience demographics via Helix.', period: 'lifetime', windowSummary: 'Not available', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'countryDistribution', label: 'Country distribution', description: 'Twitch does not expose audience geography via Helix.', period: 'lifetime', windowSummary: 'Not available', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'cityDistribution', label: 'City distribution', description: 'Twitch does not expose audience geography via Helix.', period: 'lifetime', windowSummary: 'Not available', scope: TW_SCOPE_USER, availableOn: ['account'] },
+  { key: 'likes', label: 'Likes', description: 'Twitch has no "likes" concept on VODs or clips.', period: 'lifetime', windowSummary: 'Not available', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'comments', label: 'Comments', description: 'Twitch chat is real-time IRC. Helix does not expose historical chat for VODs.', period: 'lifetime', windowSummary: 'Not available', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'shares', label: 'Shares', description: 'Twitch does not expose share counts.', period: 'lifetime', windowSummary: 'Not available', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'retentionCurve', label: 'Retention curve', description: 'Twitch does not expose per-VOD audience retention (YouTube-only). Creator Dashboard shows it, but no public API.', period: 'lifetime', windowSummary: 'Not available', scope: TW_SCOPE_USER, availableOn: ['video'] },
+  { key: 'revenue', label: 'Revenue ($)', description: 'Twitch does not expose creator revenue via Helix. Ad revenue, sub payouts and bits payouts only visible in Creator Dashboard.', period: 'lifetime', windowSummary: 'Not available', scope: TW_SCOPE_USER, availableOn: ['account'] },
+];
+
+// ============================================================================
 // LOOKUP
 // ============================================================================
 
@@ -332,6 +380,7 @@ const CATALOGS: Record<string, MetricDescriptor[]> = {
   youtube: YT_METRICS,
   tiktok: TT_METRICS,
   threads: THR_METRICS,
+  twitch: TW_METRICS,
 };
 
 const BY_PLATFORM: Record<string, Map<string, MetricDescriptor>> =

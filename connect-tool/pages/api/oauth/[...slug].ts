@@ -7,7 +7,11 @@
 // and error handling.
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { PLATFORMS, type PlatformKey } from '../../../lib/platforms';
+import {
+  PLATFORMS,
+  type CallbackResult,
+  type PlatformKey,
+} from '../../../lib/platforms';
 import { publicBaseUrl } from '../../../lib/seed-client';
 
 const VALID_PLATFORMS = new Set<PlatformKey>([
@@ -15,7 +19,40 @@ const VALID_PLATFORMS = new Set<PlatformKey>([
   'tiktok',
   'threads',
   'youtube',
+  'twitch',
 ]);
+
+// In-flight callback dedupe. Chrome's "Preload pages for faster browsing"
+// (and some extensions) can fire the callback URL TWICE with the same
+// `code` — once for the real navigation and once as a prefetch. OAuth
+// codes are single-use across every platform we integrate: the second
+// token exchange either returns 400 "Invalid authorization code" or — when
+// the upstream closes the keep-alive socket mid-response — surfaces as
+// axios `ECONNRESET` ("socket hang up"), which masks the real success
+// of the first call.
+//
+// We cache the in-flight promise by (platform, code) so concurrent
+// duplicates await the same exchange and reuse the same session. Cleared
+// after CALLBACK_CACHE_TTL_MS so a fresh OAuth attempt with a new code
+// never collides.
+//
+// Anchored on globalThis because Next.js standalone bundles API routes
+// into a separate webpack chunk — a module-level Map would be duplicated
+// across bundles (same trick session.ts uses).
+const CALLBACK_CACHE_TTL_MS = 60_000;
+type CallbackEntry = { promise: Promise<CallbackResult>; clearAt: number };
+const CALLBACK_CACHE_KEY = '__connect_tool_callback_inflight__';
+type CallbackGlobal = { [CALLBACK_CACHE_KEY]?: Map<string, CallbackEntry> };
+const cg = globalThis as unknown as CallbackGlobal;
+const callbackInFlight: Map<string, CallbackEntry> =
+  cg[CALLBACK_CACHE_KEY] ?? (cg[CALLBACK_CACHE_KEY] = new Map());
+
+function pruneCallbackCache(): void {
+  const now = Date.now();
+  for (const [key, entry] of callbackInFlight.entries()) {
+    if (entry.clearAt <= now) callbackInFlight.delete(key);
+  }
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -68,13 +105,27 @@ export default async function handler(
       return;
     }
     try {
-      const result = await PLATFORMS[platform].handleCallback(code, redirectUri);
+      pruneCallbackCache();
+      const cacheKey = `${platform}:${code}`;
+      let entry = callbackInFlight.get(cacheKey);
+      if (!entry) {
+        // Wrap the platform handleCallback in a promise that ALWAYS resolves
+        // to a tagged result so concurrent duplicates can read the same
+        // outcome (success OR error) without re-running the exchange.
+        const promise = PLATFORMS[platform].handleCallback(code, redirectUri);
+        entry = {
+          promise,
+          clearAt: Date.now() + CALLBACK_CACHE_TTL_MS,
+        };
+        callbackInFlight.set(cacheKey, entry);
+      }
+      const result = await entry.promise;
       if (result.kind === 'fb-picker') {
         res.redirect(302, `/facebook/pages?session=${result.sessionId}`);
         return;
       }
-      // TikTok / Threads / YouTube — operator still needs to confirm
-      // products before we POST to the POC seed endpoint.
+      // TikTok / Threads / YouTube / Twitch — operator still needs to
+      // confirm products before we POST to the POC seed endpoint.
       res.redirect(
         302,
         `/confirm/${result.platform}?session=${result.sessionId}`,
@@ -106,6 +157,8 @@ function redirectUriFor(platform: PlatformKey, baseUrl: string): string {
       return env('TIKTOK_REDIRECT_URI') ?? `${baseUrl}/api/oauth/callback/tiktok`;
     case 'threads':
       return env('THREADS_REDIRECT_URI') ?? `${baseUrl}/api/oauth/callback/threads`;
+    case 'twitch':
+      return env('TWITCH_REDIRECT_URI') ?? `${baseUrl}/api/oauth/callback/twitch`;
     default:
       return `${baseUrl}/api/oauth/callback/${platform}`;
   }

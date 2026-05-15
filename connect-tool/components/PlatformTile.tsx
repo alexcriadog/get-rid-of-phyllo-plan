@@ -1,10 +1,10 @@
 import Link from 'next/link';
 
 export type PlatformInfo = {
-  key: 'facebook' | 'tiktok' | 'threads' | 'youtube';
+  key: 'facebook' | 'tiktok' | 'threads' | 'youtube' | 'twitch';
   label: string;
   subtitle: string;
-  accent: 'blue' | 'red' | 'cyan' | 'mint';
+  accent: 'blue' | 'red' | 'cyan' | 'mint' | 'purple';
   enabled: boolean;
   /** Name of the missing env var, when enabled === false. */
   missing?: string;
@@ -15,6 +15,8 @@ const ACCENT_HEX: Record<PlatformInfo['accent'], string> = {
   red: '#ff3c5e',
   cyan: '#3cb6ff',
   mint: '#3cffd0',
+  // Twitch brand purple.
+  purple: '#9146ff',
 };
 
 export function PlatformTile({ platform }: { platform: PlatformInfo }) {

@@ -17,6 +17,15 @@ type IdentityData = {
   postsCount?: number;
   verified?: boolean;
   accountType?: string;
+  /** Twitch: paid-subscriber count (free followers live in followersCount). */
+  subscriberCount?: number;
+  /** Twitch: tier 1 / 2 / 3 + gift counts inside the total. */
+  subscribersByTier?: {
+    tier1?: number;
+    tier2?: number;
+    tier3?: number;
+    gifts?: number;
+  };
 };
 
 type IdentitySnapshot = {
@@ -429,11 +438,37 @@ function ProfileHero({
             gap: 48,
             paddingTop: 20,
             borderTop: '1px solid #3d00bf',
+            flexWrap: 'wrap',
           }}
         >
           <HeroStat label="Followers" value={fmtNumber(followersCount)} />
-          <HeroStat label="Following" value={fmtNumber(d.followingCount)} />
-          <HeroStat label="Posts" value={fmtNumber(d.postsCount)} />
+          {identity.platform === 'twitch' ? (
+            <>
+              {/* Twitch separates free follow from paid subscription. We
+                  expose both — the count and the tier breakdown. Following
+                  + posts are intentionally null on Twitch (Helix doesn't
+                  expose them in a useful way), so we replace those slots. */}
+              <HeroStat
+                label="Subscribers"
+                value={fmtNumber(d.subscriberCount)}
+              />
+              {d.subscribersByTier && (
+                <HeroStat
+                  label="Tiers (1 / 2 / 3 · gifts)"
+                  value={`${d.subscribersByTier.tier1 ?? 0} / ${
+                    d.subscribersByTier.tier2 ?? 0
+                  } / ${d.subscribersByTier.tier3 ?? 0} · ${
+                    d.subscribersByTier.gifts ?? 0
+                  }`}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <HeroStat label="Following" value={fmtNumber(d.followingCount)} />
+              <HeroStat label="Posts" value={fmtNumber(d.postsCount)} />
+            </>
+          )}
         </div>
       </div>
     </div>

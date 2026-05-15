@@ -123,6 +123,13 @@ const CADENCE_DEFAULTS: CadenceRow[] = [
   // Google Ads campaigns (advertiser side). 6h cadence; expects a Basic
   // developer token via GOOGLE_ADS_DEVELOPER_TOKEN.
   { platform: 'youtube', product: 'ads', defaultIntervalSeconds: 21600 },
+  // Twitch — Helix points budget is 800/min and our two products combined
+  // cost ≈4 points per sync (1× /users + 1× /channels + 1× /channels/
+  // followers + 1-N× /subscriptions for identity; 1× /videos + 1× /clips
+  // for engagement_new). Cadence mirrors YouTube — identity every 6h,
+  // content every 4h.
+  { platform: 'twitch', product: 'identity', defaultIntervalSeconds: 21600 },
+  { platform: 'twitch', product: 'engagement_new', defaultIntervalSeconds: 14400 },
 ];
 
 async function seedCadences(): Promise<number> {
@@ -288,6 +295,8 @@ const PRODUCTS_BY_PLATFORM_FOR_BACKFILL: Record<string, string[]> = {
     'comments',
     'ads',
   ],
+  // Twitch — see accounts.service.ts PRODUCTS_BY_PLATFORM for rationale.
+  twitch: ['identity', 'engagement_new'],
 };
 
 /**

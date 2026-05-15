@@ -12,7 +12,13 @@ import { AesLocalService } from '@shared/crypto/aes-local.service';
 const META_GRAPH = 'https://graph.facebook.com/v22.0';
 const NORMALIZE_TIMEOUT_MS = 15_000;
 
-export type Platform = 'instagram' | 'facebook' | 'tiktok' | 'threads' | 'youtube';
+export type Platform =
+  | 'instagram'
+  | 'facebook'
+  | 'tiktok'
+  | 'threads'
+  | 'youtube'
+  | 'twitch';
 
 export interface SeedAccountInput {
   platform: Platform;
@@ -74,6 +80,12 @@ const PRODUCTS_BY_PLATFORM: Record<Platform, ReadonlyArray<string>> = {
     'comments',
     'ads',
   ],
+  // Twitch: VODs + clips only (no live tracking). Followers + subscriber
+  // counts live inside the `identity` snapshot because Helix doesn't expose
+  // demographic distributions. No engagement_deep (no Analytics API), no
+  // comments (chat is real-time), no ads (no revenue $ via Helix), no
+  // stories/mentions/ratings (concepts don't exist on Twitch).
+  twitch: ['identity', 'engagement_new'],
 };
 
 @Injectable()

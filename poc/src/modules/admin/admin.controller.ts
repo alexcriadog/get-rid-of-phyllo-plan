@@ -74,7 +74,14 @@ const SyncJobSettingsPatchSchema = z
 
 const ConnectSeedSchema = z
   .object({
-    platform: z.enum(['instagram', 'facebook', 'tiktok', 'threads', 'youtube']),
+    platform: z.enum([
+      'instagram',
+      'facebook',
+      'tiktok',
+      'threads',
+      'youtube',
+      'twitch',
+    ]),
     access_token: z.string().min(20),
     refresh_token: z.string().min(20).optional(),
     expires_at: z.string().datetime({ offset: true }).optional(),

@@ -43,6 +43,24 @@ export interface ProfileData {
   country?: string | null;
   publishedAt?: string | null;
   hiddenSubscriberCount?: boolean | null;
+  /**
+   * Paid-subscriber count distinct from `followersCount`. Populated by
+   * platforms where free follow and paid subscription are separate concepts
+   * (Twitch today; Substack / Patreon / OnlyFans in the future). Free-follow
+   * platforms (IG, YouTube, FB) leave this null and only set followersCount.
+   */
+  subscriberCount?: number | null;
+  /**
+   * Twitch tier breakdown. Keys are Twitch tier ids ('1000','2000','3000')
+   * mirrored as friendlier `tier1`/`tier2`/`tier3` + `gifts` (gift subs
+   * count, counted once in subscriberCount). All optional.
+   */
+  subscribersByTier?: {
+    tier1?: number;
+    tier2?: number;
+    tier3?: number;
+    gifts?: number;
+  } | null;
   fetchedAt: Date;
 }
 
@@ -191,6 +209,8 @@ export type ContentType =
   | 'reel'
   | 'story'
   | 'live'
+  /** Twitch clip — a short clipped excerpt from a VOD or live stream. */
+  | 'clip'
   | 'other';
 
 export interface ContentMetrics {
