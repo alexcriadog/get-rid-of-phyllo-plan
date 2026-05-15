@@ -70,15 +70,22 @@ export class TwitchContentFetcher {
     // Only pass `started_at` when the worker asked for an incremental
     // window. For a full sync (opts.since undefined), letting Twitch
     // return top-by-views clips of all time means small streamers with
-    // sparse recent activity still see their best clips — and the 30-day
-    // ceiling we used to hardcode was too tight to catch creator-defining
-    // viral clips from months ago.
+    // sparse recent activity still see their best clips.
+    //
+    // Twitch's /clips endpoint REQUIRES `ended_at` whenever `started_at`
+    // is provided — without it the response silently comes back with
+    // `data: []` even when matching clips exist (we hit this in prod
+    // before adding the explicit ended_at). When started_at is omitted,
+    // ended_at must also be omitted and Twitch returns top-by-views
+    // clips of all time.
     const startedAt = opts.since ? opts.since.toISOString() : undefined;
+    const endedAt = startedAt ? new Date().toISOString() : undefined;
     const clipsPromise = this.client
       .getClips({
         ...callCtx,
         broadcasterId,
         startedAt,
+        endedAt,
         first: Math.min(limit, 50),
       })
       .then((r) => r.data ?? [])
