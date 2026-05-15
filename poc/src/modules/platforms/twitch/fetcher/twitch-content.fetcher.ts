@@ -2,9 +2,14 @@
 //
 // Pipeline:
 //   1. GET /videos?user_id=&type=archive&first=50 — past broadcasts (VODs).
-//      Cost: 1 Helix point.
-//   2. GET /clips?broadcaster_id=&started_at=&first=50 — clips of the last
-//      `CLIP_WINDOW_DAYS` days. Cost: 1 point.
+//      Cost: 1 Helix point. Note: Twitch only returns archived VODs when
+//      the broadcaster has "Store past broadcasts" enabled in stream
+//      settings — otherwise this returns an empty array even when the
+//      channel streams regularly.
+//   2. GET /clips?broadcaster_id=&first=50 — top clips. When opts.since is
+//      provided we pass `started_at` so the worker can do incremental
+//      syncs; otherwise we omit it and Twitch returns the channel's
+//      all-time top clips sorted by view count (DESC). Cost: 1 point.
 //   3. Merge, sort by publishedAt DESC, cap at opts.limit.
 //
 // We deliberately don't paginate further. The schedule (every 4h) plus a
@@ -23,7 +28,6 @@ import { clipToContent, videoToContent } from '../mapper/twitch-content.mapper';
 import { TWITCH_API_CLIENT } from '../twitch.tokens';
 
 const DEFAULT_LIMIT = 50;
-const CLIP_WINDOW_DAYS = 30;
 
 @Injectable()
 export class TwitchContentFetcher {
@@ -63,7 +67,13 @@ export class TwitchContentFetcher {
         return [];
       });
 
-    const startedAt = isoNDaysAgo(CLIP_WINDOW_DAYS);
+    // Only pass `started_at` when the worker asked for an incremental
+    // window. For a full sync (opts.since undefined), letting Twitch
+    // return top-by-views clips of all time means small streamers with
+    // sparse recent activity still see their best clips — and the 30-day
+    // ceiling we used to hardcode was too tight to catch creator-defining
+    // viral clips from months ago.
+    const startedAt = opts.since ? opts.since.toISOString() : undefined;
     const clipsPromise = this.client
       .getClips({
         ...callCtx,
@@ -120,9 +130,4 @@ function resolveBroadcasterId(
     if (bid) return bid;
   }
   return canonicalId;
-}
-
-function isoNDaysAgo(days: number): string {
-  const d = new Date(Date.now() - days * 86_400_000);
-  return d.toISOString();
 }
