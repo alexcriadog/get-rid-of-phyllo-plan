@@ -117,7 +117,13 @@ export function clipToContent(
     tags: null,
     categoryId: clip.game_id || null,
     defaultLanguage: clip.language || null,
-    ownerHandle: clip.creator_name || null,
+    // ownerHandle deliberately NOT set: we fetch via /clips?broadcaster_id
+    // (clips OF this channel), so every clip belongs to the connected
+    // broadcaster regardless of who hit the clip button. Setting it to
+    // clip.creator_name (Twitch's display_name, mixed case) collides with
+    // the posts page filter that compares against the identity username
+    // (login, lowercase) and silently hides clips made by others on the
+    // user's own channel.
     liveBroadcastContent: 'none',
     rawResponse: raw,
   };
