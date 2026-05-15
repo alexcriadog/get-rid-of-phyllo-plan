@@ -13,6 +13,27 @@
 #                                instead of ts-node. ~4x less RAM.
 #   • connect-tool env  → uses prod base URL
 #   • connect-tool ports → bound to loopback only (Caddy reaches it via compose net)
+#   • mysql / mongo / redis — explicit resource caps + tuned defaults
+#                              (the base compose leaves them with restart:no
+#                               and unbounded memory, dangerous for prod).
+#
+# Resource budget on the EC2 host (t4g.medium: 2 vCPU, 8 GB RAM, 2 GB swap):
+#   • Sum of mem_limit caps ≈ 9.6 GB (overcommit by ~1.6 GB, covered by swap).
+#   • Expected steady-state RSS ≈ 3 GB total.
+#   • Each cap is sized at ~25-50% above the historical peak observed in
+#     cgroup memory.peak (incl. the OOM event of 2026-05-11 where Node
+#     processes reached 1.6 GB before the host ran out of RAM).
+#   • NODE_OPTIONS=--max-old-space-size is set ~85% of mem_limit so V8
+#     starts aggressive GC before the cgroup kills the container.
+#
+# Logging: every service rotates JSON logs at 20 MB × 5 files = 100 MB max
+# per container. Without this Docker keeps logs unbounded → disk fills.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
 
 services:
   # ── Nest services: switch from dev ts-node to compiled JS ─────────────
@@ -24,16 +45,36 @@ services:
     command: ["node", "dist/src/main.js", "api"]
     environment:
       NODE_ENV: production
+      # Cap V8 old-space at ~85% of mem_limit. V8 triggers aggressive GC
+      # as it approaches this number; the cgroup limit is the second
+      # safety net if GC can't free enough.
+      NODE_OPTIONS: "--max-old-space-size=1280"
+    mem_limit: 1536m
+    mem_reservation: 256m
+    cpus: 1.5
+    logging: *default-logging
 
   worker:
     command: ["node", "dist/src/main.js", "worker"]
     environment:
       NODE_ENV: production
+      # Worker is the highest-spike container (historical OOM victim at
+      # 1.6 GB on 2026-05-11). Give it the largest headroom.
+      NODE_OPTIONS: "--max-old-space-size=1800"
+    mem_limit: 2048m
+    mem_reservation: 256m
+    cpus: 1.5
+    logging: *default-logging
 
   scheduler:
     command: ["node", "dist/src/main.js", "scheduler"]
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=400"
+    mem_limit: 512m
+    mem_reservation: 96m
+    cpus: 0.5
+    logging: *default-logging
 
   caddy:
     image: caddy:2-alpine
@@ -51,6 +92,10 @@ services:
       - connect-tool
       - verify-youtube
     restart: unless-stopped
+    mem_limit: 128m
+    mem_reservation: 16m
+    cpus: 0.3
+    logging: *default-logging
 
   web:
     build:
@@ -66,6 +111,7 @@ services:
     container_name: poc-web
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=300"
       # SSR calls — go via the compose network at runtime.
       CONNECTOR_API_URL: "http://api:3000"
       MONGO_URL: "mongodb://mongo:27017/connector_ui"
@@ -77,6 +123,10 @@ services:
       mongo:
         condition: service_started
     restart: unless-stopped
+    mem_limit: 384m
+    mem_reservation: 64m
+    cpus: 0.5
+    logging: *default-logging
 
   connect-tool:
     build:
@@ -93,6 +143,11 @@ services:
       POC_ADMIN_URL: "https://smconnector.camaleonicanalytics.com/admin"
       NEXT_PUBLIC_POC_ADMIN_URL: "https://smconnector.camaleonicanalytics.com/admin"
       NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=200"
+    mem_limit: 256m
+    mem_reservation: 48m
+    cpus: 0.5
+    logging: *default-logging
     # We deliberately do NOT override ports here. The base file maps
     # 3002:3002 on 0.0.0.0; AWS Security Group blocks 3002 inbound, so
     # only the compose-network path Caddy uses reaches the container.
@@ -116,9 +171,62 @@ services:
     environment:
       PUBLIC_BASE_URL: "https://yt-connector.camaleonicanalytics.com"
       NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=200"
     expose:
       - "3003"
     restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 48m
+    cpus: 0.3
+    logging: *default-logging
+
+  # ── Data layer overrides ──────────────────────────────────────────────
+  # The base compose has these with restart: no (Docker default) and no
+  # resource caps. In prod we want them to come back automatically and
+  # be bounded so they never starve the host.
+  mysql:
+    # 384 MB InnoDB buffer pool (default 128 MB). The pool currently hits
+    # 100% page-cache rate at 128 MB; bumping ahead of growth.
+    command:
+      - mysqld
+      - --innodb-buffer-pool-size=384M
+      - --max-connections=200
+    mem_limit: 1536m
+    mem_reservation: 256m
+    cpus: 1.0
+    restart: unless-stopped
+    logging: *default-logging
+
+  mongo:
+    # Pin WiredTiger cache to 1.5 GB (default would be (RAM-1GB)*0.5 ≈
+    # 3.4 GB on this host — dangerously close to total RAM if anything
+    # else spikes). Working set today ≈ 800 MB, plenty of headroom.
+    command:
+      - mongod
+      - --wiredTigerCacheSizeGB=1.5
+      - --bind_ip_all
+    mem_limit: 3072m
+    mem_reservation: 512m
+    cpus: 1.5
+    restart: unless-stopped
+    logging: *default-logging
+
+  redis:
+    # Bounded data set (LRU eviction) so a runaway producer can't fill
+    # Redis. Today's footprint is 3 MB — this cap is mostly insurance.
+    command:
+      - redis-server
+      - --maxmemory
+      - "96mb"
+      - --maxmemory-policy
+      - "allkeys-lru"
+      - --appendonly
+      - "no"
+    mem_limit: 128m
+    mem_reservation: 16m
+    cpus: 0.3
+    restart: unless-stopped
+    logging: *default-logging
 
 volumes:
   caddy_data:
