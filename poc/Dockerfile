@@ -40,6 +40,10 @@ RUN npx prisma generate
 #    case where someone runs the image without a mount.
 COPY tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY src ./src
+# Operator scripts (issue-api-key, discover-ig, etc.) — invoked via
+# `docker compose exec api npm run <script>`. Kept in the image so the
+# legacy connect-tool/CLI flows work without bind-mounts in prod.
+COPY scripts ./scripts
 
 # 4. Compile TypeScript → dist/. Used in prod (node dist/main.js); ignored in
 #    dev where compose overrides the command back to ts-node + bind-mount.
