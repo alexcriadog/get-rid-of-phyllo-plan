@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { SharedDatabaseModule } from '@shared/database/database.module';
-import { ConnectToolGuard } from '@modules/admin/connect-tool.guard';
 import { WorkspacesModule } from '@modules/workspaces/workspaces.module';
 import { ApiKeysModule } from '@modules/api-keys/api-keys.module';
 import { OutboundWebhooksModule } from '@modules/outbound-webhooks/outbound-webhooks.module';
@@ -12,9 +11,9 @@ import { AdminSaasController } from './admin-saas.controller';
  * (which owns sync-job / cadence / rate-bucket operations on the legacy
  * single-tenant connector) so the two can evolve independently.
  *
- * ConnectToolGuard is registered as a local provider so this module
- * doesn't have to depend on AdminModule's internals — it only needs the
- * bearer guard's shape, not the rest of the admin DI graph.
+ * Routes are unguarded externally to match the existing /admin/* pattern
+ * — the operational model is "the /admin/* URL space is operator-trust;
+ * add Caddy Basic Auth at the ingress when stricter control is needed."
  */
 @Module({
   imports: [
@@ -25,6 +24,5 @@ import { AdminSaasController } from './admin-saas.controller';
     AccountsModule,
   ],
   controllers: [AdminSaasController],
-  providers: [ConnectToolGuard],
 })
 export class AdminSaasModule {}

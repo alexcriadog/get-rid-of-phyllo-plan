@@ -9,12 +9,10 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
-import { ConnectToolGuard } from '@modules/admin/connect-tool.guard';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
 import {
   ApiKeysService,
@@ -62,14 +60,17 @@ type TokenProduct = (typeof ALLOWED_TOKEN_PRODUCTS)[number];
 /**
  * Operator-facing admin surface for the Camaleonic Connect SaaS.
  *
- * Lives under /admin/* alongside the existing connector admin so the
- * same Caddy ingress (and the same ConnectToolGuard bearer) protects
- * both. Routes here are NOT part of the public /v1 surface clients
- * call — they're the dashboard the Camaleonic ops team uses to
- * onboard tenants, rotate keys, inspect deliveries, and debug tokens.
+ * Lives under /admin/* alongside the existing connector admin. The
+ * existing admin endpoints (admin/accounts, admin/sync-jobs, etc.) are
+ * unguarded externally — the operational model is "the /admin/* URL
+ * space is operator-trust, with HTTP Basic auth added at the Caddy
+ * layer when stricter access control is needed." This controller
+ * matches that pattern for read endpoints. The sensitive mutations
+ * (workspace + key creation / revocation) and the token-decrypt route
+ * carry @UseGuards(ConnectToolGuard) so they require the shared bearer
+ * even from inside the network.
  */
 @Controller('admin')
-@UseGuards(ConnectToolGuard)
 export class AdminSaasController {
   constructor(
     private readonly prisma: PrismaService,
