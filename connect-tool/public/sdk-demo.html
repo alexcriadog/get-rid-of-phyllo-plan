@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Camaleonic Connect — SDK demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        background: #0e0e0e;
+        color: #f4f4f4;
+        font-family:
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        padding: 48px;
+        max-width: 720px;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 36px;
+        margin: 0 0 8px;
+      }
+      .sub {
+        color: #888;
+        margin: 0 0 32px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        color: #aaa;
+        margin: 16px 0 4px;
+      }
+      input,
+      textarea {
+        width: 100%;
+        padding: 10px 12px;
+        font: inherit;
+        background: #161616;
+        border: 1px solid #2a2a2a;
+        color: inherit;
+        border-radius: 8px;
+        box-sizing: border-box;
+      }
+      textarea {
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        font-size: 12px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+        flex-wrap: wrap;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+        padding: 12px 20px;
+        background: #3cffd0;
+        color: #0e0e0e;
+        border: 0;
+        border-radius: 9999px;
+        font-weight: 600;
+      }
+      button.ghost {
+        background: transparent;
+        color: #3cffd0;
+        border: 1px solid #3cffd0;
+      }
+      pre {
+        background: #161616;
+        border-radius: 8px;
+        padding: 16px;
+        overflow: auto;
+        font-size: 12px;
+        line-height: 1.45;
+        margin-top: 24px;
+      }
+      a {
+        color: #3cffd0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Camaleonic Connect — SDK demo</h1>
+    <p class="sub">
+      Mint an SDK token server-side, paste it here, then click one of the
+      platform buttons. The widget opens a popup, the end-user authorizes,
+      and we log the resulting <code>onSuccess</code> payload below.
+    </p>
+
+    <label for="sdk-token">SDK token (paste — mint via POST /v1/sdk-tokens)</label>
+    <textarea id="sdk-token" rows="3" placeholder="eyJhbGciOiJIUzI1NiIs…"></textarea>
+
+    <label for="workspace">Workspace slug</label>
+    <input id="workspace" value="demo" />
+
+    <div class="row">
+      <button data-platform="twitch">Connect Twitch</button>
+      <button data-platform="instagram">Connect Instagram</button>
+      <button data-platform="youtube">Connect YouTube</button>
+      <button class="ghost" data-platform="">Open chooser</button>
+    </div>
+
+    <h3 style="margin-top: 32px">Events</h3>
+    <pre id="log">(events will appear here)</pre>
+
+    <p class="sub" style="margin-top: 24px">
+      Server reference: <a href="/openapi.yaml">openapi.yaml</a> · interactive
+      docs at <a href="/docs.html">/docs.html</a>.
+    </p>
+
+    <script src="/connect-sdk.js"></script>
+    <script>
+      var logEl = document.getElementById('log');
+      function log(label, data) {
+        var line = '[' + new Date().toISOString() + '] ' + label;
+        if (data !== undefined) line += '\n' + JSON.stringify(data, null, 2);
+        logEl.textContent = line + '\n\n' + logEl.textContent;
+      }
+      function start(platform) {
+        var token = document.getElementById('sdk-token').value.trim();
+        var ws = document.getElementById('workspace').value.trim();
+        if (!token || !ws) {
+          log('error', { code: 'missing-input', message: 'sdk-token and workspace are required' });
+          return;
+        }
+        try {
+          var handle = CamaleonicConnect.init({
+            sdkToken: token,
+            workspace: ws,
+            onSuccess: function (d) { log('onSuccess', d); },
+            onError: function (e) { log('onError', e); },
+            onExit: function () { log('onExit'); },
+          });
+          handle.open(platform || undefined);
+        } catch (err) {
+          log('threw', { message: err && err.message });
+        }
+      }
+      Array.prototype.forEach.call(document.querySelectorAll('button[data-platform]'), function (b) {
+        b.addEventListener('click', function () {
+          start(b.getAttribute('data-platform'));
+        });
+      });
+    </script>
+  </body>
+</html>
