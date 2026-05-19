@@ -1,16 +1,15 @@
-// Post-seed confirmation. The query string carries everything we need
-// so this page is fully static; no session / no DB read.
+'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/router';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
-export default function SuccessPage() {
-  const router = useRouter();
-  const platform = (router.query.platform as string | undefined) ?? '';
-  const accountsRaw = (router.query.accounts as string | undefined) ?? '';
+export function SuccessClient() {
+  const params = useSearchParams();
+  const platform = params.get('platform') ?? '';
+  const accountsRaw = params.get('accounts') ?? '';
   const accounts = accountsRaw ? accountsRaw.split(',').filter(Boolean) : [];
-  const summaryRaw = (router.query.summary as string | undefined) ?? '';
+  const summaryRaw = params.get('summary') ?? '';
   let summary: Record<string, unknown> | null = null;
   if (summaryRaw) {
     try {
@@ -29,8 +28,7 @@ export default function SuccessPage() {
   //   reference. Without this the SDK gets duplicate onSuccess calls.
   // - Belt-and-braces: a ref guard makes the postMessage idempotent in
   //   case Strict Mode (or a future change) fires the effect twice anyway.
-  const openerOrigin =
-    (router.query.opener_origin as string | undefined) ?? '';
+  const openerOrigin = params.get('opener_origin') ?? '';
   const sentRef = useRef(false);
   useEffect(() => {
     if (sentRef.current) return;
@@ -53,7 +51,6 @@ export default function SuccessPage() {
       // postMessage to a cross-origin opener may throw if the origin
       // policy disallowed it — that's the opener's problem, not ours.
     }
-    // Give the parent a tick to bind the listener before we close.
     const timer = window.setTimeout(() => window.close(), 250);
     return () => window.clearTimeout(timer);
   }, [accountsRaw, openerOrigin, platform]);

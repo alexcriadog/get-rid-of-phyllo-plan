@@ -1,12 +1,11 @@
-// Landing page — five tiles, one per platform. Each tile is a link to
-// /api/oauth/start/{platform} (server-side route that 302s to the
-// platform's authorize URL).
+// Landing page — five platform tiles, one per provider. Each tile links
+// to /api/oauth/start/{platform} which 302s to the upstream authorize URL.
 //
-// Tiles where the corresponding *_APP_ID/*_CLIENT_ID is missing render
-// disabled, with a hint to fill in `.env`.
+// SDK-launched popups carry ?ws=<slug>&token=<jwt>&origin=<opener-origin>.
+// We forward those params to every tile href so the dispatcher can verify
+// the JWT and stash the workspace context in a cookie before the redirect.
 
 import Link from 'next/link';
-import type { GetServerSideProps } from 'next';
 import axios from 'axios';
 import { PlatformTile, type PlatformInfo } from '../components/PlatformTile';
 
@@ -21,16 +20,17 @@ interface Branding {
   hide_platforms?: ReadonlyArray<string>;
 }
 
-type PageProps = {
-  platforms: PlatformInfo[];
-  pocAdminUrl: string;
-  pocFeedUrl: string;
-  /** ?error=… banner pass-through from cancelled OAuth flows. */
-  errorBanner?: string;
-  /** Already-encoded `ws=...&token=...&origin=...` to forward to tile hrefs. */
-  forwardQuery?: string;
-  branding?: Branding | null;
+type Search = {
+  error?: string | string[];
+  ws?: string | string[];
+  token?: string | string[];
+  origin?: string | string[];
 };
+
+function first(v: string | string[] | undefined): string | null {
+  if (Array.isArray(v)) return v[0] ?? null;
+  return typeof v === 'string' ? v : null;
+}
 
 async function fetchBranding(slug: string): Promise<Branding | null> {
   const baseUrl = process.env.POC_API_URL;
@@ -47,125 +47,109 @@ async function fetchBranding(slug: string): Promise<Branding | null> {
   }
 }
 
-export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
-  const errorBanner =
-    typeof ctx.query.error === 'string' ? ctx.query.error : undefined;
-  // Derive the public feed URL from POC_ADMIN_URL by swapping the
-  // trailing /admin segment for /feed. Avoids a second env var.
-  const adminUrl = process.env.POC_ADMIN_URL ?? 'http://localhost:3001/admin';
-  const feedUrl = adminUrl.replace(/\/admin\/?$/, '/feed');
+function buildPlatforms(): PlatformInfo[] {
+  return [
+    {
+      key: 'facebook',
+      label: 'Facebook',
+      subtitle: 'Pages + Instagram (via picker)',
+      accent: 'blue',
+      enabled: !!process.env.META_APP_ID && !!process.env.META_APP_SECRET,
+      missing: !process.env.META_APP_ID
+        ? 'META_APP_ID'
+        : !process.env.META_APP_SECRET
+          ? 'META_APP_SECRET'
+          : undefined,
+    },
+    {
+      key: 'youtube',
+      label: 'YouTube',
+      subtitle: 'Channel + Analytics',
+      accent: 'red',
+      enabled:
+        !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET,
+      missing: !process.env.GOOGLE_CLIENT_ID
+        ? 'GOOGLE_CLIENT_ID'
+        : !process.env.GOOGLE_CLIENT_SECRET
+          ? 'GOOGLE_CLIENT_SECRET'
+          : undefined,
+    },
+    {
+      key: 'tiktok',
+      label: 'TikTok',
+      subtitle: 'Business account',
+      accent: 'cyan',
+      enabled:
+        !!process.env.TIKTOK_CLIENT_KEY &&
+        !!process.env.TIKTOK_CLIENT_SECRET,
+      missing: !process.env.TIKTOK_CLIENT_KEY
+        ? 'TIKTOK_CLIENT_KEY'
+        : !process.env.TIKTOK_CLIENT_SECRET
+          ? 'TIKTOK_CLIENT_SECRET'
+          : undefined,
+    },
+    {
+      key: 'threads',
+      label: 'Threads',
+      subtitle: 'Posts + replies + insights',
+      accent: 'mint',
+      enabled:
+        !!process.env.THREADS_APP_ID && !!process.env.THREADS_APP_SECRET,
+      missing: !process.env.THREADS_APP_ID
+        ? 'THREADS_APP_ID'
+        : !process.env.THREADS_APP_SECRET
+          ? 'THREADS_APP_SECRET'
+          : undefined,
+    },
+    {
+      key: 'twitch',
+      label: 'Twitch',
+      subtitle: 'VODs + clips + follower / sub counts',
+      accent: 'purple',
+      enabled:
+        !!process.env.TWITCH_CLIENT_ID && !!process.env.TWITCH_CLIENT_SECRET,
+      missing: !process.env.TWITCH_CLIENT_ID
+        ? 'TWITCH_CLIENT_ID'
+        : !process.env.TWITCH_CLIENT_SECRET
+          ? 'TWITCH_CLIENT_SECRET'
+          : undefined,
+    },
+  ];
+}
 
-  // SDK launch: ?ws=<slug>&token=<jwt>&origin=<opener-origin>. Build the
-  // forward-query so each tile keeps the context across /api/oauth/start.
-  const ws = typeof ctx.query.ws === 'string' ? ctx.query.ws : null;
-  const token = typeof ctx.query.token === 'string' ? ctx.query.token : null;
-  const origin = typeof ctx.query.origin === 'string' ? ctx.query.origin : null;
+export default async function Index({
+  searchParams,
+}: {
+  searchParams: Promise<Search>;
+}) {
+  // Next 15 makes searchParams async; awaiting works on 14 too (just
+  // resolves immediately).
+  const sp = await searchParams;
+  const errorBanner = first(sp.error) ?? undefined;
+  const ws = first(sp.ws);
+  const token = first(sp.token);
+  const origin = first(sp.origin);
+
+  const adminUrl = process.env.POC_ADMIN_URL ?? 'http://localhost:3001/admin';
+  const pocFeedUrl = adminUrl.replace(/\/admin\/?$/, '/feed');
+
   const forwardParams = new URLSearchParams();
   if (ws) forwardParams.set('ws', ws);
   if (token) forwardParams.set('token', token);
   if (origin) forwardParams.set('origin', origin);
   const forwardQuery = forwardParams.toString() || undefined;
+  const inPopup = !!forwardQuery;
 
   const branding = ws ? await fetchBranding(ws) : null;
+  const platforms = buildPlatforms();
+  const hide = new Set(branding?.hide_platforms ?? []);
+  const visiblePlatforms = platforms.filter((p) => !hide.has(p.key));
 
-  return {
-    props: {
-      errorBanner,
-      pocAdminUrl: adminUrl,
-      pocFeedUrl: feedUrl,
-      forwardQuery,
-      branding,
-      platforms: [
-        {
-          key: 'facebook',
-          label: 'Facebook',
-          subtitle: 'Pages + Instagram (via picker)',
-          accent: 'blue',
-          enabled: !!process.env.META_APP_ID && !!process.env.META_APP_SECRET,
-          missing: !process.env.META_APP_ID
-            ? 'META_APP_ID'
-            : !process.env.META_APP_SECRET
-              ? 'META_APP_SECRET'
-              : undefined,
-        },
-        {
-          key: 'youtube',
-          label: 'YouTube',
-          subtitle: 'Channel + Analytics',
-          accent: 'red',
-          enabled:
-            !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET,
-          missing: !process.env.GOOGLE_CLIENT_ID
-            ? 'GOOGLE_CLIENT_ID'
-            : !process.env.GOOGLE_CLIENT_SECRET
-              ? 'GOOGLE_CLIENT_SECRET'
-              : undefined,
-        },
-        {
-          key: 'tiktok',
-          label: 'TikTok',
-          subtitle: 'Business account',
-          accent: 'cyan',
-          enabled:
-            !!process.env.TIKTOK_CLIENT_KEY &&
-            !!process.env.TIKTOK_CLIENT_SECRET,
-          missing: !process.env.TIKTOK_CLIENT_KEY
-            ? 'TIKTOK_CLIENT_KEY'
-            : !process.env.TIKTOK_CLIENT_SECRET
-              ? 'TIKTOK_CLIENT_SECRET'
-              : undefined,
-        },
-        {
-          key: 'threads',
-          label: 'Threads',
-          subtitle: 'Posts + replies + insights',
-          accent: 'mint',
-          enabled:
-            !!process.env.THREADS_APP_ID && !!process.env.THREADS_APP_SECRET,
-          missing: !process.env.THREADS_APP_ID
-            ? 'THREADS_APP_ID'
-            : !process.env.THREADS_APP_SECRET
-              ? 'THREADS_APP_SECRET'
-              : undefined,
-        },
-        {
-          key: 'twitch',
-          label: 'Twitch',
-          subtitle: 'VODs + clips + follower / sub counts',
-          accent: 'purple',
-          enabled:
-            !!process.env.TWITCH_CLIENT_ID &&
-            !!process.env.TWITCH_CLIENT_SECRET,
-          missing: !process.env.TWITCH_CLIENT_ID
-            ? 'TWITCH_CLIENT_ID'
-            : !process.env.TWITCH_CLIENT_SECRET
-              ? 'TWITCH_CLIENT_SECRET'
-              : undefined,
-        },
-      ],
-    },
-  };
-};
-
-export default function Index({
-  platforms,
-  pocAdminUrl,
-  pocFeedUrl,
-  errorBanner,
-  forwardQuery,
-  branding,
-}: PageProps) {
-  // SDK-driven popups hide the operator-only "POC admin / Public feed"
-  // footer links: they aren't meaningful to an end-user of the client.
-  const inPopup = !!forwardQuery;
   const title = branding?.title ?? 'One click. One token.';
   const subtitle =
     branding?.subtitle ??
     "Pick a platform. Approve the OAuth dialog. We hand the long-lived token to the POC's seed endpoint. The POC starts syncing.";
-  const hide = new Set(branding?.hide_platforms ?? []);
-  const visiblePlatforms = platforms.filter((p) => !hide.has(p.key));
 
-  // Inject branded CSS variables so the v-tile/v-pill rules pick them up.
   const themeStyle: React.CSSProperties | undefined = branding
     ? ({
         ['--brand-primary' as never]: branding.primary_color ?? undefined,
@@ -189,7 +173,9 @@ export default function Index({
           ) : (
             <span className="v-kicker mint">connect-tool</span>
           )}
-          <span className="v-eyebrow">{inPopup ? 'Connect your account' : 'Hand a token to the POC'}</span>
+          <span className="v-eyebrow">
+            {inPopup ? 'Connect your account' : 'Hand a token to the POC'}
+          </span>
         </header>
 
         <h1 className="v-display size-hero">{title}</h1>
@@ -211,7 +197,7 @@ export default function Index({
             <Link className="v-pill-outline-mint" href={pocFeedUrl}>
               Public feed →
             </Link>
-            <Link className="v-pill-outline-mint" href={pocAdminUrl}>
+            <Link className="v-pill-outline-mint" href={adminUrl}>
               POC admin →
             </Link>
           </footer>
@@ -256,7 +242,7 @@ function classifyError(raw: string): BannerKind {
   if (m.includes('platform') && m.includes('not allowed')) {
     return {
       title: 'This platform is not available for your account.',
-      hint: 'The app you came from didn\'t include this platform when issuing your connect link. Try a different one or ask them to re-issue.',
+      hint: "The app you came from didn't include this platform when issuing your connect link. Try a different one or ask them to re-issue.",
     };
   }
   if (m.includes('unknown platform')) {
@@ -267,7 +253,7 @@ function classifyError(raw: string): BannerKind {
   }
   if (m.includes('denied:') || m.includes('access_denied')) {
     return {
-      title: "You declined the permission dialog.",
+      title: 'You declined the permission dialog.',
       hint: "We can't connect the account without those permissions. Click a platform again to retry.",
     };
   }
@@ -315,7 +301,9 @@ function ErrorBanner({ raw }: { raw: string }) {
       <div style={{ fontSize: 13, opacity: 0.85 }}>{kind.hint}</div>
       <details style={{ marginTop: 4, fontSize: 11, opacity: 0.55 }}>
         <summary style={{ cursor: 'pointer' }}>Technical details</summary>
-        <code style={{ display: 'block', marginTop: 4, fontFamily: 'monospace' }}>
+        <code
+          style={{ display: 'block', marginTop: 4, fontFamily: 'monospace' }}
+        >
           {decoded}
         </code>
       </details>

@@ -4,23 +4,23 @@
 //   - optionally a second seed call as platform=instagram (if the operator
 //     wants the IG business account, AND the Page actually has one)
 
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import {
   dropSession,
   getFbSession,
   getOAuthContextSession,
-} from '../../lib/session';
+} from '../../../lib/session';
 import {
   buildFacebookSeeds,
   type PlatformKey,
-} from '../../lib/platforms';
-import { postToPocSeed } from '../../lib/seed-client';
-import { defaultSelectedProducts } from '../../lib/products';
+} from '../../../lib/platforms';
+import { postToPocSeed } from '../../../lib/seed-client';
+import { defaultSelectedProducts } from '../../../lib/products';
 import {
   getContextCookie,
   setContextCookie,
-} from '../../lib/oauth-context';
+} from '../../../lib/oauth-context';
 
 const Body = z
   .object({
@@ -40,26 +40,27 @@ interface PerPageResult {
   errors: Array<{ platform: PlatformKey; message: string }>;
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-): Promise<void> {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
-  const parsed = Body.safeParse(req.body);
+  const parsed = Body.safeParse(raw);
   if (!parsed.success) {
-    res.status(400).json({ error: 'invalid body', issues: parsed.error.issues });
-    return;
+    return NextResponse.json(
+      { error: 'invalid body', issues: parsed.error.issues },
+      { status: 400 },
+    );
   }
 
   const session = getFbSession(parsed.data.sessionId);
   if (!session) {
-    res.status(410).json({
-      error: 'session expired or unknown — restart Facebook OAuth',
-    });
-    return;
+    return NextResponse.json(
+      { error: 'session expired or unknown — restart Facebook OAuth' },
+      { status: 410 },
+    );
   }
 
   const productsFb = parsed.data.productsFb?.length
@@ -69,7 +70,6 @@ export default async function handler(
     ? parsed.data.productsIg
     : defaultSelectedProducts('instagram');
 
-  // SDK-launched popup carries tenant context in a cookie.
   const contextSessionId = getContextCookie(req);
   const context = contextSessionId
     ? getOAuthContextSession(contextSessionId)
@@ -132,13 +132,13 @@ export default async function handler(
 
   // Drop the session so the user_token doesn't linger in memory.
   dropSession(parsed.data.sessionId);
-  if (contextSessionId) {
-    dropSession(contextSessionId);
-    setContextCookie(res, null);
-  }
-
-  res.status(200).json({
+  const response = NextResponse.json({
     results,
     opener_origin: context?.openerOrigin ?? null,
   });
+  if (contextSessionId) {
+    dropSession(contextSessionId);
+    setContextCookie(response, null);
+  }
+  return response;
 }

@@ -7,7 +7,7 @@
 // It's deliberately short-lived to match session.ts TTL.
 
 import axios from 'axios';
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextRequest, NextResponse } from 'next/server';
 
 export const CONNECT_CONTEXT_COOKIE = 'camaleonic_connect_session';
 const COOKIE_TTL_SECONDS = 10 * 60;
@@ -64,34 +64,31 @@ export async function verifySdkToken(token: string): Promise<SdkTokenClaims> {
  * SDK context).
  */
 export function setContextCookie(
-  res: NextApiResponse,
+  res: NextResponse,
   sessionId: string | null,
 ): void {
   if (sessionId === null) {
-    res.setHeader(
-      'Set-Cookie',
-      `${CONNECT_CONTEXT_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
-    );
+    res.cookies.set(CONNECT_CONTEXT_COOKIE, '', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 0,
+    });
     return;
   }
-  res.setHeader(
-    'Set-Cookie',
-    `${CONNECT_CONTEXT_COOKIE}=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_TTL_SECONDS}`,
-  );
+  res.cookies.set(CONNECT_CONTEXT_COOKIE, sessionId, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: COOKIE_TTL_SECONDS,
+  });
 }
 
 /**
  * Read the connect-context sessionId from the request cookie. Returns
  * null when the header is absent or the cookie was cleared.
  */
-export function getContextCookie(req: NextApiRequest): string | null {
-  const raw = req.headers.cookie ?? '';
-  for (const piece of raw.split(';')) {
-    const [k, ...rest] = piece.trim().split('=');
-    if (k === CONNECT_CONTEXT_COOKIE) {
-      const v = rest.join('=').trim();
-      return v.length > 0 ? v : null;
-    }
-  }
-  return null;
+export function getContextCookie(req: NextRequest): string | null {
+  const v = req.cookies.get(CONNECT_CONTEXT_COOKIE)?.value;
+  return v && v.length > 0 ? v : null;
 }

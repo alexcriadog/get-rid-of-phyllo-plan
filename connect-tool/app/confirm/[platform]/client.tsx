@@ -1,84 +1,32 @@
-// Confirmation page shown after the OAuth callback for TikTok / Threads /
-// YouTube. Renders an account preview + product checkboxes; on submit POSTs
-// to /api/seed-confirm and redirects to /success.
+'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { GetServerSideProps } from 'next';
-import { getSimpleSession } from '../../lib/session';
-import {
-  PRODUCT_CATALOG,
-  defaultSelectedProducts,
-  type ProductDef,
-} from '../../lib/products';
-import type { PlatformKey } from '../../lib/platforms';
+import type { ProductDef } from '../../../lib/products';
+import type { PlatformKey } from '../../../lib/platforms';
 
-type Preview = {
+interface Preview {
   handle?: string;
   name?: string;
   extras?: Record<string, unknown>;
-};
+}
 
-type PageProps = {
+interface Props {
   sessionId: string;
   platform: PlatformKey;
   preview: Preview;
   products: ProductDef[];
   defaultIds: string[];
-};
+}
 
-export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
-  const sessionId =
-    typeof ctx.query.session === 'string' ? ctx.query.session : '';
-  const platform = ctx.params?.platform as PlatformKey | undefined;
-  if (!sessionId || !platform || !PRODUCT_CATALOG[platform]) {
-    return {
-      redirect: {
-        destination: '/?error=' + encodeURIComponent('Missing session or platform'),
-        permanent: false,
-      },
-    };
-  }
-  const session = getSimpleSession(sessionId);
-  if (!session) {
-    return {
-      redirect: {
-        destination:
-          '/?error=' +
-          encodeURIComponent(
-            'Session expired (10 minutes) — restart the OAuth flow.',
-          ),
-        permanent: false,
-      },
-    };
-  }
-  if (session.platform !== platform) {
-    return {
-      redirect: {
-        destination: '/?error=' + encodeURIComponent('Session/platform mismatch'),
-        permanent: false,
-      },
-    };
-  }
-  return {
-    props: {
-      sessionId,
-      platform,
-      preview: session.preview,
-      products: PRODUCT_CATALOG[platform],
-      defaultIds: defaultSelectedProducts(platform),
-    },
-  };
-};
-
-export default function ConfirmPage({
+export function ConfirmClient({
   sessionId,
   platform,
   preview,
   products,
   defaultIds,
-}: PageProps) {
+}: Props) {
   const router = useRouter();
   const [picked, setPicked] = useState<Set<string>>(() => new Set(defaultIds));
   const [busy, setBusy] = useState(false);
@@ -116,9 +64,10 @@ export default function ConfirmPage({
           sync_jobs_created: (json.sync_jobs_created ?? []).length,
         }),
       });
-      // Propagate the verified opener origin so /success can lock down
-      // the postMessage targetOrigin to the SDK caller's domain.
-      if (typeof json.opener_origin === 'string' && json.opener_origin.length > 0) {
+      if (
+        typeof json.opener_origin === 'string' &&
+        json.opener_origin.length > 0
+      ) {
         params.set('opener_origin', json.opener_origin);
       }
       router.push(`/success?${params.toString()}`);

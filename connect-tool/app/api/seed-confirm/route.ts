@@ -2,19 +2,19 @@
 // Reads the simple-platform session that the OAuth callback stashed, takes
 // the operator's product selection, and posts the seed to the POC.
 
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import {
   dropSession,
   getOAuthContextSession,
   getSimpleSession,
-} from '../../lib/session';
-import { postToPocSeed } from '../../lib/seed-client';
-import { requiredProducts } from '../../lib/products';
+} from '../../../lib/session';
+import { postToPocSeed } from '../../../lib/seed-client';
+import { requiredProducts } from '../../../lib/products';
 import {
   getContextCookie,
   setContextCookie,
-} from '../../lib/oauth-context';
+} from '../../../lib/oauth-context';
 
 const Body = z
   .object({
@@ -23,37 +23,34 @@ const Body = z
   })
   .strict();
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-): Promise<void> {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
-  const parsed = Body.safeParse(req.body);
+  const parsed = Body.safeParse(raw);
   if (!parsed.success) {
-    res.status(400).json({ error: 'invalid body', issues: parsed.error.issues });
-    return;
+    return NextResponse.json(
+      { error: 'invalid body', issues: parsed.error.issues },
+      { status: 400 },
+    );
   }
 
   const session = getSimpleSession(parsed.data.sessionId);
   if (!session) {
-    res
-      .status(410)
-      .json({ error: 'session expired or unknown — restart OAuth' });
-    return;
+    return NextResponse.json(
+      { error: 'session expired or unknown — restart OAuth' },
+      { status: 410 },
+    );
   }
 
-  // Force-include required products (operator can't disable them anyway).
   const required = requiredProducts(session.platform);
   const products = Array.from(
     new Set([...required, ...parsed.data.productIds]),
   );
 
-  // SDK-launched popup: thread the verified workspace + end-user from the
-  // OAuth context cookie into the seed body so the backend scopes the
-  // account to the right tenant. Absent → legacy flow (demo workspace).
   const contextSessionId = getContextCookie(req);
   const context = contextSessionId
     ? getOAuthContextSession(contextSessionId)
@@ -77,11 +74,7 @@ export default async function handler(
   try {
     const seeded = await postToPocSeed(seedBody);
     dropSession(parsed.data.sessionId);
-    if (contextSessionId) {
-      dropSession(contextSessionId);
-      setContextCookie(res, null);
-    }
-    res.status(200).json({
+    const response = NextResponse.json({
       account_id: seeded.account_id,
       sync_jobs_created: seeded.sync_jobs_created,
       products,
@@ -89,8 +82,16 @@ export default async function handler(
       preview: session.preview,
       opener_origin: context?.openerOrigin ?? null,
     });
+    if (contextSessionId) {
+      dropSession(contextSessionId);
+      setContextCookie(response, null);
+    }
+    return response;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(502).json({ error: 'POC seed failed', message });
+    return NextResponse.json(
+      { error: 'POC seed failed', message },
+      { status: 502 },
+    );
   }
 }

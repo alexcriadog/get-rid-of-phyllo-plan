@@ -1,90 +1,41 @@
-// Page picker shown after the Facebook OAuth callback. Reads the session
-// that holds the user_token + page list, and lets the operator tick
-// which Pages to connect (and whether to also seed their IG business
-// account, when they have one).
+'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { GetServerSideProps } from 'next';
-import { getFbSession } from '../../lib/session';
-import {
-  PRODUCT_CATALOG,
-  defaultSelectedProducts,
-  type ProductDef,
-} from '../../lib/products';
+import type { ProductDef } from '../../../lib/products';
 
-type PageItem = {
+interface PageItem {
   id: string;
   name: string;
   ig_business_account_id: string | null;
-};
+}
 
-type PageProps = {
+interface Props {
   sessionId: string;
   pages: PageItem[];
   fbProducts: ProductDef[];
   fbDefaults: string[];
   igProducts: ProductDef[];
   igDefaults: string[];
-};
+}
 
-export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
-  const sessionId =
-    typeof ctx.query.session === 'string' ? ctx.query.session : '';
-  if (!sessionId) {
-    return {
-      redirect: {
-        destination: '/?error=' + encodeURIComponent('Missing session id'),
-        permanent: false,
-      },
-    };
-  }
-  const session = getFbSession(sessionId);
-  if (!session) {
-    return {
-      redirect: {
-        destination:
-          '/?error=' +
-          encodeURIComponent(
-            'Session expired (10 minutes) — restart Facebook OAuth.',
-          ),
-        permanent: false,
-      },
-    };
-  }
-  return {
-    props: {
-      sessionId,
-      pages: session.pages.map((p) => ({
-        id: p.id,
-        name: p.name,
-        ig_business_account_id: p.instagram_business_account?.id ?? null,
-      })),
-      fbProducts: PRODUCT_CATALOG.facebook,
-      fbDefaults: defaultSelectedProducts('facebook'),
-      igProducts: PRODUCT_CATALOG.instagram,
-      igDefaults: defaultSelectedProducts('instagram'),
-    },
-  };
-};
-
-type ResultRow = {
+interface ResultRow {
   page_id: string;
   page_name: string;
   facebook_account_id: string | null;
   instagram_account_id: string | null;
   errors: Array<{ platform: string; message: string }>;
-};
+}
 
-export default function FacebookPagesPicker({
+export function FacebookPagesClient({
   sessionId,
   pages,
   fbProducts,
   fbDefaults,
   igProducts,
   igDefaults,
-}: PageProps) {
+}: Props) {
   const router = useRouter();
   const [picked, setPicked] = useState<Set<string>>(
     () => new Set(pages.map((p) => p.id)),
@@ -155,8 +106,9 @@ export default function FacebookPagesPicker({
           facebook_pages: json.results.length,
           facebook_accounts: json.results.filter((r) => r.facebook_account_id)
             .length,
-          instagram_accounts: json.results.filter((r) => r.instagram_account_id)
-            .length,
+          instagram_accounts: json.results.filter(
+            (r) => r.instagram_account_id,
+          ).length,
         }),
       );
       const accounts = json.results
@@ -204,8 +156,6 @@ export default function FacebookPagesPicker({
 
         {err && <div className="v-banner danger">↯ {err}</div>}
 
-        {/* Product panels — apply to ALL chosen pages. Granularity per-page
-            is intentionally avoided to keep the UX manageable. */}
         <div
           style={{
             display: 'grid',
@@ -341,7 +291,14 @@ function ProductsPanel({
         background: 'rgba(255,255,255,0.02)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 4,
+        }}
+      >
         <span className="v-kicker mint">{title}</span>
         <span className="v-meta">
           {picked.size}/{products.length}
@@ -357,34 +314,33 @@ function ProductsPanel({
           return (
             <label
               key={p.id}
+              className={'v-page-row ' + (on ? 'picked' : '')}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '6px 8px',
-                borderRadius: 8,
                 cursor: locked ? 'default' : 'pointer',
                 opacity: locked ? 0.85 : 1,
-                background: on ? 'rgba(60,255,208,0.06)' : 'transparent',
+                padding: '10px 12px',
               }}
             >
               <input
                 type="checkbox"
                 checked={on}
                 disabled={locked}
-                onChange={() => !locked && onToggle(p.id)}
+                onChange={() => {
+                  if (!locked) onToggle(p.id);
+                }}
               />
-              <span style={{ flex: 1, fontFamily: 'var(--v-sans)', fontSize: 14 }}>
-                {p.label}
-                {locked && (
-                  <span className="v-meta" style={{ marginLeft: 6 }}>
-                    required
-                  </span>
-                )}
-              </span>
-              <span className="v-meta" style={{ fontSize: 10 }}>
-                {p.id}
-              </span>
+              <div className="v-page-meta">
+                <div className="v-page-name">
+                  {p.label}
+                  {locked && (
+                    <span className="v-meta" style={{ marginLeft: 8 }}>
+                      required
+                    </span>
+                  )}
+                </div>
+                {p.hint && <div className="v-page-id">{p.hint}</div>}
+              </div>
+              <span className="v-meta">{p.id}</span>
             </label>
           );
         })}

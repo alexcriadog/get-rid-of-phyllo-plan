@@ -1,23 +1,22 @@
-// Single dispatcher for OAuth routes.
+// Single dispatcher for OAuth routes (App Router edition).
 //
 //   GET /api/oauth/start/{platform}     → 302 to platform authorize URL
 //   GET /api/oauth/callback/{platform}  → exchange code, seed POC, redirect
 //
-// Each platform's logic lives in lib/platforms.ts. This file is just routing
-// and error handling.
+// Each platform's logic lives in lib/platforms.ts. This file is just
+// routing and error handling.
 
-import type { NextApiRequest, NextApiResponse } from 'next';
+import { NextRequest, NextResponse } from 'next/server';
 import {
   PLATFORMS,
   type CallbackResult,
   type PlatformKey,
-} from '../../../lib/platforms';
-import { publicBaseUrl } from '../../../lib/seed-client';
-import { putSession } from '../../../lib/session';
+} from '../../../../lib/platforms';
+import { putSession } from '../../../../lib/session';
 import {
   setContextCookie,
   verifySdkToken,
-} from '../../../lib/oauth-context';
+} from '../../../../lib/oauth-context';
 
 const VALID_PLATFORMS = new Set<PlatformKey>([
   'facebook',
@@ -41,9 +40,9 @@ const VALID_PLATFORMS = new Set<PlatformKey>([
 // after CALLBACK_CACHE_TTL_MS so a fresh OAuth attempt with a new code
 // never collides.
 //
-// Anchored on globalThis because Next.js standalone bundles API routes
-// into a separate webpack chunk — a module-level Map would be duplicated
-// across bundles (same trick session.ts uses).
+// Anchored on globalThis because Next.js standalone bundles route
+// handlers into a separate webpack chunk — a module-level Map would be
+// duplicated across bundles (same trick session.ts uses).
 const CALLBACK_CACHE_TTL_MS = 60_000;
 type CallbackEntry = { promise: Promise<CallbackResult>; clearAt: number };
 const CALLBACK_CACHE_KEY = '__connect_tool_callback_inflight__';
@@ -59,142 +58,20 @@ function pruneCallbackCache(): void {
   }
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-): Promise<void> {
-  const slug = (req.query.slug as string[] | undefined) ?? [];
-  if (slug.length !== 2) {
-    res.status(404).send('Not found');
-    return;
-  }
-  const [action, rawPlatform] = slug;
-  const platform = rawPlatform as PlatformKey;
-  if (!VALID_PLATFORMS.has(platform)) {
-    res.status(404).send(`Unknown platform: ${rawPlatform}`);
-    return;
-  }
-
-  const baseUrl = publicBaseUrl(
-    req.headers as Record<string, string | string[] | undefined>,
-  );
-  const redirectUri = redirectUriFor(platform, baseUrl);
-
-  if (action === 'start') {
-    // SDK launch flow: the popup arrives with ?ws=<slug>&token=<jwt>.
-    // Verify against the POC backend, persist the tenant + end-user
-    // context under a fresh session id, and drop a HttpOnly cookie that
-    // survives the OAuth round-trip. seed-confirm / seed-pages pick it
-    // up later to scope the account to the right workspace.
-    //
-    // Absent ?ws/?token → legacy single-tenant flow: nothing changes,
-    // the seed POST omits workspace_id and the backend falls back to the
-    // "demo" workspace.
-    const ws = typeof req.query.ws === 'string' ? req.query.ws : null;
-    const token = typeof req.query.token === 'string' ? req.query.token : null;
-    if (ws && token) {
-      try {
-        const claims = await verifySdkToken(token);
-        // The JWT carries the workspace ID (claims.ws) and slug (claims.ws_slug);
-        // the popup URL only carries the slug. Compare slugs.
-        if (claims.ws_slug !== ws) {
-          throw new Error(
-            `SDK token workspace mismatch (token=${claims.ws_slug}, query=${ws})`,
-          );
-        }
-        if (claims.platforms && !claims.platforms.includes(platform)) {
-          throw new Error(
-            `Platform ${platform} not allowed by SDK token (allowed=${claims.platforms.join(',')})`,
-          );
-        }
-        const origin = typeof req.query.origin === 'string'
-          ? req.query.origin
-          : undefined;
-        const contextSessionId = putSession({
-          kind: 'oauth-context',
-          workspaceId: claims.ws,
-          workspaceSlug: ws,
-          endUserId: claims.sub,
-          allowedPlatforms: claims.platforms,
-          environment: claims.env,
-          openerOrigin: origin,
-        });
-        setContextCookie(res, contextSessionId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        res.redirect(302, `/?error=${encodeURIComponent(message)}`);
-        return;
-      }
-    }
-
-    try {
-      const url = PLATFORMS[platform].buildAuthorizeUrl(redirectUri);
-      res.redirect(302, url);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.redirect(302, `/?error=${encodeURIComponent(message)}`);
-    }
-    return;
-  }
-
-  if (action === 'callback') {
-    const error = req.query.error;
-    if (typeof error === 'string') {
-      const desc = req.query.error_description ?? '';
-      res.redirect(
-        302,
-        `/?error=${encodeURIComponent(`${platform} denied: ${error}${desc ? ` — ${desc}` : ''}`)}`,
-      );
-      return;
-    }
-    const code = req.query.code;
-    if (typeof code !== 'string' || !code) {
-      res.redirect(
-        302,
-        `/?error=${encodeURIComponent(`${platform} callback missing ?code`)}`,
-      );
-      return;
-    }
-    try {
-      pruneCallbackCache();
-      const cacheKey = `${platform}:${code}`;
-      let entry = callbackInFlight.get(cacheKey);
-      if (!entry) {
-        // Wrap the platform handleCallback in a promise that ALWAYS resolves
-        // to a tagged result so concurrent duplicates can read the same
-        // outcome (success OR error) without re-running the exchange.
-        const promise = PLATFORMS[platform].handleCallback(code, redirectUri);
-        entry = {
-          promise,
-          clearAt: Date.now() + CALLBACK_CACHE_TTL_MS,
-        };
-        callbackInFlight.set(cacheKey, entry);
-      }
-      const result = await entry.promise;
-      if (result.kind === 'fb-picker') {
-        res.redirect(302, `/facebook/pages?session=${result.sessionId}`);
-        return;
-      }
-      // TikTok / Threads / YouTube / Twitch — operator still needs to
-      // confirm products before we POST to the POC seed endpoint.
-      res.redirect(
-        302,
-        `/confirm/${result.platform}?session=${result.sessionId}`,
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.redirect(302, `/?error=${encodeURIComponent(message)}`);
-    }
-    return;
-  }
-
-  res.status(404).send(`Unknown action: ${action}`);
+function publicBaseUrl(req: NextRequest): string {
+  const fromEnv = process.env.PUBLIC_BASE_URL;
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  const proto =
+    req.headers.get('x-forwarded-proto') ??
+    req.nextUrl.protocol.replace(':', '');
+  const host =
+    req.headers.get('x-forwarded-host') ??
+    req.headers.get('host') ??
+    req.nextUrl.host;
+  return `${proto}://${host}`;
 }
 
 function redirectUriFor(platform: PlatformKey, baseUrl: string): string {
-  // Empty string in .env (e.g. `META_REDIRECT_URI=`) loads as `""`, which
-  // ?? does NOT fall through. Coerce to undefined so the baseUrl fallback
-  // takes over.
   const env = (key: string): string | undefined => {
     const v = process.env[key];
     return v && v.length > 0 ? v : undefined;
@@ -213,4 +90,138 @@ function redirectUriFor(platform: PlatformKey, baseUrl: string): string {
     default:
       return `${baseUrl}/api/oauth/callback/${platform}`;
   }
+}
+
+function errorRedirect(baseUrl: string, message: string): NextResponse {
+  return NextResponse.redirect(
+    `${baseUrl}/?error=${encodeURIComponent(message)}`,
+    { status: 302 },
+  );
+}
+
+export async function GET(
+  req: NextRequest,
+  ctx: { params: Promise<{ slug: string[] }> },
+): Promise<NextResponse> {
+  const { slug } = await ctx.params;
+  if (!slug || slug.length !== 2) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+  const [action, rawPlatform] = slug;
+  const platform = rawPlatform as PlatformKey;
+  const baseUrl = publicBaseUrl(req);
+  if (!VALID_PLATFORMS.has(platform)) {
+    return new NextResponse(`Unknown platform: ${rawPlatform}`, { status: 404 });
+  }
+  const redirectUri = redirectUriFor(platform, baseUrl);
+
+  if (action === 'start') {
+    // SDK launch flow: the popup arrives with ?ws=<slug>&token=<jwt>.
+    // Verify against the POC backend, persist the tenant + end-user
+    // context under a fresh session id, and drop a HttpOnly cookie that
+    // survives the OAuth round-trip. seed-confirm / seed-pages pick it
+    // up later to scope the account to the right workspace.
+    //
+    // Absent ?ws/?token → legacy single-tenant flow: nothing changes,
+    // the seed POST omits workspace_id and the backend falls back to the
+    // "demo" workspace.
+    const sp = req.nextUrl.searchParams;
+    const ws = sp.get('ws');
+    const token = sp.get('token');
+    let contextSessionId: string | null = null;
+    if (ws && token) {
+      try {
+        const claims = await verifySdkToken(token);
+        if (claims.ws_slug !== ws) {
+          throw new Error(
+            `SDK token workspace mismatch (token=${claims.ws_slug}, query=${ws})`,
+          );
+        }
+        if (claims.platforms && !claims.platforms.includes(platform)) {
+          throw new Error(
+            `Platform ${platform} not allowed by SDK token (allowed=${claims.platforms.join(',')})`,
+          );
+        }
+        const origin = sp.get('origin') ?? undefined;
+        contextSessionId = putSession({
+          kind: 'oauth-context',
+          workspaceId: claims.ws,
+          workspaceSlug: ws,
+          endUserId: claims.sub,
+          allowedPlatforms: claims.platforms,
+          environment: claims.env,
+          openerOrigin: origin,
+        });
+      } catch (err) {
+        return errorRedirect(
+          baseUrl,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
+    let authorizeUrl: string;
+    try {
+      authorizeUrl = PLATFORMS[platform].buildAuthorizeUrl(redirectUri);
+    } catch (err) {
+      return errorRedirect(
+        baseUrl,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    const response = NextResponse.redirect(authorizeUrl, { status: 302 });
+    if (contextSessionId) {
+      setContextCookie(response, contextSessionId);
+    }
+    return response;
+  }
+
+  if (action === 'callback') {
+    const sp = req.nextUrl.searchParams;
+    const error = sp.get('error');
+    if (error) {
+      const desc = sp.get('error_description') ?? '';
+      return errorRedirect(
+        baseUrl,
+        `${platform} denied: ${error}${desc ? ` — ${desc}` : ''}`,
+      );
+    }
+    const code = sp.get('code');
+    if (!code) {
+      return errorRedirect(baseUrl, `${platform} callback missing ?code`);
+    }
+    try {
+      pruneCallbackCache();
+      const cacheKey = `${platform}:${code}`;
+      let entry = callbackInFlight.get(cacheKey);
+      if (!entry) {
+        const promise = PLATFORMS[platform].handleCallback(code, redirectUri);
+        entry = {
+          promise,
+          clearAt: Date.now() + CALLBACK_CACHE_TTL_MS,
+        };
+        callbackInFlight.set(cacheKey, entry);
+      }
+      const result = await entry.promise;
+      if (result.kind === 'fb-picker') {
+        return NextResponse.redirect(
+          `${baseUrl}/facebook/pages?session=${result.sessionId}`,
+          { status: 302 },
+        );
+      }
+      // TikTok / Threads / YouTube / Twitch — operator still needs to
+      // confirm products before we POST to the POC seed endpoint.
+      return NextResponse.redirect(
+        `${baseUrl}/confirm/${result.platform}?session=${result.sessionId}`,
+        { status: 302 },
+      );
+    } catch (err) {
+      return errorRedirect(
+        baseUrl,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
+  return new NextResponse(`Unknown action: ${action}`, { status: 404 });
 }
