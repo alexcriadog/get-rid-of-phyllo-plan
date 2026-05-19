@@ -165,9 +165,14 @@ async function seedAccount(input: SeedAccountInput): Promise<{
 }> {
   const ciphertext = encryptToken(input.token);
 
+  // Seed script always lands on the auto-created "demo" workspace. Real
+  // multi-tenant seeding goes through the /v1/sdk-tokens path in Phase 3+.
+  const workspaceId = 'wkspc_demo';
+
   const existing = await prisma.account.findUnique({
     where: {
-      platform_canonicalUserId: {
+      workspaceId_platform_canonicalUserId: {
+        workspaceId,
         platform: input.platform,
         canonicalUserId: input.canonicalUserId,
       },
@@ -176,12 +181,14 @@ async function seedAccount(input: SeedAccountInput): Promise<{
 
   const account = await prisma.account.upsert({
     where: {
-      platform_canonicalUserId: {
+      workspaceId_platform_canonicalUserId: {
+        workspaceId,
         platform: input.platform,
         canonicalUserId: input.canonicalUserId,
       },
     },
     create: {
+      workspaceId,
       platform: input.platform,
       canonicalUserId: input.canonicalUserId,
       handle: input.handle ?? null,

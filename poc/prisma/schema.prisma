@@ -16,6 +16,13 @@ model Account {
   status               String   @default("ready")
   syncTier             String   @default("standard") @map("sync_tier")
   owningOrganizationId String   @default("demo") @map("owning_organization_id")
+  // Multi-tenant scoping. NOT NULL after the backfill migration. Existing
+  // accounts are reassigned to the auto-created "demo" workspace so legacy
+  // single-tenant deployments keep working unchanged.
+  workspaceId          String   @map("workspace_id")
+  // Optional end-user identifier carried in from the SDK token. Lets a
+  // client correlate the connected account back to their own user record.
+  endUserId            String?  @map("end_user_id")
   // Per-platform extension bag — `{ business_id?, page_id?, channel_id?, advertiser_id?, ... }`.
   // Adapters read from here via their own context builders. Nullable for backwards-compat.
   metadata             Json?
@@ -27,8 +34,11 @@ model Account {
   tokens    OAuthToken[]
   syncJobs  SyncJob[]
   overrides AccountCadenceOverride[]
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
 
-  @@unique([platform, canonicalUserId])
+  @@unique([workspaceId, platform, canonicalUserId])
+  @@index([workspaceId, platform])
+  @@index([workspaceId, endUserId])
   @@map("accounts")
 }
 
@@ -114,6 +124,115 @@ model InboundWebhookLog {
   @@unique([platform, eventId])
   @@index([receivedAt])
   @@map("inbound_webhook_log")
+}
+
+// ─── Multi-tenancy & SaaS surface ──────────────────────────────────────────
+//
+// A Workspace is a tenant. Every Account belongs to one. Each Workspace has:
+//   - ApiKeys: long-lived bearer credentials the client's backend uses to
+//     call /v1/* and to mint short-lived SDK tokens.
+//   - WorkspaceSecret: symmetric HMAC key used to sign + verify SDK JWTs
+//     handed to the browser. Stored encrypted via AesLocalService.
+//   - WebhookEndpoints: outbound notification targets the client registers.
+//
+// Created in the multi_tenancy_foundation migration. A row with slug="demo"
+// is auto-seeded so existing pre-multi-tenant accounts keep functioning.
+
+model Workspace {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  // Brandable theme JSON read by connect.camaleonic.io. Shape documented in
+  // the spec; null means "use platform defaults".
+  branding  Json?
+  planTier  String   @default("standard") @map("plan_tier")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  apiKeys          ApiKey[]
+  secret           WorkspaceSecret?
+  webhookEndpoints WebhookEndpoint[]
+  accounts         Account[]
+
+  @@map("workspaces")
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  workspaceId String    @map("workspace_id")
+  // Public prefix shown in dashboards/logs (e.g. "cmlk_live_abcd"). Never
+  // by itself sufficient to authenticate.
+  keyPrefix   String    @map("key_prefix")
+  // SHA-256 hex digest of the full key. We verify by hashing the inbound
+  // Bearer string and comparing in constant time against this.
+  keyHash     String    @unique @map("key_hash")
+  scope       String    @default("read_write")
+  label       String?
+  lastUsedAt  DateTime? @map("last_used_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([keyPrefix])
+  @@map("api_keys")
+}
+
+model WorkspaceSecret {
+  id               String    @id @default(cuid())
+  workspaceId      String    @unique @map("workspace_id")
+  // AES-256-GCM ciphertext of the HMAC-SHA256 secret used to sign SDK JWTs.
+  // Layout matches AesLocalService: iv(12) || tag(16) || ciphertext.
+  secretCiphertext Bytes     @map("secret_ciphertext")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  rotatedAt        DateTime? @map("rotated_at")
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_secrets")
+}
+
+model WebhookEndpoint {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  url         String   @db.Text
+  // Signing secret returned ONCE on creation. Used to compute the
+  // X-Camaleonic-Signature header. Stored plaintext intentionally — losing
+  // it requires regenerating; we do not need to retrieve it after creation
+  // but operators inspecting deliveries may need it.
+  secret      String
+  // JSON array of event types subscribed to. MySQL has no native String[],
+  // so we use Json. Allowed values are validated in the service layer.
+  events      Json
+  active      Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  deliveries WebhookDelivery[]
+
+  @@index([workspaceId])
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id               String    @id @default(cuid())
+  endpointId       String    @map("endpoint_id")
+  event            String
+  payload          Json
+  attempts         Int       @default(0)
+  // pending | delivered | failed | abandoned
+  status           String    @default("pending")
+  lastResponseCode Int?      @map("last_response_code")
+  lastError        String?   @db.Text @map("last_error")
+  nextRetryAt      DateTime? @map("next_retry_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  deliveredAt      DateTime? @map("delivered_at")
+  endpoint         WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId, status])
+  @@index([status, nextRetryAt])
+  @@map("webhook_deliveries")
 }
 
 model ApiCallLog {

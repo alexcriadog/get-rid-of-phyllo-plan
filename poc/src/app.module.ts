@@ -11,6 +11,8 @@ import { PlatformsModule } from '@modules/platforms/platforms.module';
 import { SyncModule } from '@modules/sync/sync.module';
 import { ApiModule } from '@modules/api/api.module';
 import { WebhooksModule } from '@modules/webhooks/webhooks.module';
+import { WorkspacesModule } from '@modules/workspaces/workspaces.module';
+import { ApiKeysModule } from '@modules/api-keys/api-keys.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { WebhooksModule } from '@modules/webhooks/webhooks.module';
     SharedRedisModule,
     SharedMetricsModule,
     PlatformsModule,
+    WorkspacesModule,
+    ApiKeysModule,
     AccountsModule,
     AdminModule,
     SyncModule,

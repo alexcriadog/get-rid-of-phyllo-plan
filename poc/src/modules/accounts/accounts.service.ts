@@ -31,6 +31,18 @@ export interface SeedAccountInput {
   canonicalUserId: string;
   handle?: string;
   /**
+   * Tenant that owns the account. Resolved upstream by the bearer-api-key
+   * guard (server-to-server calls) or by the SDK JWT (popup flow). Until
+   * the legacy CONNECT_TOOL_SECRET path is retired, callers without a
+   * workspace fall back to the auto-seeded "wkspc_demo" tenant.
+   */
+  workspaceId?: string;
+  /**
+   * Optional id used by the client to correlate the account back to their
+   * own user record. Threaded in from the SDK JWT.
+   */
+  endUserId?: string;
+  /**
    * Free-form per-platform context bag persisted to `account.metadata`.
    *   - Meta: `{ page_id, ig_business_id }`
    *   - TikTok: `{ business_id, open_id, advertiser_id?, scopes? }`
@@ -38,6 +50,13 @@ export interface SeedAccountInput {
    */
   metadata?: Record<string, unknown>;
 }
+
+/**
+ * Workspace assigned to legacy callers that don't yet carry a workspaceId.
+ * Created by the multi_tenancy_foundation migration; removed once every
+ * caller threads the JWT/API key.
+ */
+export const DEFAULT_WORKSPACE_ID = 'wkspc_demo';
 
 export interface SeedAccountResult {
   account_id: string;
@@ -166,6 +185,8 @@ export class AccountsService {
         ? (input.metadata as Prisma.InputJsonValue)
         : Prisma.JsonNull;
 
+    const workspaceId = input.workspaceId ?? DEFAULT_WORKSPACE_ID;
+
     return this.prisma.$transaction(async (tx) => {
       // Look up first so we can decide whether re-OAuth should also resume an
       // auto-paused account. We only override syncTier when it's currently
@@ -174,7 +195,8 @@ export class AccountsService {
       // five consecutive failures (sync.worker.ts).
       const existing = await tx.account.findUnique({
         where: {
-          platform_canonicalUserId: {
+          workspaceId_platform_canonicalUserId: {
+            workspaceId,
             platform: input.platform,
             canonicalUserId: input.canonicalUserId,
           },
@@ -185,12 +207,15 @@ export class AccountsService {
 
       const account = await tx.account.upsert({
         where: {
-          platform_canonicalUserId: {
+          workspaceId_platform_canonicalUserId: {
+            workspaceId,
             platform: input.platform,
             canonicalUserId: input.canonicalUserId,
           },
         },
         create: {
+          workspaceId,
+          endUserId: input.endUserId ?? null,
           platform: input.platform,
           canonicalUserId: input.canonicalUserId,
           handle: input.handle ?? null,
@@ -201,6 +226,7 @@ export class AccountsService {
         update: {
           handle: input.handle ?? undefined,
           status: 'ready',
+          ...(input.endUserId !== undefined ? { endUserId: input.endUserId } : {}),
           ...(wasPaused ? { syncTier: 'standard' } : {}),
           // Only overwrite metadata when the caller provided one — preserves
           // existing keys (e.g. page_id) on a re-seed of the same account.
@@ -420,8 +446,9 @@ export class AccountsService {
     );
   }
 
-  async listAccounts(): Promise<unknown[]> {
+  async listAccounts(workspaceId?: string): Promise<unknown[]> {
     const rows = await this.prisma.account.findMany({
+      where: workspaceId ? { workspaceId } : undefined,
       include: {
         tokens: {
           select: {
@@ -471,7 +498,7 @@ export class AccountsService {
     }));
   }
 
-  async getAccount(id: bigint): Promise<unknown> {
+  async getAccount(id: bigint, workspaceId?: string): Promise<unknown> {
     const row = await this.prisma.account.findUnique({
       where: { id },
       include: {
@@ -481,6 +508,11 @@ export class AccountsService {
     });
 
     if (!row) {
+      throw new NotFoundException(`Account ${id.toString()} not found`);
+    }
+    // Cross-tenant access protection: a caller scoped to workspace A must
+    // not be able to read an account owned by workspace B.
+    if (workspaceId && row.workspaceId !== workspaceId) {
       throw new NotFoundException(`Account ${id.toString()} not found`);
     }
 
