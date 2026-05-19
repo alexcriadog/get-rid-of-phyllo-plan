@@ -62,6 +62,48 @@ After every `git push` to `main`:
 
 That SSHes into the EC2 and runs `redeploy.sh` (git pull + `docker compose up -d --build`). Only the containers whose source changed get rebuilt.
 
+## Locking down /admin/* with Basic Auth
+
+The `/admin/*` surface is operator-trust by default — open to anyone with the URL. Before onboarding a real customer, flip on Basic Auth at the Caddy layer:
+
+```bash
+# 1. Generate a bcrypt hash for your password
+docker run --rm caddy:2-alpine caddy hash-password --plaintext 'YOUR_PASSWORD_HERE'
+# Copy the entire $2a$14$... line that comes back.
+
+# 2. Edit tools/Caddyfile — find the `handle /admin*` block and uncomment
+#    the basic_auth lines, pasting your hash:
+#
+#    handle /admin* {
+#        basic_auth {
+#            alex $2a$14$RealBcryptHashGoesHere
+#            # add more 'user hash' lines for additional operators
+#        }
+#        reverse_proxy web:3001
+#    }
+
+# 3. Commit + deploy
+git add tools/Caddyfile
+git commit -m "ops: enable basic auth on /admin/*"
+git push && ./tools/deploy.sh
+```
+
+Caddy reloads automatically on `redeploy.sh`. From the next request onwards `/admin/*` returns 401 unless the browser sends the credentials. Note this also affects the AdminSaasController endpoints (`/admin/workspaces`, `/admin/api-keys`, etc.) — the `/client/*` and `/v1/*` surfaces are unaffected.
+
+## Client-dashboard session secret
+
+`poc/web` signs the API-key cookie with `WEB_SESSION_SECRET`. If unset it falls back to `hmac(hostname() + CONNECTOR_API_URL)` — stable per host, not trivially guessable. For real security, set the env var explicitly:
+
+```bash
+# Generate
+openssl rand -hex 32
+
+# Add to the web container's env_file (or environment block in docker-compose.prod.yml)
+echo "WEB_SESSION_SECRET=<that hex>" >> poc/web/.env
+# Then redeploy.
+```
+
+
 ## OAuth redirect URIs (one-time, in each platform console)
 
 Add the prod URIs alongside the existing ngrok ones. **Do not delete** the ngrok ones until you've verified prod works.

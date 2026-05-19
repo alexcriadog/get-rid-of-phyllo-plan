@@ -21,6 +21,8 @@ export interface ResolvedApiKey {
   id: string;
   workspaceId: string;
   workspaceSlug: string;
+  /** Workspace plan tier (drives rate limit ceilings, future billing). */
+  planTier: string;
   scope: string;
   keyPrefix: string;
   /** Derived from the keyPrefix; downstream code uses it to mark accounts. */
@@ -87,7 +89,7 @@ export class ApiKeysService {
         keyPrefix: true,
         revokedAt: true,
         keyHash: true,
-        workspace: { select: { slug: true } },
+        workspace: { select: { slug: true, planTier: true } },
       },
     });
     if (!row) {
@@ -118,6 +120,7 @@ export class ApiKeysService {
       id: row.id,
       workspaceId: row.workspaceId,
       workspaceSlug: row.workspace.slug,
+      planTier: row.workspace.planTier,
       scope: row.scope,
       keyPrefix: row.keyPrefix,
       environment: row.keyPrefix.startsWith(KEY_PREFIX_TEST) ? 'test' : 'live',

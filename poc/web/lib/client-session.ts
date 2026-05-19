@@ -10,6 +10,7 @@
 // readable only). XSS in the dashboard cannot exfiltrate the key.
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { hostname } from 'node:os';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 export const CLIENT_SESSION_COOKIE = 'camaleonic_client_session';
@@ -20,14 +21,17 @@ function getSecret(): Buffer {
   if (hex && /^[0-9a-fA-F]{32,}$/.test(hex)) {
     return Buffer.from(hex, 'hex');
   }
-  // Dev fallback: derive a deterministic secret from CONNECTOR_API_URL so
-  // we never need a freshly-set env var to start the web app. Prod SHOULD
-  // override with WEB_SESSION_SECRET; without it, any operator with the
-  // CONNECTOR_API_URL can forge sessions.
-  const seed =
-    process.env.CONNECTOR_API_URL ||
-    process.env.NEXT_PUBLIC_CONNECTOR_API_URL ||
-    'camaleonic-client-session-fallback-v1';
+  // Fallback: derive a deterministic secret from `hostname() +
+  // CONNECTOR_API_URL`. On a single EC2 host this is stable across
+  // restarts but not guessable from outside (an attacker would need to
+  // know both the host's name AND the connector URL to forge a session).
+  // Prod SHOULD still set WEB_SESSION_SECRET explicitly; this fallback
+  // just keeps the dashboard usable without a manual env step.
+  const seed = [
+    hostname(),
+    process.env.CONNECTOR_API_URL || process.env.NEXT_PUBLIC_CONNECTOR_API_URL || '',
+    'camaleonic-client-session-v2',
+  ].join('|');
   return createHmac('sha256', 'derived').update(seed).digest();
 }
 

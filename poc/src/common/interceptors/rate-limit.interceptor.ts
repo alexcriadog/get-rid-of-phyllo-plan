@@ -63,7 +63,8 @@ export class RateLimitInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    const limit = LIMITS_BY_PLAN.standard ?? DEFAULT_LIMIT;
+    const plan = req.workspace?.planTier ?? 'standard';
+    const limit = LIMITS_BY_PLAN[plan] ?? DEFAULT_LIMIT;
     const now = Math.floor(Date.now() / 1000);
     const bucket = Math.floor(now / WINDOW_SECONDS);
     const resetAt = (bucket + 1) * WINDOW_SECONDS;

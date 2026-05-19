@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { AppConfigModule } from '@shared/config/config.module';
+import { PlatformErrorFilter } from '@/common/filters/platform-error.filter';
 import { SharedDatabaseModule } from '@shared/database/database.module';
 import { SharedMongoModule } from '@shared/database/mongo.module';
 import { SharedCryptoModule } from '@shared/crypto/crypto.module';
@@ -36,6 +38,15 @@ import { AdminSaasModule } from '@modules/admin-saas/admin-saas.module';
     SyncModule,
     ApiModule,
     WebhooksModule,
+  ],
+  providers: [
+    {
+      // Global filter — catches platform-adapter exceptions thrown anywhere
+      // in the request pipeline (live /v1/* fetches, manual refresh, admin
+      // discover, etc.) and surfaces them as proper 401 / 502 / 503.
+      provide: APP_FILTER,
+      useClass: PlatformErrorFilter,
+    },
   ],
 })
 export class AppModule {}

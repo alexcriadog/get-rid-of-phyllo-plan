@@ -11,8 +11,14 @@ smconnector.camaleonicanalytics.com {
 		reverse_proxy api:3000
 	}
 
-	# Admin dashboard.
+	# Admin dashboard. Operator-trust by default — flip on the basic_auth
+	# directive below once a real customer ships. Generate the hash with:
+	#   docker run --rm caddy:2-alpine caddy hash-password --plaintext '<pw>'
+	# Then uncomment + paste the `<user> <hash>` line(s) and redeploy.
 	handle /admin* {
+		# basic_auth {
+		#     alex JDJhJDE0JFJFUExBQ0VfV0lUSF9SRUFMX0JDUllQVF9IQVNI
+		# }
 		reverse_proxy web:3001
 	}
 
