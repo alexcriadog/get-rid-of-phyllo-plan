@@ -22,9 +22,32 @@ if ! docker compose version >/dev/null 2>&1; then DC="sudo docker compose"; fi
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml build --pull
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml up -d
 
-# Reconcile Prisma schema. Idempotent — no-op when live DB matches
-# schema.prisma. Catches schema additions automatically on every deploy.
-log "Reconciling Prisma schema…"
+# Apply Prisma migrations. `migrate deploy` is the production-safe path
+# — unlike `db push`, it executes the explicit migration SQL so backfill
+# steps (e.g. seeding "wkspc_demo" before promoting accounts.workspace_id
+# to NOT NULL) run in the right order.
+#
+# Historically this stack used `db push --accept-data-loss`, so the
+# _prisma_migrations table may be empty on long-lived prod instances.
+# Baseline the four pre-multi-tenancy migrations as applied first;
+# `migrate resolve --applied` is idempotent (no-op if already recorded).
+log "Baselining historic Prisma migrations (idempotent)…"
+for m in 20260423151828_init \
+         20260426150000_add_product_to_api_call_log \
+         20260428151952_add_tiktok_token_columns_and_account_metadata \
+         20260505131500_add_sync_job_settings_column; do
+  $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
+    npx prisma migrate resolve --applied "$m" 2>&1 | tail -2 || true
+done
+
+log "Applying pending Prisma migrations…"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
+  npx prisma migrate deploy 2>&1 | tail -10
+
+# `db push` kept as a safety net for ad-hoc schema additions that haven't
+# been promoted to a migration yet (e.g. a quick column tweak between
+# releases). Idempotent — no-op when schema matches.
+log "Reconciling residual Prisma drift (db push fallback)…"
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
   npx prisma db push --accept-data-loss 2>&1 | tail -3 || true
 
