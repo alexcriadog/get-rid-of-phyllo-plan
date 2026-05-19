@@ -67,3 +67,12 @@ $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml restart caddy 2>&1
 
 log "Status:"
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml ps
+
+# Temporary diagnostic — remove once the multi-tenancy rollout is stable.
+log "DIAG: workspaces + api_keys table presence and counts"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T mysql \
+  mysql -u root -prootpw -D connector -e \
+  "SHOW TABLES LIKE 'workspaces'; SHOW TABLES LIKE 'api_keys'; SHOW TABLES LIKE 'workspace_secrets'; SELECT COUNT(*) AS workspaces_count FROM workspaces; SELECT COUNT(*) AS accounts_with_ws FROM accounts WHERE workspace_id IS NOT NULL;" 2>&1 | grep -v "Warning"
+
+log "DIAG: api logs (last 60 lines)"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml logs --tail=60 api 2>&1 | tail -60
