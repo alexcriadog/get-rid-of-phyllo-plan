@@ -13,7 +13,10 @@ export const CONNECT_CONTEXT_COOKIE = 'camaleonic_connect_session';
 const COOKIE_TTL_SECONDS = 10 * 60;
 
 export interface SdkTokenClaims {
+  /** Workspace id (opaque internal ref). */
   ws: string;
+  /** Workspace slug — matches the `?ws=<slug>` popup URL. */
+  ws_slug: string;
   sub: string;
   platforms?: ReadonlyArray<string>;
   iss: string;

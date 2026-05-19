@@ -34,7 +34,8 @@ export class SdkTokensController {
     @Body() body: unknown,
   ): Promise<{ sdk_token: string; expires_at: string }> {
     const ws = req.workspace?.workspaceId;
-    if (!ws) {
+    const slug = req.workspace?.workspaceSlug;
+    if (!ws || !slug) {
       throw new Error('Workspace context missing on authenticated request');
     }
     const parsed = MintBodySchema.safeParse(body);
@@ -46,6 +47,7 @@ export class SdkTokensController {
     }
     const minted = await this.sdkTokens.mint({
       workspaceId: ws,
+      workspaceSlug: slug,
       endUserId: parsed.data.user_id,
       ttlSeconds: parsed.data.ttl,
       allowedPlatforms: parsed.data.allowed_platforms,

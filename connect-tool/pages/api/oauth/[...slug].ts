@@ -95,9 +95,11 @@ export default async function handler(
     if (ws && token) {
       try {
         const claims = await verifySdkToken(token);
-        if (claims.ws !== ws) {
+        // The JWT carries the workspace ID (claims.ws) and slug (claims.ws_slug);
+        // the popup URL only carries the slug. Compare slugs.
+        if (claims.ws_slug !== ws) {
           throw new Error(
-            `SDK token workspace mismatch (token=${claims.ws}, query=${ws})`,
+            `SDK token workspace mismatch (token=${claims.ws_slug}, query=${ws})`,
           );
         }
         if (claims.platforms && !claims.platforms.includes(platform)) {

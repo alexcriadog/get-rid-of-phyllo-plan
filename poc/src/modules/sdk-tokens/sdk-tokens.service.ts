@@ -26,6 +26,12 @@ const ALLOWED_PLATFORMS: ReadonlyArray<string> = [
 
 export interface MintSdkTokenInput {
   workspaceId: string;
+  /**
+   * Public-facing workspace slug embedded in the JWT so the connect-ui
+   * popup can verify it against the `?ws=<slug>` query param without a
+   * DB roundtrip.
+   */
+  workspaceSlug: string;
   endUserId: string;
   ttlSeconds?: number;
   allowedPlatforms?: ReadonlyArray<string>;
@@ -34,6 +40,8 @@ export interface MintSdkTokenInput {
 export interface SdkTokenClaims {
   /** Workspace id this token was minted for. */
   ws: string;
+  /** Workspace slug (public-facing identifier). */
+  ws_slug: string;
   /** Client's id for the end-user inside their own product. */
   sub: string;
   /** Optional whitelist of platforms the popup may offer. */
@@ -86,6 +94,7 @@ export class SdkTokensService {
     const now = Math.floor(Date.now() / 1000);
     const payload: SdkTokenClaims = {
       ws: input.workspaceId,
+      ws_slug: input.workspaceSlug,
       sub: input.endUserId,
       ...(input.allowedPlatforms && input.allowedPlatforms.length > 0
         ? { platforms: input.allowedPlatforms }
@@ -133,6 +142,9 @@ export class SdkTokensService {
 
     if (!payload.ws || typeof payload.ws !== 'string') {
       throw new UnauthorizedException('SDK token missing workspace claim');
+    }
+    if (!payload.ws_slug || typeof payload.ws_slug !== 'string') {
+      throw new UnauthorizedException('SDK token missing workspace slug claim');
     }
     if (payload.iss !== ISS || payload.aud !== AUD) {
       throw new UnauthorizedException('SDK token issuer/audience mismatch');

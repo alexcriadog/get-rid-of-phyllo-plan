@@ -20,6 +20,7 @@ export interface IssuedApiKey {
 export interface ResolvedApiKey {
   id: string;
   workspaceId: string;
+  workspaceSlug: string;
   scope: string;
   keyPrefix: string;
 }
@@ -84,6 +85,7 @@ export class ApiKeysService {
         keyPrefix: true,
         revokedAt: true,
         keyHash: true,
+        workspace: { select: { slug: true } },
       },
     });
     if (!row) {
@@ -113,6 +115,7 @@ export class ApiKeysService {
     return {
       id: row.id,
       workspaceId: row.workspaceId,
+      workspaceSlug: row.workspace.slug,
       scope: row.scope,
       keyPrefix: row.keyPrefix,
     };
