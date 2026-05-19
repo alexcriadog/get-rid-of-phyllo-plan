@@ -2252,6 +2252,8 @@ export class AdminService {
     canonicalUserId: string;
     handle?: string;
     metadata?: Record<string, unknown>;
+    workspaceId?: string;
+    endUserId?: string;
   }): Promise<{ account_id: string; sync_jobs_created: string[] }> {
     let accessToken = input.accessToken;
     let expiresAt = input.expiresAt;
@@ -2291,6 +2293,8 @@ export class AdminService {
       canonicalUserId: input.canonicalUserId,
       handle: input.handle,
       metadata: input.metadata,
+      workspaceId: input.workspaceId,
+      endUserId: input.endUserId,
     });
   }
 

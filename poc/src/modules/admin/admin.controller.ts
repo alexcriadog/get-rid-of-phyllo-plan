@@ -88,6 +88,11 @@ const ConnectSeedSchema = z
     canonical_user_id: z.string().min(1),
     handle: z.string().min(1).optional(),
     metadata: z.record(z.unknown()).optional(),
+    // Threaded through by connect-ui from the SDK JWT claims. When absent
+    // the account is assigned to the "demo" workspace (legacy single-tenant
+    // behaviour) — required only once the JWT cutover lands in Phase 4.
+    workspace_id: z.string().min(1).max(64).optional(),
+    end_user_id: z.string().min(1).max(256).optional(),
   })
   .strict();
 
@@ -487,6 +492,8 @@ export class AdminController {
       canonicalUserId: parsed.data.canonical_user_id,
       handle: parsed.data.handle,
       metadata: parsed.data.metadata,
+      workspaceId: parsed.data.workspace_id,
+      endUserId: parsed.data.end_user_id,
     });
   }
 

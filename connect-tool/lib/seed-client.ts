@@ -24,6 +24,14 @@ export interface SeedBody {
    *   - hold YouTube uploads_playlist_id / channel country / scopes[]
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Tenant + end-user threaded through from the SDK JWT claims. When the
+   * popup is launched via the connect-sdk these are present; when the
+   * legacy single-tenant connect-tool flow is used they're omitted and
+   * the POC backend falls back to the "demo" workspace.
+   */
+  workspace_id?: string;
+  end_user_id?: string;
 }
 
 export interface SeedResponse {
