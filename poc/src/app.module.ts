@@ -13,6 +13,7 @@ import { ApiModule } from '@modules/api/api.module';
 import { WebhooksModule } from '@modules/webhooks/webhooks.module';
 import { WorkspacesModule } from '@modules/workspaces/workspaces.module';
 import { ApiKeysModule } from '@modules/api-keys/api-keys.module';
+import { SdkTokensModule } from '@modules/sdk-tokens/sdk-tokens.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ApiKeysModule } from '@modules/api-keys/api-keys.module';
     PlatformsModule,
     WorkspacesModule,
     ApiKeysModule,
+    SdkTokensModule,
     AccountsModule,
     AdminModule,
     SyncModule,
