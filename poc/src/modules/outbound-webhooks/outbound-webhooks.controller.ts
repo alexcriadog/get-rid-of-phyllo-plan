@@ -9,12 +9,14 @@ import {
   Post,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { z } from 'zod';
 import {
   BearerApiKeyGuard,
   RequestWithWorkspace,
 } from '@/common/guards/bearer-api-key.guard';
+import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
 import {
   OutboundWebhooksService,
   RegisteredEndpoint,
@@ -30,6 +32,7 @@ const CreateBodySchema = z
 
 @Controller('v1/webhook-endpoints')
 @UseGuards(BearerApiKeyGuard)
+@UseInterceptors(RateLimitInterceptor)
 export class OutboundWebhooksController {
   constructor(private readonly webhooks: OutboundWebhooksService) {}
 

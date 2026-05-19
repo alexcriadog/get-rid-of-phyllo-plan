@@ -32,6 +32,8 @@ export interface SeedBody {
    */
   workspace_id?: string;
   end_user_id?: string;
+  /** True when seeded via a cmlk_test_* SDK token — suppresses webhooks. */
+  is_test?: boolean;
 }
 
 export interface SeedResponse {

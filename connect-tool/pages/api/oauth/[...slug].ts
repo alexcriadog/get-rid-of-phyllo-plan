@@ -116,6 +116,7 @@ export default async function handler(
           workspaceSlug: ws,
           endUserId: claims.sub,
           allowedPlatforms: claims.platforms,
+          environment: claims.env,
           openerOrigin: origin,
         });
         setContextCookie(res, contextSessionId);

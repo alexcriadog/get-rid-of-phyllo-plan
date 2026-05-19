@@ -2254,6 +2254,7 @@ export class AdminService {
     metadata?: Record<string, unknown>;
     workspaceId?: string;
     endUserId?: string;
+    isTest?: boolean;
   }): Promise<{ account_id: string; sync_jobs_created: string[] }> {
     let accessToken = input.accessToken;
     let expiresAt = input.expiresAt;
@@ -2295,6 +2296,7 @@ export class AdminService {
       metadata: input.metadata,
       workspaceId: input.workspaceId,
       endUserId: input.endUserId,
+      isTest: input.isTest,
     });
   }
 

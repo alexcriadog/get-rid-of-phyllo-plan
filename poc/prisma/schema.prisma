@@ -23,6 +23,11 @@ model Account {
   // Optional end-user identifier carried in from the SDK token. Lets a
   // client correlate the connected account back to their own user record.
   endUserId            String?  @map("end_user_id")
+  // True when the account was created via a `cmlk_test_*` SDK token.
+  // Test-mode accounts share the same storage as live ones but don't fire
+  // outbound webhooks (so clients can develop against real OAuth without
+  // hammering their own webhook endpoint with fake events).
+  isTest               Boolean  @default(false) @map("is_test")
   // Per-platform extension bag — `{ business_id?, page_id?, channel_id?, advertiser_id?, ... }`.
   // Adapters read from here via their own context builders. Nullable for backwards-compat.
   metadata             Json?

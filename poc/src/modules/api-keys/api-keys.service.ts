@@ -23,6 +23,8 @@ export interface ResolvedApiKey {
   workspaceSlug: string;
   scope: string;
   keyPrefix: string;
+  /** Derived from the keyPrefix; downstream code uses it to mark accounts. */
+  environment: KeyEnvironment;
 }
 
 /**
@@ -118,6 +120,7 @@ export class ApiKeysService {
       workspaceSlug: row.workspace.slug,
       scope: row.scope,
       keyPrefix: row.keyPrefix,
+      environment: row.keyPrefix.startsWith(KEY_PREFIX_TEST) ? 'test' : 'live',
     };
   }
 

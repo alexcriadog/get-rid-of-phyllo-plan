@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { SharedDatabaseModule } from '@shared/database/database.module';
+import { SharedRedisModule } from '@shared/redis/redis.module';
 import { SyncModule } from '@modules/sync/sync.module';
 import { PlatformsModule } from '@modules/platforms/platforms.module';
 import { AccountsModule } from '@modules/accounts/accounts.module';
 import { ApiKeysModule } from '@modules/api-keys/api-keys.module';
+import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
 import { ManualRefreshController } from './manual-refresh.controller';
 import { V1AccountsController } from './v1-accounts.controller';
 
@@ -15,13 +17,14 @@ import { V1AccountsController } from './v1-accounts.controller';
 @Module({
   imports: [
     SharedDatabaseModule,
+    SharedRedisModule,
     SyncModule,
     PlatformsModule,
     AccountsModule,
     ApiKeysModule,
   ],
   controllers: [ManualRefreshController, V1AccountsController],
-  providers: [ManualRefreshController],
+  providers: [ManualRefreshController, RateLimitInterceptor],
   exports: [ManualRefreshController],
 })
 export class ApiModule {}

@@ -19,6 +19,8 @@ export interface SdkTokenClaims {
   ws_slug: string;
   sub: string;
   platforms?: ReadonlyArray<string>;
+  /** 'test' → account will be marked is_test on seed (no webhooks). */
+  env?: 'live' | 'test';
   iss: string;
   aud: string;
   iat: number;

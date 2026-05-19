@@ -66,6 +66,8 @@ export interface OAuthContextSession {
   workspaceSlug: string;
   endUserId: string;
   allowedPlatforms?: ReadonlyArray<string>;
+  /** Test-mode flag derived from the SDK token; threaded into the seed POST. */
+  environment?: 'live' | 'test';
   /**
    * Origin of the page that opened the popup, used to scope the
    * `postMessage` reply on the success page. When absent we fall back to

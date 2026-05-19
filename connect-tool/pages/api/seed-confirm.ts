@@ -69,6 +69,7 @@ export default async function handler(
       ? {
           workspace_id: context.workspaceId,
           end_user_id: context.endUserId,
+          ...(context.environment === 'test' ? { is_test: true } : {}),
         }
       : {}),
   };

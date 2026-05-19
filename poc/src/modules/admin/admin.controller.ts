@@ -93,6 +93,8 @@ const ConnectSeedSchema = z
     // behaviour) — required only once the JWT cutover lands in Phase 4.
     workspace_id: z.string().min(1).max(64).optional(),
     end_user_id: z.string().min(1).max(256).optional(),
+    /** Sandbox flag — accounts seeded with is_test=true don't fire webhooks. */
+    is_test: z.boolean().optional(),
   })
   .strict();
 
@@ -494,6 +496,7 @@ export class AdminController {
       metadata: parsed.data.metadata,
       workspaceId: parsed.data.workspace_id,
       endUserId: parsed.data.end_user_id,
+      isTest: parsed.data.is_test,
     });
   }
 

@@ -6,12 +6,14 @@ import {
   Post,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { z } from 'zod';
 import {
   BearerApiKeyGuard,
   RequestWithWorkspace,
 } from '@/common/guards/bearer-api-key.guard';
+import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
 import { SdkTokensService } from './sdk-tokens.service';
 
 const MintBodySchema = z
@@ -24,6 +26,7 @@ const MintBodySchema = z
 
 @Controller('v1')
 @UseGuards(BearerApiKeyGuard)
+@UseInterceptors(RateLimitInterceptor)
 export class SdkTokensController {
   constructor(private readonly sdkTokens: SdkTokensService) {}
 
@@ -51,6 +54,9 @@ export class SdkTokensController {
       endUserId: parsed.data.user_id,
       ttlSeconds: parsed.data.ttl,
       allowedPlatforms: parsed.data.allowed_platforms,
+      // Test keys mint test tokens, live keys mint live tokens. There's no
+      // way for a client to upgrade their environment from the SDK token.
+      environment: req.workspace?.environment,
     });
     return {
       sdk_token: minted.token,

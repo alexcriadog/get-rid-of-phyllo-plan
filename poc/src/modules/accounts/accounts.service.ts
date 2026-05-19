@@ -46,6 +46,13 @@ export interface SeedAccountInput {
    */
   endUserId?: string;
   /**
+   * True when the SDK JWT was minted from a `cmlk_test_*` API key. The
+   * account is otherwise indistinguishable from a live one (real OAuth,
+   * real tokens, real syncs) — the flag only suppresses outbound webhook
+   * deliveries so clients can develop without their endpoint being hit.
+   */
+  isTest?: boolean;
+  /**
    * Free-form per-platform context bag persisted to `account.metadata`.
    *   - Meta: `{ page_id, ig_business_id }`
    *   - TikTok: `{ business_id, open_id, advertiser_id?, scopes? }`
@@ -214,6 +221,8 @@ export class AccountsService {
       });
       const wasPaused = existing?.syncTier === 'paused';
 
+      const isTest = input.isTest === true;
+
       const account = await tx.account.upsert({
         where: {
           workspaceId_platform_canonicalUserId: {
@@ -225,6 +234,7 @@ export class AccountsService {
         create: {
           workspaceId,
           endUserId: input.endUserId ?? null,
+          isTest,
           platform: input.platform,
           canonicalUserId: input.canonicalUserId,
           handle: input.handle ?? null,
@@ -235,7 +245,12 @@ export class AccountsService {
         update: {
           handle: input.handle ?? undefined,
           status: 'ready',
+          // Re-seeding an existing account doesn't downgrade live → test
+          // (a live account that previously had webhooks fire shouldn't
+          // start being silenced because someone re-OAuth'd with a test
+          // key). Only upgrade test → live.
           ...(input.endUserId !== undefined ? { endUserId: input.endUserId } : {}),
+          ...(isTest === false ? { isTest: false } : {}),
           ...(wasPaused ? { syncTier: 'standard' } : {}),
           // Only overwrite metadata when the caller provided one — preserves
           // existing keys (e.g. page_id) on a re-seed of the same account.
@@ -307,7 +322,12 @@ export class AccountsService {
       // guaranteed visible by the time we hand off to the dispatcher, but
       // we don't await: emit() is best-effort and must not roll back the
       // tx if it fails.
-      if (this.outboundWebhooks) {
+      //
+      // Skip for test-mode accounts — the whole point of cmlk_test_* keys
+      // is to develop against real OAuth without their endpoint receiving
+      // fake events. Subsequent token-refresh / disconnect events from a
+      // test account follow the same rule (see outbound-webhooks.service).
+      if (this.outboundWebhooks && !account.isTest) {
         void this.outboundWebhooks.emit(workspaceId, 'account.connected', {
           account_id: account.id.toString(),
           platform: input.platform,

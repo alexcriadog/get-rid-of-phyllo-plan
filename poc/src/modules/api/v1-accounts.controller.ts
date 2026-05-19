@@ -8,6 +8,7 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { z } from 'zod';
 import { PrismaService } from '@shared/database/prisma.service';
@@ -21,6 +22,7 @@ import {
   BearerApiKeyGuard,
   RequestWithWorkspace,
 } from '@/common/guards/bearer-api-key.guard';
+import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
 
 /**
  * Public /v1 surface for external client backends. Auth: Bearer
@@ -38,6 +40,7 @@ import {
  */
 @Controller('v1')
 @UseGuards(BearerApiKeyGuard)
+@UseInterceptors(RateLimitInterceptor)
 export class V1AccountsController {
   constructor(
     private readonly prisma: PrismaService,
@@ -274,6 +277,7 @@ interface AccountSummary {
   display_name: string | null;
   status: string;
   end_user_id: string | null;
+  is_test: boolean;
   connected_at: string;
   disconnected_at: string | null;
 }
@@ -305,6 +309,7 @@ function toSummary(row: {
   displayName: string | null;
   status: string;
   endUserId: string | null;
+  isTest: boolean;
   connectedAt: Date;
   disconnectedAt: Date | null;
 }): AccountSummary {
@@ -316,6 +321,7 @@ function toSummary(row: {
     display_name: row.displayName,
     status: row.status,
     end_user_id: row.endUserId,
+    is_test: row.isTest,
     connected_at: row.connectedAt.toISOString(),
     disconnected_at: row.disconnectedAt ? row.disconnectedAt.toISOString() : null,
   };

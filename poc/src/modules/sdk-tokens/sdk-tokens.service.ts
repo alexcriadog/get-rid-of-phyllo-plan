@@ -35,6 +35,8 @@ export interface MintSdkTokenInput {
   endUserId: string;
   ttlSeconds?: number;
   allowedPlatforms?: ReadonlyArray<string>;
+  /** Sandbox flag — derived from the issuing API key prefix. */
+  environment?: 'live' | 'test';
 }
 
 export interface SdkTokenClaims {
@@ -46,6 +48,8 @@ export interface SdkTokenClaims {
   sub: string;
   /** Optional whitelist of platforms the popup may offer. */
   platforms?: ReadonlyArray<string>;
+  /** 'test' marks accounts seeded via this token as sandbox (no webhooks). */
+  env?: 'live' | 'test';
   iss: string;
   aud: string;
   iat: number;
@@ -100,6 +104,7 @@ export class SdkTokensService {
       ...(expandedPlatforms && expandedPlatforms.length > 0
         ? { platforms: expandedPlatforms }
         : {}),
+      ...(input.environment === 'test' ? { env: 'test' } : {}),
       iss: ISS,
       aud: AUD,
       iat: now,
