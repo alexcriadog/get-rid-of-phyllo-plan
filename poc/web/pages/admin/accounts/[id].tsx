@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ArrowLeft, ExternalLink, Pause, Play, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Copy, ExternalLink, Eye, Pause, Play, RefreshCw } from 'lucide-react';
 import AdminLayout from '../../../components/AdminLayout';
 import { useLive } from '../../../lib/useLive';
-import { adminPost } from '../../../lib/api';
+import { adminPost, CONNECTOR_API_URL } from '../../../lib/api';
 import { fmtRelative, fmtMs, fmtTime, productFromCall, type ProductKind } from '../../../lib/format';
 import {
   LineChart,
@@ -222,6 +222,9 @@ export default function AccountDetailPage() {
               </Button>
             </div>
           </Card>
+
+          <TokenDebugPanel accountId={String(id)} platform={account.platform} />
+
 
           <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {PRODUCTS.map((p) => (
@@ -561,4 +564,126 @@ function buildTopEndpoints(calls: ApiCall[]) {
     }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 6);
+}
+
+// ─── Token debug ───────────────────────────────────────────────────────────
+//
+// Operator-only on-demand decrypt of the OAuth token currently stored on
+// the account. Useful for debugging upstream Meta/Twitch/TikTok issues
+// against the same credentials our worker uses. The token is fetched only
+// when the button is clicked (never auto-polled) and lives on screen
+// until the operator dismisses it.
+
+function TokenDebugPanel({
+  accountId,
+  platform,
+}: {
+  accountId: string;
+  platform: string;
+}) {
+  const [token, setToken] = useState<{
+    token: string;
+    level: 'page' | 'user';
+    product: 'page' | 'ads';
+  } | null>(null);
+  const [busy, setBusy] = useState<'page' | 'ads' | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const supportsAds = platform === 'facebook' || platform === 'instagram';
+
+  const fetchToken = async (product: 'page' | 'ads') => {
+    setBusy(product);
+    setErr(null);
+    setToken(null);
+    try {
+      const res = await fetch(
+        `${CONNECTOR_API_URL}/admin/accounts/${accountId}/access-token?product=${product}`,
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? `${res.status} ${res.statusText}`);
+      }
+      const json = (await res.json()) as {
+        token: string;
+        level: 'page' | 'user';
+        product: 'page' | 'ads';
+      };
+      setToken(json);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card className="mb-5 p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Token debug
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Decrypts and shows the stored OAuth token for ad-hoc API testing.
+            Never shared with the client.
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy !== null}
+            onClick={() => fetchToken('page')}
+          >
+            <Eye className="h-3.5 w-3.5" />
+            {busy === 'page' ? 'Loading…' : 'Show page token'}
+          </Button>
+          {supportsAds && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy !== null}
+              onClick={() => fetchToken('ads')}
+            >
+              <Eye className="h-3.5 w-3.5" />
+              {busy === 'ads' ? 'Loading…' : 'Show user token (ads)'}
+            </Button>
+          )}
+          {token && (
+            <Button size="sm" variant="ghost" onClick={() => setToken(null)}>
+              Hide
+            </Button>
+          )}
+        </div>
+      </div>
+      {err && (
+        <div className="mt-2 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+          ↯ {err}
+        </div>
+      )}
+      {token && (
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs">
+            <Badge variant="default">{token.product}</Badge>
+            <span className="text-muted-foreground">level</span>
+            <Badge variant={token.level === 'user' ? 'warn' : 'default'}>
+              {token.level}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 overflow-auto rounded bg-secondary/40 px-2 py-1.5 font-mono text-xs">
+              {token.token}
+            </code>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => navigator.clipboard.writeText(token.token)}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Copy
+            </Button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
 }

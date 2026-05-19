@@ -3,17 +3,20 @@ import { useRouter } from 'next/router';
 import { ReactNode, useState } from 'react';
 import {
   Activity,
+  Building2,
   Clock,
   Database,
   ExternalLink,
   FileJson,
   Gauge,
+  KeyRound,
   LayoutDashboard,
   ListOrdered,
   Lock,
   Menu,
   Plug2,
   Repeat,
+  Send,
   TableProperties,
   Users,
   Webhook,
@@ -65,6 +68,14 @@ const NAV: NavSection[] = [
     items: [
       { href: '/admin/raw', label: 'Raw responses', icon: FileJson },
       { href: '/admin/support-matrix', label: 'Support matrix', icon: TableProperties },
+    ],
+  },
+  {
+    title: 'SaaS',
+    items: [
+      { href: '/admin/workspaces', label: 'Workspaces', icon: Building2 },
+      { href: '/admin/api-keys', label: 'API keys', icon: KeyRound },
+      { href: '/admin/webhook-deliveries', label: 'Webhook deliveries', icon: Send },
     ],
   },
 ];
