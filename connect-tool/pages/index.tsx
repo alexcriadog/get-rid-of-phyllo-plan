@@ -197,9 +197,7 @@ export default function Index({
           {subtitle}
         </p>
 
-        {errorBanner && (
-          <div className="v-banner danger">↯ {decodeURIComponent(errorBanner)}</div>
-        )}
+        {errorBanner && <ErrorBanner raw={errorBanner} />}
 
         <div className="v-grid">
           {visiblePlatforms.map((p) => (
@@ -219,6 +217,108 @@ export default function Index({
           </footer>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Error banner ──────────────────────────────────────────────────────────
+//
+// The dispatcher redirects to /?error=<message> on every OAuth-flow
+// failure. We classify the message into a short bucket the end-user can
+// understand (instead of leaking raw upstream errors) and surface a
+// suggested action.
+
+interface BannerKind {
+  title: string;
+  hint: string;
+}
+
+function classifyError(raw: string): BannerKind {
+  const m = raw.toLowerCase();
+  if (m.includes('sdk token') && m.includes('mismatch')) {
+    return {
+      title: "This connect link doesn't match the workspace it was issued for.",
+      hint: 'Ask the app you came from to restart the connection — they need to mint a fresh SDK token for this workspace.',
+    };
+  }
+  if (m.includes('sdk token') && (m.includes('expired') || m.includes('exp'))) {
+    return {
+      title: 'The connect link has expired.',
+      hint: 'SDK tokens last 30 minutes. Restart the connection from the app you came from.',
+    };
+  }
+  if (m.includes('sdk token') && m.includes('signature')) {
+    return {
+      title: 'This connect link was tampered with.',
+      hint: 'Go back to the app you came from and start a fresh connection. If this keeps happening, contact support.',
+    };
+  }
+  if (m.includes('platform') && m.includes('not allowed')) {
+    return {
+      title: 'This platform is not available for your account.',
+      hint: 'The app you came from didn\'t include this platform when issuing your connect link. Try a different one or ask them to re-issue.',
+    };
+  }
+  if (m.includes('unknown platform')) {
+    return {
+      title: 'Unsupported platform.',
+      hint: 'We connect Facebook, Instagram (via Facebook), TikTok, Threads, YouTube, and Twitch. Pick one of those.',
+    };
+  }
+  if (m.includes('denied:') || m.includes('access_denied')) {
+    return {
+      title: "You declined the permission dialog.",
+      hint: "We can't connect the account without those permissions. Click a platform again to retry.",
+    };
+  }
+  if (m.includes('callback missing ?code')) {
+    return {
+      title: 'The platform returned an empty response.',
+      hint: 'This usually means the OAuth flow was cancelled mid-way. Try again.',
+    };
+  }
+  if (m.includes('workspace not found')) {
+    return {
+      title: 'Workspace not found.',
+      hint: 'Double-check the link you came from. If it was correct, contact the app that sent you.',
+    };
+  }
+  return {
+    title: 'Something went wrong.',
+    hint: 'Try again, or contact the app you came from if this keeps happening.',
+  };
+}
+
+function ErrorBanner({ raw }: { raw: string }) {
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  })();
+  const kind = classifyError(decoded);
+  return (
+    <div
+      className="v-banner danger"
+      role="alert"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        padding: '14px 18px',
+        marginBottom: 24,
+        borderRadius: 12,
+      }}
+    >
+      <div style={{ fontWeight: 600 }}>↯ {kind.title}</div>
+      <div style={{ fontSize: 13, opacity: 0.85 }}>{kind.hint}</div>
+      <details style={{ marginTop: 4, fontSize: 11, opacity: 0.55 }}>
+        <summary style={{ cursor: 'pointer' }}>Technical details</summary>
+        <code style={{ display: 'block', marginTop: 4, fontFamily: 'monospace' }}>
+          {decoded}
+        </code>
+      </details>
     </div>
   );
 }

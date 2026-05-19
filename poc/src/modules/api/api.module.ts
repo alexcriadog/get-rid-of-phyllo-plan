@@ -6,6 +6,7 @@ import { PlatformsModule } from '@modules/platforms/platforms.module';
 import { AccountsModule } from '@modules/accounts/accounts.module';
 import { ApiKeysModule } from '@modules/api-keys/api-keys.module';
 import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
+import { V1CacheInterceptor } from '@/common/interceptors/cache.interceptor';
 import { ManualRefreshController } from './manual-refresh.controller';
 import { V1AccountsController } from './v1-accounts.controller';
 
@@ -24,7 +25,7 @@ import { V1AccountsController } from './v1-accounts.controller';
     ApiKeysModule,
   ],
   controllers: [ManualRefreshController, V1AccountsController],
-  providers: [ManualRefreshController, RateLimitInterceptor],
+  providers: [ManualRefreshController, RateLimitInterceptor, V1CacheInterceptor],
   exports: [ManualRefreshController],
 })
 export class ApiModule {}

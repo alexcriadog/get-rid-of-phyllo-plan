@@ -23,6 +23,7 @@ import {
   RequestWithWorkspace,
 } from '@/common/guards/bearer-api-key.guard';
 import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
+import { V1CacheInterceptor } from '@/common/interceptors/cache.interceptor';
 
 /**
  * Public /v1 surface for external client backends. Auth: Bearer
@@ -40,7 +41,7 @@ import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.intercept
  */
 @Controller('v1')
 @UseGuards(BearerApiKeyGuard)
-@UseInterceptors(RateLimitInterceptor)
+@UseInterceptors(RateLimitInterceptor, V1CacheInterceptor)
 export class V1AccountsController {
   constructor(
     private readonly prisma: PrismaService,

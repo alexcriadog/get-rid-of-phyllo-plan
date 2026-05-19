@@ -7,10 +7,114 @@ info:
     normalized profile / audience / content / engagement data across
     Instagram, Facebook, TikTok, Threads, YouTube, and Twitch.
 
-    All requests authenticate with a workspace API key
-    (`Authorization: Bearer cmlk_(live|test)_*`). Issue one in the admin
+    ## Quick start (5 minutes)
+
+    **1. Get an API key.** Your Camaleonic operator issues you a
+    `cmlk_live_*` (production) or `cmlk_test_*` (sandbox — no webhooks
+    fired, accounts marked `is_test=true`) bearer key from the admin
+    dashboard. Keep it server-side: it must never reach a browser.
+
+    **2. Mint a short-lived SDK token per end-user.** This is the token
+    you hand to the JS widget — it binds the popup to one of your users
+    and expires in 30 minutes max.
+
+    ```bash
+    # curl
+    curl -X POST https://smconnector.camaleonicanalytics.com/api/poc/v1/sdk-tokens \
+      -H "Authorization: Bearer cmlk_live_xxxxx" \
+      -H "Content-Type: application/json" \
+      -d '{"user_id":"<your-end-user-id>","ttl":1800}'
+    ```
+
+    ```js
+    // Node
+    const res = await fetch('https://smconnector.camaleonicanalytics.com/api/poc/v1/sdk-tokens', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.CAMALEONIC_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ user_id: 'acme-user-42', ttl: 1800 }),
+    });
+    const { sdk_token } = await res.json();
+    ```
+
+    ```python
+    # Python
+    import requests
+    r = requests.post(
+        'https://smconnector.camaleonicanalytics.com/api/poc/v1/sdk-tokens',
+        headers={'Authorization': f'Bearer {API_KEY}'},
+        json={'user_id': 'acme-user-42', 'ttl': 1800},
+    )
+    sdk_token = r.json()['sdk_token']
+    ```
+
+    **3. Embed the widget.** Drop the script tag and call
+    `init({sdkToken,workspace}).open(platform)` from a button click.
+
+    ```html
+    <script src="https://smconnector.camaleonicanalytics.com/connect-sdk.js"></script>
+    <button id="btn">Connect Instagram</button>
+    <script>
+      const handle = CamaleonicConnect.init({
+        sdkToken: '<jwt from step 2>',
+        workspace: '<your workspace slug>',
+        onSuccess: ({accountIds, platform}) => {
+          console.log('connected', platform, accountIds);
+        },
+        onError: (err) => console.warn(err),
+        onExit:  ()  => console.log('user closed'),
+      });
+      document.getElementById('btn').onclick = () => handle.open('facebook');
+    </script>
+    ```
+
+    **4. Pull normalized data.** Once the popup closes with `onSuccess`,
+    read the account from the REST API:
+
+    ```bash
+    curl https://smconnector.camaleonicanalytics.com/api/poc/v1/accounts/<id>/identity \
+      -H "Authorization: Bearer cmlk_live_xxxxx"
+    ```
+
+    Same shape across every platform (`username`, `full_name`,
+    `followers_count`, `profile_image_url`, ...). Platform-specific
+    fields live under `extra`.
+
+    **5. Register a webhook** so you get notified of new connections
+    without polling:
+
+    ```bash
+    curl -X POST https://smconnector.camaleonicanalytics.com/api/poc/v1/webhook-endpoints \
+      -H "Authorization: Bearer cmlk_live_xxxxx" \
+      -H "Content-Type: application/json" \
+      -d '{"url":"https://api.your-app.com/hooks/camaleonic",
+           "events":["account.connected","token.expired"]}'
+    ```
+
+    The response includes a `secret` (shown ONCE) — store it. Verify
+    every delivery with HMAC-SHA256 over `<unix_ts>.<raw_body>` against
+    the `X-Camaleonic-Signature` header.
+
+    ## Auth
+
+    `Authorization: Bearer cmlk_(live|test)_*`. Issue one in the admin
     dashboard or — until the dashboard ships — via the
     `tools/issue-prod-key.sh` operator script.
+
+    ## Caching
+
+    `GET /v1/accounts/{id}/<product>` responses are cached for 5 minutes
+    per workspace + path + query. Add `?live=true` to bypass and force a
+    fresh platform fetch. Every response includes
+    `X-Cache: HIT|MISS|BYPASS` and (on hits) `X-Cached-At`.
+
+    ## Rate limits
+
+    120 requests/minute per workspace on the `standard` plan tier. Every
+    response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and
+    `X-RateLimit-Reset` (unix seconds). 429s include `Retry-After`.
 
     Cross-tenant reads return `404 Not Found` (not 403) to keep the
     existence of accounts in other workspaces opaque.

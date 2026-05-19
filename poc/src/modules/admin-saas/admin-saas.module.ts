@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SharedDatabaseModule } from '@shared/database/database.module';
+import { SharedRedisModule } from '@shared/redis/redis.module';
 import { WorkspacesModule } from '@modules/workspaces/workspaces.module';
 import { ApiKeysModule } from '@modules/api-keys/api-keys.module';
 import { OutboundWebhooksModule } from '@modules/outbound-webhooks/outbound-webhooks.module';
@@ -18,6 +19,7 @@ import { AdminSaasController } from './admin-saas.controller';
 @Module({
   imports: [
     SharedDatabaseModule,
+    SharedRedisModule,
     WorkspacesModule,
     ApiKeysModule,
     OutboundWebhooksModule,

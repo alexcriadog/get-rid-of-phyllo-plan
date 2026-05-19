@@ -13,6 +13,7 @@ import {
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
+import { RedisService } from '@shared/redis/redis.service';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
 import {
   ApiKeysService,
@@ -74,6 +75,7 @@ type TokenProduct = (typeof ALLOWED_TOKEN_PRODUCTS)[number];
 export class AdminSaasController {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
     private readonly workspaces: WorkspacesService,
     private readonly apiKeys: ApiKeysService,
     private readonly webhooks: OutboundWebhooksService,
@@ -359,6 +361,58 @@ export class AdminSaasController {
         delivered_at: r.deliveredAt ? r.deliveredAt.toISOString() : null,
       })),
     };
+  }
+
+  // ─── Usage telemetry ────────────────────────────────────────────────────
+
+  @Get('usage')
+  async usage(
+    @Query('days') daysRaw: string | undefined,
+  ): Promise<{
+    days: string[];
+    workspaces: Array<{
+      id: string;
+      slug: string;
+      name: string;
+      counts: number[];
+      total: number;
+    }>;
+  }> {
+    const days = clampInt(daysRaw, 7, 1, 90);
+    const today = Math.floor(Date.now() / 1000);
+    const dayKeys: string[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      dayKeys.push(
+        new Date((today - i * 86400) * 1000).toISOString().slice(0, 10),
+      );
+    }
+
+    const workspaces = await this.prisma.workspace.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, slug: true, name: true },
+    });
+
+    // Single round-trip MGET — one key per (workspace, day).
+    const keys = workspaces.flatMap((ws) =>
+      dayKeys.map((d) => `usage:${ws.id}:${d}`),
+    );
+    const values = keys.length > 0 ? await this.redis.client.mget(...keys) : [];
+
+    const rows = workspaces.map((ws, wsIdx) => {
+      const counts = dayKeys.map((_, dIdx) => {
+        const v = values[wsIdx * dayKeys.length + dIdx];
+        return v ? parseInt(v, 10) || 0 : 0;
+      });
+      return {
+        id: ws.id,
+        slug: ws.slug,
+        name: ws.name,
+        counts,
+        total: counts.reduce((a, b) => a + b, 0),
+      };
+    });
+
+    return { days: dayKeys, workspaces: rows };
   }
 
   // ─── Token debug (operator-only) ────────────────────────────────────────

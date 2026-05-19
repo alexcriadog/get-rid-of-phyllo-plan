@@ -76,6 +76,7 @@ const NAV: NavSection[] = [
       { href: '/admin/workspaces', label: 'Workspaces', icon: Building2 },
       { href: '/admin/api-keys', label: 'API keys', icon: KeyRound },
       { href: '/admin/webhook-deliveries', label: 'Webhook deliveries', icon: Send },
+      { href: '/admin/usage', label: 'Usage', icon: Gauge },
     ],
   },
 ];

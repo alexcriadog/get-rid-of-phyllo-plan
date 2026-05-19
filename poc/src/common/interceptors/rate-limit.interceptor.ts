@@ -78,6 +78,15 @@ export class RateLimitInterceptor implements NestInterceptor {
         // expired between the read and a downstream operation.
         await this.redis.client.expire(key, WINDOW_SECONDS + 10);
       }
+      // Long-window usage counter for the admin telemetry dashboard.
+      // Same INCR/EXPIRE pattern but keyed per-day, kept for 90 days so
+      // the operator can see week-over-week trends without standing up
+      // a full metrics pipeline.
+      const dayKey = `usage:${ws}:${dayBucket(now)}`;
+      const dayCount = await this.redis.client.incr(dayKey);
+      if (dayCount === 1) {
+        await this.redis.client.expire(dayKey, 90 * 24 * 60 * 60);
+      }
     } catch {
       // Fail open on Redis outage. Better to serve traffic than to 503
       // because our limiter is unhappy.
@@ -103,4 +112,12 @@ export class RateLimitInterceptor implements NestInterceptor {
 
     return next.handle();
   }
+}
+
+/**
+ * UTC day bucket (YYYY-MM-DD). Same calendar day across deployments
+ * regardless of host timezone.
+ */
+function dayBucket(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toISOString().slice(0, 10);
 }
