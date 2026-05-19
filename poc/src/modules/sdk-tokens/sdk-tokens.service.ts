@@ -90,14 +90,15 @@ export class SdkTokensService {
       throw new BadRequestException('endUserId is required');
     }
 
+    const expandedPlatforms = expandPlatformAliases(input.allowedPlatforms);
     const secret = await this.workspaces.getSecret(input.workspaceId);
     const now = Math.floor(Date.now() / 1000);
     const payload: SdkTokenClaims = {
       ws: input.workspaceId,
       ws_slug: input.workspaceSlug,
       sub: input.endUserId,
-      ...(input.allowedPlatforms && input.allowedPlatforms.length > 0
-        ? { platforms: input.allowedPlatforms }
+      ...(expandedPlatforms && expandedPlatforms.length > 0
+        ? { platforms: expandedPlatforms }
         : {}),
       iss: ISS,
       aud: AUD,
@@ -213,6 +214,27 @@ function randomJti(): string {
   // 16 random bytes → 22-char base64url. Enough entropy for replay
   // detection if we ever track issued tokens; today it's just identifying.
   return base64UrlEncode(randomBytes(16));
+}
+
+/**
+ * Expand platform aliases so the popup-dispatcher accept-list matches
+ * the OAuth-provider truth:
+ *   - "instagram" has no standalone OAuth surface; the IG Business
+ *     Account is connected through Facebook's OAuth + Page picker.
+ *     Allowing `instagram` therefore implicitly allows `facebook`.
+ *
+ * Returns the resolved set (deduped) or undefined when the input was
+ * empty/absent. The client sees their original list echoed back via
+ * GET /v1/sdk-tokens?... in future endpoints; here we only normalise
+ * what we write into the JWT claim consumed by the popup.
+ */
+function expandPlatformAliases(
+  list: ReadonlyArray<string> | undefined,
+): ReadonlyArray<string> | undefined {
+  if (!list || list.length === 0) return undefined;
+  const out = new Set(list);
+  if (out.has('instagram') && !out.has('facebook')) out.add('facebook');
+  return Array.from(out);
 }
 
 function clampTtl(ttl: number): number {
