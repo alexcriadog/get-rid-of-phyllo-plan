@@ -16,6 +16,17 @@ smconnector.camaleonicanalytics.com {
 		reverse_proxy web:3001
 	}
 
+	# Client dashboard — clients log in with their workspace API key,
+	# see their own connected accounts + manage webhooks.
+	handle /client* {
+		reverse_proxy web:3001
+	}
+
+	# Client-dashboard's own API routes (login / logout / proxy → connector).
+	handle /api/client* {
+		reverse_proxy web:3001
+	}
+
 	# Public account profile pages (e.g. /account/2, /account/2/posts).
 	handle /account* {
 		reverse_proxy web:3001
