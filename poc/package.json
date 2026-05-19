@@ -16,6 +16,7 @@
     "prisma:studio": "prisma studio",
     "seed": "ts-node -r tsconfig-paths/register prisma/seed.ts",
     "discover:ig": "ts-node scripts/discover-ig.ts",
+    "issue-key": "ts-node -r tsconfig-paths/register scripts/issue-api-key.ts",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:reset": "docker compose down -v && docker compose up -d",

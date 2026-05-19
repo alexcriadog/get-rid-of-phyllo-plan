@@ -2,10 +2,8 @@ import {
   BadRequestException,
   Body,
   Controller,
-  Get,
   HttpCode,
   Logger,
-  Param,
   Post,
 } from '@nestjs/common';
 import { z } from 'zod';
@@ -44,17 +42,6 @@ export class AccountsController {
     return this.accounts.seedAccount(input);
   }
 
-  @Get('v1/accounts')
-  async listAccounts(): Promise<unknown> {
-    return this.accounts.listAccounts();
-  }
-
-  @Get('v1/accounts/:id')
-  async getAccount(@Param('id') rawId: string): Promise<unknown> {
-    const id = this.parseBigInt(rawId);
-    return this.accounts.getAccount(id);
-  }
-
   private toSeedInput(body: SeedAccountBody): SeedAccountInput {
     return {
       platform: body.platform as Platform,
@@ -63,16 +50,5 @@ export class AccountsController {
       handle: body.handle,
       metadata: body.metadata,
     };
-  }
-
-  private parseBigInt(raw: string): bigint {
-    if (!/^\d+$/.test(raw)) {
-      throw new BadRequestException(`Invalid account id: ${raw}`);
-    }
-    try {
-      return BigInt(raw);
-    } catch {
-      throw new BadRequestException(`Invalid account id: ${raw}`);
-    }
   }
 }
