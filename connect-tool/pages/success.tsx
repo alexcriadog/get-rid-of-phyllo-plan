@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export default function SuccessPage() {
   const router = useRouter();
@@ -23,18 +23,28 @@ export default function SuccessPage() {
   // SDK widget integration. When the page is loaded inside a popup opened
   // by CamaleonicConnect.init(), notify the opener and close the popup so
   // the client app can resume its flow without manual interaction.
+  //
+  // - Depend on the RAW string query params (not the parsed array) so the
+  //   effect doesn't re-fire when React renders again with a fresh array
+  //   reference. Without this the SDK gets duplicate onSuccess calls.
+  // - Belt-and-braces: a ref guard makes the postMessage idempotent in
+  //   case Strict Mode (or a future change) fires the effect twice anyway.
   const openerOrigin =
     (router.query.opener_origin as string | undefined) ?? '';
+  const sentRef = useRef(false);
   useEffect(() => {
+    if (sentRef.current) return;
     if (typeof window === 'undefined') return;
     const opener = window.opener;
     if (!opener || opener === window) return;
-    if (accounts.length === 0) return;
+    const ids = accountsRaw ? accountsRaw.split(',').filter(Boolean) : [];
+    if (ids.length === 0) return;
+    sentRef.current = true;
     try {
       opener.postMessage(
         {
           type: 'camaleonic.connect.success',
-          accountIds: accounts,
+          accountIds: ids,
           platform,
         },
         openerOrigin && openerOrigin.length > 0 ? openerOrigin : '*',
@@ -46,7 +56,7 @@ export default function SuccessPage() {
     // Give the parent a tick to bind the listener before we close.
     const timer = window.setTimeout(() => window.close(), 250);
     return () => window.clearTimeout(timer);
-  }, [accounts, openerOrigin, platform]);
+  }, [accountsRaw, openerOrigin, platform]);
 
   const adminUrl =
     process.env.NEXT_PUBLIC_POC_ADMIN_URL ?? 'http://localhost:3001/admin';
