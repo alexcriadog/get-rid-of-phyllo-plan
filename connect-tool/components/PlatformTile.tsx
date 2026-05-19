@@ -19,7 +19,14 @@ const ACCENT_HEX: Record<PlatformInfo['accent'], string> = {
   purple: '#9146ff',
 };
 
-export function PlatformTile({ platform }: { platform: PlatformInfo }) {
+export function PlatformTile({
+  platform,
+  query,
+}: {
+  platform: PlatformInfo;
+  /** Already-encoded URLSearchParams to append to the start route (`ws=...&token=...`). */
+  query?: string;
+}) {
   const accent = ACCENT_HEX[platform.accent];
   const inner = (
     <div
@@ -73,7 +80,7 @@ export function PlatformTile({ platform }: { platform: PlatformInfo }) {
   }
   return (
     <Link
-      href={`/api/oauth/start/${platform.key}`}
+      href={`/api/oauth/start/${platform.key}${query ? `?${query}` : ''}`}
       style={{ textDecoration: 'none' }}
     >
       {inner}

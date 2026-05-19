@@ -49,7 +49,34 @@ export interface SimpleSession {
   createdAt: number;
 }
 
-export type Session = FbSession | SimpleSession;
+/**
+ * Per-OAuth-flow tenant context, populated at /api/oauth/start when the
+ * popup is launched via the Camaleonic Connect SDK (carries ?ws=<slug>&
+ * token=<jwt>). Stashed under a fresh sessionId stored on a cookie so the
+ * downstream /api/seed-confirm + /api/seed-pages handlers can inject
+ * workspace_id + end_user_id into the POC seed body without the operator
+ * having to plumb them through the picker URL.
+ *
+ * Absent → legacy single-tenant flow continues (account lands on the
+ * "demo" workspace via the backend's default).
+ */
+export interface OAuthContextSession {
+  kind: 'oauth-context';
+  workspaceId: string;
+  workspaceSlug: string;
+  endUserId: string;
+  allowedPlatforms?: ReadonlyArray<string>;
+  /**
+   * Origin of the page that opened the popup, used to scope the
+   * `postMessage` reply on the success page. When absent we fall back to
+   * `*` (less strict, but the only option when an operator opened the
+   * page directly).
+   */
+  openerOrigin?: string;
+  createdAt: number;
+}
+
+export type Session = FbSession | SimpleSession | OAuthContextSession;
 
 // Singleton in-process map. The connect-tool runs as a single Next.js
 // server, so there's only ever one instance.
@@ -77,7 +104,8 @@ export function newSessionId(): string {
 // preserve discrimination through a vanilla Omit<Session, ...>).
 type PutSessionInput =
   | Omit<FbSession, 'createdAt'>
-  | Omit<SimpleSession, 'createdAt'>;
+  | Omit<SimpleSession, 'createdAt'>
+  | Omit<OAuthContextSession, 'createdAt'>;
 
 export function putSession(session: PutSessionInput): string {
   pruneExpired();
@@ -107,6 +135,12 @@ export function getFbSession(id: string): FbSession | null {
 export function getSimpleSession(id: string): SimpleSession | null {
   const s = getSession(id);
   return s && s.kind === 'simple' ? s : null;
+}
+
+/** Convenience: returns the session only if it's the SDK OAuth context shape. */
+export function getOAuthContextSession(id: string): OAuthContextSession | null {
+  const s = getSession(id);
+  return s && s.kind === 'oauth-context' ? s : null;
 }
 
 export function dropSession(id: string): void {

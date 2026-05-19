@@ -1,0 +1,383 @@
+openapi: 3.1.0
+info:
+  title: Camaleonic Connect API
+  version: '1.0.0'
+  description: |
+    Public API for connecting end-user social accounts and reading
+    normalized profile / audience / content / engagement data across
+    Instagram, Facebook, TikTok, Threads, YouTube, and Twitch.
+
+    All requests authenticate with a workspace API key
+    (`Authorization: Bearer cmlk_(live|test)_*`). Issue one in the admin
+    dashboard or — until the dashboard ships — via the
+    `tools/issue-prod-key.sh` operator script.
+
+    Cross-tenant reads return `404 Not Found` (not 403) to keep the
+    existence of accounts in other workspaces opaque.
+
+servers:
+  - url: https://smconnector.camaleonicanalytics.com/api/poc
+    description: production
+  - url: http://localhost:3000
+    description: local dev
+
+security:
+  - bearerApiKey: []
+
+tags:
+  - name: SDK Tokens
+    description: Mint short-lived JWTs the browser SDK uses to scope a connect popup.
+  - name: Accounts
+    description: Manage and read normalized data for connected accounts.
+  - name: Webhooks
+    description: Subscribe to lifecycle events.
+
+paths:
+  /v1/sdk-tokens:
+    post:
+      tags: [SDK Tokens]
+      summary: Mint an SDK token for the browser widget
+      description: |
+        Returns an HS256 JWT (TTL ≤ 30 min) signed with the workspace's
+        HMAC secret. Hand it to `CamaleonicConnect.init({ sdkToken })`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id:
+                  type: string
+                  description: Your id for the end-user inside your product.
+                ttl:
+                  type: integer
+                  minimum: 60
+                  maximum: 1800
+                  default: 1800
+                allowed_platforms:
+                  type: array
+                  items: { type: string, enum: [instagram, facebook, tiktok, threads, youtube, twitch] }
+      responses:
+        '200':
+          description: Minted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sdk_token: { type: string }
+                  expires_at: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/accounts:
+    get:
+      tags: [Accounts]
+      summary: List accounts in the workspace
+      parameters:
+        - in: query
+          name: platform
+          schema: { type: string }
+        - in: query
+          name: end_user_id
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/AccountSummary' }
+                  meta:
+                    type: object
+                    properties:
+                      count: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/accounts/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/AccountId' }
+    get:
+      tags: [Accounts]
+      summary: Fetch one account's metadata
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountSummary' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/accounts/{id}/identity:
+    parameters: [{ $ref: '#/components/parameters/AccountId' }]
+    get:
+      tags: [Accounts]
+      summary: Live-fetch normalized profile data
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Identity' }
+
+  /v1/accounts/{id}/audience:
+    parameters: [{ $ref: '#/components/parameters/AccountId' }]
+    get:
+      tags: [Accounts]
+      summary: Audience distributions (country, age, gender, city)
+      responses:
+        '200': { $ref: '#/components/responses/PlatformPayload' }
+
+  /v1/accounts/{id}/content:
+    parameters:
+      - { $ref: '#/components/parameters/AccountId' }
+      - in: query
+        name: limit
+        schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      - in: query
+        name: since
+        schema: { type: string, format: date-time }
+    get:
+      tags: [Accounts]
+      summary: Recent content items (posts, videos, clips)
+      responses:
+        '200': { $ref: '#/components/responses/PlatformPayloadList' }
+
+  /v1/accounts/{id}/engagement-deep:
+    parameters: [{ $ref: '#/components/parameters/AccountId' }]
+    get:
+      tags: [Accounts]
+      summary: Per-content windowed analytics (YouTube only today)
+      responses:
+        '200': { $ref: '#/components/responses/PlatformPayload' }
+
+  /v1/accounts/{id}/stories:
+    parameters: [{ $ref: '#/components/parameters/AccountId' }]
+    get:
+      tags: [Accounts]
+      summary: 24h stories (IG, FB)
+      responses:
+        '200': { $ref: '#/components/responses/PlatformPayloadList' }
+
+  /v1/accounts/{id}/mentions:
+    parameters:
+      - { $ref: '#/components/parameters/AccountId' }
+      - in: query
+        name: limit
+        schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    get:
+      tags: [Accounts]
+      summary: Posts mentioning the account
+      responses:
+        '200': { $ref: '#/components/responses/PlatformPayloadList' }
+
+  /v1/accounts/{id}/comments:
+    parameters:
+      - { $ref: '#/components/parameters/AccountId' }
+      - in: query
+        name: limit
+        schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    get:
+      tags: [Accounts]
+      summary: Comments on the account's recent content
+      responses:
+        '200': { $ref: '#/components/responses/PlatformPayloadList' }
+
+  /v1/accounts/{id}/ads:
+    parameters: [{ $ref: '#/components/parameters/AccountId' }]
+    get:
+      tags: [Accounts]
+      summary: Advertising snapshot (FB Ads, Google Ads)
+      responses:
+        '200': { $ref: '#/components/responses/PlatformPayload' }
+
+  /v1/webhook-endpoints:
+    get:
+      tags: [Webhooks]
+      summary: List webhook endpoints
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/WebhookEndpoint' }
+    post:
+      tags: [Webhooks]
+      summary: Register a webhook endpoint
+      description: |
+        The signing secret is returned ONCE in the create response and
+        never again. Save it somewhere safe — you'll need it to verify
+        the `X-Camaleonic-Signature` header on incoming deliveries:
+
+            sig := HMAC_SHA256(secret, "<unix-ts>." + <raw-body>)
+            header := "t=<unix-ts>,v1=<hex-sig>"
+
+        Subscribed event types:
+        - `account.connected`
+        - `account.disconnected`
+        - `account.refreshed`
+        - `token.refresh_failed`
+        - `token.expired`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url: { type: string, format: uri }
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum: [account.connected, account.disconnected, account.refreshed, token.refresh_failed, token.expired]
+                description: { type: string, maxLength: 256 }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/WebhookEndpoint'
+                  - type: object
+                    properties:
+                      secret:
+                        type: string
+                        description: Plaintext signing secret. Stored only as hash on our side.
+
+  /v1/webhook-endpoints/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [Webhooks]
+      summary: Remove a webhook endpoint
+      responses:
+        '204':
+          description: Removed (idempotent — also returns 204 if the id never existed in this workspace).
+
+components:
+  securitySchemes:
+    bearerApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: cmlk_(live|test)_*
+
+  parameters:
+    AccountId:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, description: "Account id (BigInt as string)" }
+
+  responses:
+    Unauthorized:
+      description: Missing / invalid / revoked API key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Account not found in this workspace
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    BadRequest:
+      description: Invalid payload
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PlatformPayload:
+      description: Normalized platform-specific payload
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              platform: { type: string }
+              data: { type: object }
+    PlatformPayloadList:
+      description: List of normalized platform-specific payloads
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              platform: { type: string }
+              data:
+                type: array
+                items: { type: object }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        message: { type: string }
+        error: { type: string }
+        statusCode: { type: integer }
+
+    AccountSummary:
+      type: object
+      properties:
+        id: { type: string }
+        platform: { type: string, enum: [instagram, facebook, tiktok, threads, youtube, twitch] }
+        canonical_user_id: { type: string }
+        handle: { type: string, nullable: true }
+        display_name: { type: string, nullable: true }
+        status: { type: string }
+        end_user_id: { type: string, nullable: true }
+        connected_at: { type: string, format: date-time }
+        disconnected_at: { type: string, format: date-time, nullable: true }
+
+    Identity:
+      type: object
+      description: Normalized profile shape used across every platform.
+      properties:
+        platform: { type: string }
+        platform_user_id: { type: string }
+        username: { type: string, nullable: true }
+        full_name: { type: string, nullable: true }
+        biography: { type: string, nullable: true }
+        profile_image_url: { type: string, nullable: true }
+        profile_url: { type: string, nullable: true }
+        followers_count: { type: integer, nullable: true }
+        following_count: { type: integer, nullable: true }
+        posts_count: { type: integer, nullable: true }
+        is_verified: { type: boolean, nullable: true }
+        account_type: { type: string, nullable: true }
+        extra:
+          type: object
+          nullable: true
+          description: |
+            Platform-specific fields not represented in the cross-platform
+            core (e.g. Twitch `subscribersByTier`, YouTube `topicCategories`).
+        fetched_at: { type: string, format: date-time }
+
+    WebhookEndpoint:
+      type: object
+      properties:
+        id: { type: string }
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items: { type: string }
+        active: { type: boolean }
+        description: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }

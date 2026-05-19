@@ -3,6 +3,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import { useEffect } from 'react';
 
 export default function SuccessPage() {
   const router = useRouter();
@@ -18,6 +19,34 @@ export default function SuccessPage() {
       summary = null;
     }
   }
+
+  // SDK widget integration. When the page is loaded inside a popup opened
+  // by CamaleonicConnect.init(), notify the opener and close the popup so
+  // the client app can resume its flow without manual interaction.
+  const openerOrigin =
+    (router.query.opener_origin as string | undefined) ?? '';
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const opener = window.opener;
+    if (!opener || opener === window) return;
+    if (accounts.length === 0) return;
+    try {
+      opener.postMessage(
+        {
+          type: 'camaleonic.connect.success',
+          accountIds: accounts,
+          platform,
+        },
+        openerOrigin && openerOrigin.length > 0 ? openerOrigin : '*',
+      );
+    } catch {
+      // postMessage to a cross-origin opener may throw if the origin
+      // policy disallowed it — that's the opener's problem, not ours.
+    }
+    // Give the parent a tick to bind the listener before we close.
+    const timer = window.setTimeout(() => window.close(), 250);
+    return () => window.clearTimeout(timer);
+  }, [accounts, openerOrigin, platform]);
 
   const adminUrl =
     process.env.NEXT_PUBLIC_POC_ADMIN_URL ?? 'http://localhost:3001/admin';

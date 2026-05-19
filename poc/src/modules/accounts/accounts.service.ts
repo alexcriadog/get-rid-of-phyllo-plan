@@ -1,13 +1,16 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import axios from 'axios';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
+import { OutboundWebhooksService } from '@modules/outbound-webhooks/outbound-webhooks.service';
 
 const META_GRAPH = 'https://graph.facebook.com/v22.0';
 const NORMALIZE_TIMEOUT_MS = 15_000;
@@ -114,6 +117,12 @@ export class AccountsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
+    // Optional: when AccountsModule is imported into a process that doesn't
+    // wire OutboundWebhooks (e.g. the worker), seeding still succeeds —
+    // emit is just a no-op.
+    @Optional()
+    @Inject(OutboundWebhooksService)
+    private readonly outboundWebhooks: OutboundWebhooksService | null = null,
   ) {}
 
   async seedAccount(input: SeedAccountInput): Promise<SeedAccountResult> {
@@ -292,6 +301,23 @@ export class AccountsService {
       this.logger.log(
         `Seeded account ${account.id} (${input.platform}) with ${jobIds.length} sync_jobs`,
       );
+
+      // Fire the account.connected webhook after the transaction commits.
+      // We do it inside the transaction callback so the account row is
+      // guaranteed visible by the time we hand off to the dispatcher, but
+      // we don't await: emit() is best-effort and must not roll back the
+      // tx if it fails.
+      if (this.outboundWebhooks) {
+        void this.outboundWebhooks.emit(workspaceId, 'account.connected', {
+          account_id: account.id.toString(),
+          platform: input.platform,
+          workspace_id: workspaceId,
+          end_user_id: input.endUserId ?? null,
+          canonical_user_id: input.canonicalUserId,
+          handle: input.handle ?? null,
+          occurred_at: now.toISOString(),
+        });
+      }
 
       return {
         account_id: account.id.toString(),

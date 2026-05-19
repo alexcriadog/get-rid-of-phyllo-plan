@@ -6,13 +6,21 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
-import { dropSession, getFbSession } from '../../lib/session';
+import {
+  dropSession,
+  getFbSession,
+  getOAuthContextSession,
+} from '../../lib/session';
 import {
   buildFacebookSeeds,
   type PlatformKey,
 } from '../../lib/platforms';
 import { postToPocSeed } from '../../lib/seed-client';
 import { defaultSelectedProducts } from '../../lib/products';
+import {
+  getContextCookie,
+  setContextCookie,
+} from '../../lib/oauth-context';
 
 const Body = z
   .object({
@@ -61,6 +69,15 @@ export default async function handler(
     ? parsed.data.productsIg
     : defaultSelectedProducts('instagram');
 
+  // SDK-launched popup carries tenant context in a cookie.
+  const contextSessionId = getContextCookie(req);
+  const context = contextSessionId
+    ? getOAuthContextSession(contextSessionId)
+    : null;
+  const tenantFields = context
+    ? { workspace_id: context.workspaceId, end_user_id: context.endUserId }
+    : {};
+
   const results: PerPageResult[] = [];
   for (const pageId of parsed.data.pageIds) {
     const page = session.pages.find((p) => p.id === pageId);
@@ -82,6 +99,7 @@ export default async function handler(
           ...(seed.metadata ?? {}),
           products: seed.platform === 'instagram' ? productsIg : productsFb,
         },
+        ...tenantFields,
       }),
     );
 
@@ -110,6 +128,13 @@ export default async function handler(
 
   // Drop the session so the user_token doesn't linger in memory.
   dropSession(parsed.data.sessionId);
+  if (contextSessionId) {
+    dropSession(contextSessionId);
+    setContextCookie(res, null);
+  }
 
-  res.status(200).json({ results });
+  res.status(200).json({
+    results,
+    opener_origin: context?.openerOrigin ?? null,
+  });
 }

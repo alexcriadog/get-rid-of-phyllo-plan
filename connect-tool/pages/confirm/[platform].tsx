@@ -116,6 +116,11 @@ export default function ConfirmPage({
           sync_jobs_created: (json.sync_jobs_created ?? []).length,
         }),
       });
+      // Propagate the verified opener origin so /success can lock down
+      // the postMessage targetOrigin to the SDK caller's domain.
+      if (typeof json.opener_origin === 'string' && json.opener_origin.length > 0) {
+        params.set('opener_origin', json.opener_origin);
+      }
       router.push(`/success?${params.toString()}`);
     } catch (e) {
       setErr((e as Error).message);

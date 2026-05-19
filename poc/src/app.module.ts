@@ -14,6 +14,7 @@ import { WebhooksModule } from '@modules/webhooks/webhooks.module';
 import { WorkspacesModule } from '@modules/workspaces/workspaces.module';
 import { ApiKeysModule } from '@modules/api-keys/api-keys.module';
 import { SdkTokensModule } from '@modules/sdk-tokens/sdk-tokens.module';
+import { OutboundWebhooksModule } from '@modules/outbound-webhooks/outbound-webhooks.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { SdkTokensModule } from '@modules/sdk-tokens/sdk-tokens.module';
     WorkspacesModule,
     ApiKeysModule,
     SdkTokensModule,
+    OutboundWebhooksModule,
     AccountsModule,
     AdminModule,
     SyncModule,

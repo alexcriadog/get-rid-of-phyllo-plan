@@ -145,7 +145,10 @@ export default function FacebookPagesPicker({
         const txt = await res.text();
         throw new Error(`HTTP ${res.status}: ${txt}`);
       }
-      const json = (await res.json()) as { results: ResultRow[] };
+      const json = (await res.json()) as {
+        results: ResultRow[];
+        opener_origin?: string | null;
+      };
       setDone(true);
       const summary = encodeURIComponent(
         JSON.stringify({
@@ -163,10 +166,14 @@ export default function FacebookPagesPicker({
           ),
         )
         .join(',');
+      const openerOrigin =
+        typeof json.opener_origin === 'string' && json.opener_origin.length > 0
+          ? `&opener_origin=${encodeURIComponent(json.opener_origin)}`
+          : '';
       setTimeout(
         () =>
           router.push(
-            `/success?platform=facebook&accounts=${accounts}&summary=${summary}`,
+            `/success?platform=facebook&accounts=${accounts}&summary=${summary}${openerOrigin}`,
           ),
         1200,
       );

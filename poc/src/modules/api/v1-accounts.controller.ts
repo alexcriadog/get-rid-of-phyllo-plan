@@ -90,22 +90,166 @@ export class V1AccountsController {
     @Req() req: RequestWithWorkspace,
     @Param('id') rawId: string,
   ): Promise<NormalizedIdentity> {
+    const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+    const profile = await adapter.fetchProfile(token, account.canonicalUserId, metadata);
+    return toIdentityView(account.platform, account.canonicalUserId, profile);
+  }
+
+  @Get('accounts/:id/audience')
+  async getAudience(
+    @Req() req: RequestWithWorkspace,
+    @Param('id') rawId: string,
+  ): Promise<{ platform: string; data: unknown }> {
+    const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+    const audience = await adapter.fetchAudience(token, account.canonicalUserId, metadata);
+    return { platform: account.platform, data: audience };
+  }
+
+  @Get('accounts/:id/content')
+  async getContent(
+    @Req() req: RequestWithWorkspace,
+    @Param('id') rawId: string,
+    @Query('limit') limitRaw: string | undefined,
+    @Query('since') since: string | undefined,
+  ): Promise<{ platform: string; data: unknown[] }> {
+    const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+    const limit = parseIntParam(limitRaw, 50, 1, 200);
+    const sinceDate = since ? new Date(since) : undefined;
+    if (sinceDate && Number.isNaN(sinceDate.getTime())) {
+      throw new BadRequestException(`Invalid since timestamp: ${since}`);
+    }
+    const items = await adapter.fetchContents(
+      token,
+      account.canonicalUserId,
+      { limit, since: sinceDate },
+      metadata,
+    );
+    return { platform: account.platform, data: items };
+  }
+
+  @Get('accounts/:id/engagement-deep')
+  async getEngagementDeep(
+    @Req() req: RequestWithWorkspace,
+    @Param('id') rawId: string,
+  ): Promise<{ platform: string; data: unknown }> {
+    const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+    if (!adapter.fetchEngagementDeep) {
+      throw new BadRequestException(
+        `engagement-deep not supported for ${account.platform}`,
+      );
+    }
+    const snap = await adapter.fetchEngagementDeep(token, account.canonicalUserId, metadata);
+    return { platform: account.platform, data: snap };
+  }
+
+  @Get('accounts/:id/stories')
+  async getStories(
+    @Req() req: RequestWithWorkspace,
+    @Param('id') rawId: string,
+  ): Promise<{ platform: string; data: unknown[] }> {
+    const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+    if (!adapter.fetchStories) {
+      throw new BadRequestException(
+        `stories not supported for ${account.platform}`,
+      );
+    }
+    const stories = await adapter.fetchStories(token, account.canonicalUserId, metadata);
+    return { platform: account.platform, data: stories };
+  }
+
+  @Get('accounts/:id/mentions')
+  async getMentions(
+    @Req() req: RequestWithWorkspace,
+    @Param('id') rawId: string,
+    @Query('limit') limitRaw: string | undefined,
+  ): Promise<{ platform: string; data: unknown[] }> {
+    const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+    if (!adapter.fetchMentions) {
+      throw new BadRequestException(
+        `mentions not supported for ${account.platform}`,
+      );
+    }
+    const limit = parseIntParam(limitRaw, 50, 1, 200);
+    const items = await adapter.fetchMentions(
+      token,
+      account.canonicalUserId,
+      { limit },
+      metadata,
+    );
+    return { platform: account.platform, data: items };
+  }
+
+  @Get('accounts/:id/comments')
+  async getComments(
+    @Req() req: RequestWithWorkspace,
+    @Param('id') rawId: string,
+    @Query('limit') limitRaw: string | undefined,
+  ): Promise<{ platform: string; data: unknown[] }> {
+    const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+    if (!adapter.fetchComments) {
+      throw new BadRequestException(
+        `comments not supported for ${account.platform}`,
+      );
+    }
+    const limit = parseIntParam(limitRaw, 50, 1, 200);
+    const items = await adapter.fetchComments(
+      token,
+      account.canonicalUserId,
+      { limit },
+      metadata,
+    );
+    return { platform: account.platform, data: items };
+  }
+
+  @Get('accounts/:id/ads')
+  async getAds(
+    @Req() req: RequestWithWorkspace,
+    @Param('id') rawId: string,
+  ): Promise<{ platform: string; data: unknown }> {
+    const { adapter, account, token, metadata } = await this.resolve(req, rawId, 'ads');
+    if (!adapter.fetchAds) {
+      throw new BadRequestException(
+        `ads not supported for ${account.platform}`,
+      );
+    }
+    const snap = await adapter.fetchAds(token, account.canonicalUserId, metadata);
+    return { platform: account.platform, data: snap };
+  }
+
+  /**
+   * Shared lookup for every account-scoped endpoint. Enforces the workspace
+   * boundary, resolves the platform adapter, decrypts the right token
+   * (page vs user — only the ads endpoint asks for the user token), and
+   * surfaces the platform-extension metadata bag.
+   */
+  private async resolve(
+    req: RequestWithWorkspace,
+    rawId: string,
+    tokenAudience: 'page' | 'ads' = 'page',
+  ): Promise<{
+    workspaceId: string;
+    account: { id: bigint; platform: string; canonicalUserId: string; metadata: unknown };
+    adapter: NonNullable<AdapterRegistry[string]>;
+    token: string;
+    metadata: Record<string, unknown> | undefined;
+  }> {
     const workspaceId = this.requireWorkspace(req);
     const id = parseBigInt(rawId);
     const account = await this.prisma.account.findUnique({ where: { id } });
     if (!account || account.workspaceId !== workspaceId) {
       throw new NotFoundException(`Account ${rawId} not found`);
     }
-
     const adapter = this.adapters[account.platform];
     if (!adapter) {
       throw new BadRequestException(`Unsupported platform: ${account.platform}`);
     }
-
-    const { token } = await this.accounts.getDecryptedAccessToken(account.id, 'page');
-    const metadata = (account.metadata as Record<string, unknown> | null) ?? undefined;
-    const profile = await adapter.fetchProfile(token, account.canonicalUserId, metadata);
-    return toIdentityView(account.platform, account.canonicalUserId, profile);
+    const { token } = await this.accounts.getDecryptedAccessToken(
+      account.id,
+      tokenAudience,
+    );
+    const metadata =
+      (account.metadata as Record<string, unknown> | null) ?? undefined;
+    return { workspaceId, account, adapter, token, metadata };
   }
 
   private requireWorkspace(req: RequestWithWorkspace): string {

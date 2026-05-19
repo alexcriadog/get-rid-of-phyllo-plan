@@ -4,9 +4,17 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
-import { dropSession, getSimpleSession } from '../../lib/session';
+import {
+  dropSession,
+  getOAuthContextSession,
+  getSimpleSession,
+} from '../../lib/session';
 import { postToPocSeed } from '../../lib/seed-client';
 import { requiredProducts } from '../../lib/products';
+import {
+  getContextCookie,
+  setContextCookie,
+} from '../../lib/oauth-context';
 
 const Body = z
   .object({
@@ -43,23 +51,42 @@ export default async function handler(
     new Set([...required, ...parsed.data.productIds]),
   );
 
+  // SDK-launched popup: thread the verified workspace + end-user from the
+  // OAuth context cookie into the seed body so the backend scopes the
+  // account to the right tenant. Absent → legacy flow (demo workspace).
+  const contextSessionId = getContextCookie(req);
+  const context = contextSessionId
+    ? getOAuthContextSession(contextSessionId)
+    : null;
+
   const seedBody = {
     ...session.seedBody,
     metadata: {
       ...(session.seedBody.metadata ?? {}),
       products,
     },
+    ...(context
+      ? {
+          workspace_id: context.workspaceId,
+          end_user_id: context.endUserId,
+        }
+      : {}),
   };
 
   try {
     const seeded = await postToPocSeed(seedBody);
     dropSession(parsed.data.sessionId);
+    if (contextSessionId) {
+      dropSession(contextSessionId);
+      setContextCookie(res, null);
+    }
     res.status(200).json({
       account_id: seeded.account_id,
       sync_jobs_created: seeded.sync_jobs_created,
       products,
       platform: session.platform,
       preview: session.preview,
+      opener_origin: context?.openerOrigin ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

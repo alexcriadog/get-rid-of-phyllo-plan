@@ -13,6 +13,11 @@ import {
   type PlatformKey,
 } from '../../../lib/platforms';
 import { publicBaseUrl } from '../../../lib/seed-client';
+import { putSession } from '../../../lib/session';
+import {
+  setContextCookie,
+  verifySdkToken,
+} from '../../../lib/oauth-context';
 
 const VALID_PLATFORMS = new Set<PlatformKey>([
   'facebook',
@@ -76,6 +81,49 @@ export default async function handler(
   const redirectUri = redirectUriFor(platform, baseUrl);
 
   if (action === 'start') {
+    // SDK launch flow: the popup arrives with ?ws=<slug>&token=<jwt>.
+    // Verify against the POC backend, persist the tenant + end-user
+    // context under a fresh session id, and drop a HttpOnly cookie that
+    // survives the OAuth round-trip. seed-confirm / seed-pages pick it
+    // up later to scope the account to the right workspace.
+    //
+    // Absent ?ws/?token → legacy single-tenant flow: nothing changes,
+    // the seed POST omits workspace_id and the backend falls back to the
+    // "demo" workspace.
+    const ws = typeof req.query.ws === 'string' ? req.query.ws : null;
+    const token = typeof req.query.token === 'string' ? req.query.token : null;
+    if (ws && token) {
+      try {
+        const claims = await verifySdkToken(token);
+        if (claims.ws !== ws) {
+          throw new Error(
+            `SDK token workspace mismatch (token=${claims.ws}, query=${ws})`,
+          );
+        }
+        if (claims.platforms && !claims.platforms.includes(platform)) {
+          throw new Error(
+            `Platform ${platform} not allowed by SDK token (allowed=${claims.platforms.join(',')})`,
+          );
+        }
+        const origin = typeof req.query.origin === 'string'
+          ? req.query.origin
+          : undefined;
+        const contextSessionId = putSession({
+          kind: 'oauth-context',
+          workspaceId: claims.ws,
+          workspaceSlug: ws,
+          endUserId: claims.sub,
+          allowedPlatforms: claims.platforms,
+          openerOrigin: origin,
+        });
+        setContextCookie(res, contextSessionId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.redirect(302, `/?error=${encodeURIComponent(message)}`);
+        return;
+      }
+    }
+
     try {
       const url = PLATFORMS[platform].buildAuthorizeUrl(redirectUri);
       res.redirect(302, url);
