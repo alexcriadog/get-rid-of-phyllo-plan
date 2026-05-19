@@ -251,6 +251,39 @@ export class AdminSaasController {
     });
   }
 
+  @Get('api-keys')
+  async listAllApiKeys(): Promise<{
+    data: Array<{
+      id: string;
+      workspace_slug: string;
+      workspace_name: string;
+      key_prefix: string;
+      scope: string;
+      label: string | null;
+      last_used_at: string | null;
+      revoked_at: string | null;
+      created_at: string;
+    }>;
+  }> {
+    const rows = await this.prisma.apiKey.findMany({
+      orderBy: [{ revokedAt: 'asc' }, { lastUsedAt: 'desc' }],
+      include: { workspace: { select: { slug: true, name: true } } },
+    });
+    return {
+      data: rows.map((r) => ({
+        id: r.id,
+        workspace_slug: r.workspace.slug,
+        workspace_name: r.workspace.name,
+        key_prefix: r.keyPrefix,
+        scope: r.scope,
+        label: r.label,
+        last_used_at: r.lastUsedAt ? r.lastUsedAt.toISOString() : null,
+        revoked_at: r.revokedAt ? r.revokedAt.toISOString() : null,
+        created_at: r.createdAt.toISOString(),
+      })),
+    };
+  }
+
   @Post('api-keys/:id/revoke')
   @HttpCode(200)
   async revokeApiKey(@Param('id') id: string): Promise<{ revoked: boolean }> {
