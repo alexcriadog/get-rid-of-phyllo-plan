@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
+import { useWorkspaceFilter } from '../../lib/workspace-context';
 import { fmtTime } from '../../lib/format';
 import { LineChart, HBarChart, STATUS_COLORS, seriesColor } from '../../components/charts';
 import { Section } from '@/components/admin/section';
@@ -32,7 +33,11 @@ const ACCOUNT_ALL = 'all';
 const ROW_GRID = 'grid-cols-[64px_200px_80px_minmax(0,1fr)]';
 
 export default function EventsPage() {
-  const { data } = useLive<EventRow[]>('/admin/events?limit=300', 4000);
+  const { withQuery } = useWorkspaceFilter();
+  const { data } = useLive<EventRow[]>(
+    withQuery('/admin/events?limit=300'),
+    4000,
+  );
 
   const [typeFilter, setTypeFilter] = useState('all');
   const [accountFilter, setAccountFilter] = useState(ACCOUNT_ALL);

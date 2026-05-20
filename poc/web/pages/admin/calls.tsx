@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
+import { useWorkspaceFilter } from '../../lib/workspace-context';
 import { fmtMs, fmtTime } from '../../lib/format';
 import {
   LineChart,
@@ -39,7 +40,11 @@ const STATUS_FILTERS = ['all', '2xx', '4xx', '5xx', '0'];
 const ROW_GRID = 'grid-cols-[64px_84px_56px_minmax(0,1fr)_140px_64px]';
 
 export default function CallsPage() {
-  const { data } = useLive<ApiCall[]>('/admin/api-calls?limit=500', 3000);
+  const { withQuery } = useWorkspaceFilter();
+  const { data } = useLive<ApiCall[]>(
+    withQuery('/admin/api-calls?limit=500'),
+    3000,
+  );
 
   const [platform, setPlatform] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
+import GlobalScopeBadge from '../../components/GlobalScopeBadge';
 import { useLive } from '../../lib/useLive';
 import { Section } from '@/components/admin/section';
 import { KpiCard } from '@/components/admin/kpi-card';
@@ -39,6 +40,7 @@ export default function SupportMatrixPage() {
 
   return (
     <AdminLayout title="Support matrix">
+      <GlobalScopeBadge reason="The support matrix describes platform-level capabilities (which products each adapter implements). It's identical for every workspace." />
       {error && !data && (
         <div className="mb-5 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
           {error}

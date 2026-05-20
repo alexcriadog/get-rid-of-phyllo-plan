@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Activity, AlertCircle, AlertTriangle, CheckCircle2, Inbox, Users } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
+import { useWorkspaceFilter } from '../../lib/workspace-context';
 import { fmtMs, fmtTime, fmtRelative } from '../../lib/format';
 import {
   LineChart,
@@ -95,10 +96,14 @@ const WINDOW_MIN = 60;
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function AdminOverview() {
-  const overviewLive = useLive<Overview>('/admin/overview', 3000);
-  const bucketsLive = useLive<Bucket[]>('/admin/rate-buckets', 3000);
-  const accountsLive = useLive<AdminAccount[]>('/admin/accounts', 5000);
-  const callsLive = useLive<ApiCall[]>('/admin/api-calls?limit=500', 3000);
+  const { withQuery } = useWorkspaceFilter();
+  const overviewLive = useLive<Overview>(withQuery('/admin/overview'), 3000);
+  const bucketsLive = useLive<Bucket[]>(withQuery('/admin/rate-buckets'), 3000);
+  const accountsLive = useLive<AdminAccount[]>(withQuery('/admin/accounts'), 5000);
+  const callsLive = useLive<ApiCall[]>(
+    withQuery('/admin/api-calls?limit=500'),
+    3000,
+  );
 
   const allCalls = callsLive.data ?? [];
   const overview = overviewLive.data;

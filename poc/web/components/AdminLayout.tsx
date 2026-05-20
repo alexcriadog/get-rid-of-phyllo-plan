@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import WorkspaceSelect from './WorkspaceSelect';
 import {
   Tooltip,
   TooltipContent,
@@ -128,6 +129,7 @@ export default function AdminLayout({ title, children, actions }: Props) {
               <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
               <div className="ml-auto flex items-center gap-2">
                 {actions}
+                <WorkspaceSelect />
                 <SystemHealthBadge health={health.data} apiDown={apiDown} />
               </div>
             </header>

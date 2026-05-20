@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
+import { useWorkspaceFilter } from '../../lib/workspace-context';
 import { adminPost, CONNECTOR_API_URL } from '../../lib/api';
 import { fmtRelative, fmtTime } from '../../lib/format';
 import { Timeline, STATUS_COLORS } from '../../components/charts';
@@ -471,8 +472,9 @@ export default function NextRunsPage() {
   const horizonHours = TAB_HOURS[tab] ?? 24;
   const [runNowJob, setRunNowJob] = useState<NextRun | null>(null);
 
+  const { withQuery } = useWorkspaceFilter();
   const { data, error, refresh } = useLive<NextRun[]>(
-    `/admin/next-runs?horizon_hours=${horizonHours}`,
+    withQuery(`/admin/next-runs?horizon_hours=${horizonHours}`),
     8000,
   );
 

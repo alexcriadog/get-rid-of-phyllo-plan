@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
+import { useWorkspaceFilter } from '../../lib/workspace-context';
 import { CONNECTOR_API_URL } from '../../lib/api';
 import { fmtTime, fmtNumber } from '../../lib/format';
 import { Section } from '@/components/admin/section';
@@ -33,7 +34,11 @@ type RawDetail = RawResponse & {
 };
 
 export default function RawResponsesPage() {
-  const { data, error } = useLive<RawResponse[]>('/admin/raw-responses?limit=200', 5000);
+  const { withQuery } = useWorkspaceFilter();
+  const { data, error } = useLive<RawResponse[]>(
+    withQuery('/admin/raw-responses?limit=200'),
+    5000,
+  );
 
   const [search, setSearch] = useState('');
   const [platform, setPlatform] = useState('all');

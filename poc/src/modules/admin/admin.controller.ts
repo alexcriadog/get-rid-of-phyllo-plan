@@ -92,6 +92,9 @@ const ConnectSeedSchema = z
     // the account is assigned to the "demo" workspace (legacy single-tenant
     // behaviour) — required only once the JWT cutover lands in Phase 4.
     workspace_id: z.string().min(1).max(64).optional(),
+    // Alternative to workspace_id — accepted from the admin panel's topbar
+    // selector. Resolved to an id server-side.
+    workspace_slug: z.string().min(1).max(64).optional(),
     end_user_id: z.string().min(1).max(256).optional(),
     /** Sandbox flag — accounts seeded with is_test=true don't fire webhooks. */
     is_test: z.boolean().optional(),
@@ -118,8 +121,10 @@ export class AdminController {
   // ─── Overview + health ─────────────────────────────────────────────────
 
   @Get('overview')
-  async overview(): Promise<unknown> {
-    return this.admin.overview();
+  async overview(
+    @Query('workspace') workspace: string | undefined,
+  ): Promise<unknown> {
+    return this.admin.overview(workspace);
   }
 
   @Get('healthz')
@@ -245,17 +250,21 @@ export class AdminController {
   @Get('next-runs')
   async nextRuns(
     @Query('horizon_hours') horizonHours: string | undefined,
+    @Query('workspace') workspace: string | undefined,
   ): Promise<unknown> {
     return this.admin.nextRuns(
       this.parseIntParam(horizonHours, DEFAULT_HORIZON_HOURS, 1, 24 * 7),
+      workspace,
     );
   }
 
   // ─── Accounts ──────────────────────────────────────────────────────────
 
   @Get('accounts')
-  async listAccounts(): Promise<unknown> {
-    return this.admin.listAccountsDetailed();
+  async listAccounts(
+    @Query('workspace') workspace: string | undefined,
+  ): Promise<unknown> {
+    return this.admin.listAccountsDetailed(workspace);
   }
 
   @Get('accounts/:id')
@@ -383,12 +392,14 @@ export class AdminController {
     @Query('status') status: string | undefined,
     @Query('account_id') accountId: string | undefined,
     @Query('limit') limit: string | undefined,
+    @Query('workspace') workspace: string | undefined,
   ): Promise<unknown> {
     return this.admin.listApiCalls({
       platform: platform ?? undefined,
       statusClass: status ?? undefined,
       accountId: accountId ? this.parseBigInt(accountId) : undefined,
       limit: this.parseIntParam(limit, 100, 1, 500),
+      workspaceSlug: workspace,
     });
   }
 
@@ -419,11 +430,13 @@ export class AdminController {
     @Query('limit') limit: string | undefined,
     @Query('event_type') eventType: string | undefined,
     @Query('account_id') accountId: string | undefined,
+    @Query('workspace') workspace: string | undefined,
   ): Promise<unknown> {
     return this.admin.listEvents({
       eventType: eventType ?? undefined,
       accountId: accountId ?? undefined,
       limit: this.parseIntParam(limit, 100, 1, 500),
+      workspaceSlug: workspace,
     });
   }
 
@@ -433,10 +446,12 @@ export class AdminController {
   async listRawResponses(
     @Query('account_id') accountId: string | undefined,
     @Query('limit') limit: string | undefined,
+    @Query('workspace') workspace: string | undefined,
   ): Promise<unknown> {
     return this.admin.listRawResponses(
       accountId ?? null,
       this.parseIntParam(limit, 50, 1, 200),
+      workspace,
     );
   }
 
@@ -495,6 +510,7 @@ export class AdminController {
       handle: parsed.data.handle,
       metadata: parsed.data.metadata,
       workspaceId: parsed.data.workspace_id,
+      workspaceSlug: parsed.data.workspace_slug,
       endUserId: parsed.data.end_user_id,
       isTest: parsed.data.is_test,
     });

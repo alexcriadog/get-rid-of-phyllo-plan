@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import AdminLayout from '../../components/AdminLayout';
+import GlobalScopeBadge from '../../components/GlobalScopeBadge';
 import { useLive } from '../../lib/useLive';
 import { adminPatch } from '../../lib/api';
 import { fmtRelative } from '../../lib/format';
@@ -104,6 +105,7 @@ export default function CadencePage() {
 
   return (
     <AdminLayout title="Cadence">
+      <GlobalScopeBadge reason="Default cadences are defined per (platform × product) and apply to every workspace. Per-account overrides are visible at the bottom regardless of the topbar selection." />
       {err && (
         <div className="mb-5 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
           {err}

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
 import { adminPost } from '../../lib/api';
+import { useWorkspaceFilter } from '../../lib/workspace-context';
 import { fmtNumber } from '../../lib/format';
 import { Section } from '@/components/admin/section';
 import { Empty } from '@/components/admin/empty';
@@ -92,11 +93,13 @@ type SeedBody = {
   canonical_user_id: string;
   handle?: string;
   metadata?: Record<string, unknown>;
+  workspace_slug?: string;
 };
 
 type DiscoverPlatform = 'facebook' | 'tiktok' | 'threads';
 
 export default function ConnectPage() {
+  const { slug: wsSlug } = useWorkspaceFilter();
   const [platform, setPlatform] = useState<DiscoverPlatform>('facebook');
   const [token, setToken] = useState('');
   const [openId, setOpenId] = useState('');
@@ -140,7 +143,15 @@ export default function ConnectPage() {
   const connect = async (key: ConnectKey, body: SeedBody) => {
     setBusy(key);
     try {
-      const res = await adminPost<SeedResponse>('/admin/connect/seed', body);
+      // Attach the workspace selected in the topbar so the new account
+      // lands in the right tenant. Backend resolves slug → id.
+      const enrichedBody: SeedBody = wsSlug
+        ? { ...body, workspace_slug: wsSlug }
+        : body;
+      const res = await adminPost<SeedResponse>(
+        '/admin/connect/seed',
+        enrichedBody,
+      );
       setResults((prev) => ({ ...prev, [key]: res }));
     } catch (e) {
       setResults((prev) => ({ ...prev, [key]: (e as Error).message }));
@@ -154,6 +165,36 @@ export default function ConnectPage() {
 
   return (
     <AdminLayout title="Connect new accounts">
+      {wsSlug ? (
+        <div
+          role="note"
+          className="mb-4 flex items-start gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-[12px] text-foreground"
+        >
+          <span className="font-semibold">Target workspace:</span>
+          <code className="rounded bg-card/60 px-1.5 py-0.5 font-mono text-[11px]">
+            {wsSlug}
+          </code>
+          <span className="text-muted-foreground">
+            — every account seeded here lands in this workspace. Change it
+            from the topbar.
+          </span>
+        </div>
+      ) : (
+        <div
+          role="alert"
+          className="mb-4 flex items-start gap-2 rounded-md border border-warn/50 bg-warn/10 px-3 py-2 text-[12px] text-foreground"
+        >
+          <span className="font-semibold">Pick a workspace</span>
+          <span className="text-muted-foreground">
+            from the topbar before connecting. Without one the seed step is
+            disabled so accounts don't accidentally land in{' '}
+            <code className="rounded bg-card/60 px-1.5 py-0.5 font-mono text-[11px]">
+              demo
+            </code>
+            .
+          </span>
+        </div>
+      )}
       {/* connect-tool CTA — primary path. The paste-token UI below is the
           fallback for emergencies or scripts. */}
       <Section
@@ -257,7 +298,8 @@ export default function ConnectPage() {
             disabled={
               discovering ||
               !token.trim() ||
-              (platform === 'tiktok' && !openId.trim())
+              (platform === 'tiktok' && !openId.trim()) ||
+              !wsSlug
             }
             className="min-w-[140px] sm:self-stretch"
           >

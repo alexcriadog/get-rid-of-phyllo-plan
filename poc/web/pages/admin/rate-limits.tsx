@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
+import GlobalScopeBadge from '../../components/GlobalScopeBadge';
 import { useLive } from '../../lib/useLive';
 import { adminPost } from '../../lib/api';
 import {
@@ -100,6 +101,7 @@ export default function RateLimitsPage() {
 
   return (
     <AdminLayout title="Rate buckets">
+      <GlobalScopeBadge reason="Rate buckets live at the account / app-token level. The topbar workspace filter doesn't apply here — every bucket across every workspace is shown." />
       {err && (
         <div className="mb-5 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
           {err}

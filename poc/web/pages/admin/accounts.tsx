@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { Pause, Play, Plus, RefreshCw } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
+import { useWorkspaceFilter } from '../../lib/workspace-context';
 import { adminPatch, adminPost } from '../../lib/api';
 import { fmtRelative } from '../../lib/format';
 import { Sparkline, STATUS_COLORS } from '../../components/charts';
@@ -40,6 +41,8 @@ type AdminAccount = {
   sync_tier?: string;
   status?: string;
   token_expires_at?: string | null;
+  workspace_slug?: string | null;
+  workspace_name?: string | null;
   products?: ProductHealth[] | Record<string, ProductHealth>;
 };
 
@@ -55,8 +58,15 @@ const STATUSES = ['all', 'ready', 'paused', 'needs_reauth'];
 
 export default function AccountsPage() {
   const router = useRouter();
-  const { data, error, refresh } = useLive<AdminAccount[]>('/admin/accounts', 5000);
-  const callsLive = useLive<ApiCall[]>('/admin/api-calls?limit=500', 5000);
+  const { slug: wsSlug, withQuery } = useWorkspaceFilter();
+  const { data, error, refresh } = useLive<AdminAccount[]>(
+    withQuery('/admin/accounts'),
+    5000,
+  );
+  const callsLive = useLive<ApiCall[]>(
+    withQuery('/admin/api-calls?limit=500'),
+    5000,
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -167,6 +177,7 @@ export default function AccountsPage() {
               account={a}
               recentCalls={callsByAccount.get(String(a.id)) ?? []}
               busyKey={busy}
+              showWorkspace={wsSlug == null}
               onRefresh={() =>
                 // Route through /admin/next-runs?account=<id> so the
                 // operator goes through the 2-step risk-check dialog
@@ -204,6 +215,7 @@ function AccountCard({
   onRefresh,
   onPause,
   onTier,
+  showWorkspace,
 }: {
   account: AdminAccount;
   recentCalls: ApiCall[];
@@ -211,6 +223,7 @@ function AccountCard({
   onRefresh: () => void;
   onPause: () => void;
   onTier: (t: string) => void;
+  showWorkspace: boolean;
 }) {
   const id = String(account.id);
   const products = normalizeProducts(account.products);
@@ -262,6 +275,11 @@ function AccountCard({
           </Link>
           <div className="font-mono text-[10.5px] text-muted-foreground/70">
             {account.platform} · #{id}
+            {showWorkspace && account.workspace_slug && (
+              <span className="ml-2 inline-flex items-center rounded-full border border-border/80 bg-card/60 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-muted-foreground">
+                {account.workspace_slug}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1.5">

@@ -1,6 +1,7 @@
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { WorkspaceProvider } from '../lib/workspace-context';
 import '../styles/globals.css';
 
 export default function App({ Component, pageProps }: AppProps) {
@@ -16,10 +17,12 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="theme-color" content="#0e0e0e" />
       </Head>
       {/* TooltipProvider is required by Radix's <Tooltip>. delayDuration=200
-          gives a snappier hover than the 700ms default — readers don't have
-          to wait an awkward beat for metric descriptions. */}
+          gives a snappier hover than the 700ms default. WorkspaceProvider
+          exposes the topbar filter (slug + withQuery) to every admin page. */}
       <TooltipProvider delayDuration={200}>
-        <Component {...pageProps} />
+        <WorkspaceProvider>
+          <Component {...pageProps} />
+        </WorkspaceProvider>
       </TooltipProvider>
     </>
   );

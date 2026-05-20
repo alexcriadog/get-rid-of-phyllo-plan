@@ -4,6 +4,7 @@ import { ApiModule } from '@modules/api/api.module';
 import { SyncModule } from '@modules/sync/sync.module';
 import { PlatformsModule } from '@modules/platforms/platforms.module';
 import { MetaGraphModule } from '@modules/platforms/shared/meta-graph/meta-graph.module';
+import { WorkspacesModule } from '@modules/workspaces/workspaces.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { FacebookExtrasController } from './facebook-extras.controller';
@@ -26,6 +27,7 @@ import { ConnectToolGuard } from './connect-tool.guard';
     SyncModule,
     PlatformsModule,
     MetaGraphModule,
+    WorkspacesModule,
   ],
   controllers: [
     AdminController,

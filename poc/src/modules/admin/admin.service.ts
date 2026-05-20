@@ -27,6 +27,7 @@ import {
   AdapterRegistry,
 } from '@modules/platforms/platforms.module';
 import { AccountsService, Platform } from '@modules/accounts/accounts.service';
+import { WorkspacesService } from '@modules/workspaces/workspaces.service';
 import { ThreadsTokenRefreshService } from '@modules/platforms/shared/threads-api/threads-token-refresh.service';
 import { BucTelemetryService } from '@modules/platforms/shared/meta-graph/buc-telemetry.service';
 import { ConfigService } from '@nestjs/config';
@@ -116,8 +117,53 @@ export class AdminService {
     private readonly threadsTokenRefresh: ThreadsTokenRefreshService,
     private readonly bucTelemetry: BucTelemetryService,
     private readonly config: ConfigService,
+    private readonly workspaces: WorkspacesService,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
+
+  /**
+   * Resolve a workspace slug (from the admin panel topbar selector) to its
+   * id, or return undefined when no slug was provided. Used by every list
+   * method to compose a Prisma `where` clause: spread the result into the
+   * existing where so legacy callers (no slug) keep their global behaviour.
+   *
+   * Returns the sentinel `'__NO_MATCH__'` for unknown slugs so downstream
+   * queries yield zero rows instead of throwing a 5xx through the UI.
+   */
+  private async resolveWorkspaceId(
+    slug: string | undefined | null,
+  ): Promise<string | undefined> {
+    if (typeof slug !== 'string' || slug.trim() === '') return undefined;
+    try {
+      const ws = await this.workspaces.findBySlug(slug.trim());
+      return ws.id;
+    } catch {
+      return '__NO_MATCH__';
+    }
+  }
+
+  /**
+   * Resolve a slug to the set of accountIds in that workspace. Used by
+   * tables that don't carry workspaceId directly (api_call_log,
+   * event_log Mongo collection, raw_platform_responses) — we pre-fetch
+   * the workspace's accounts and filter the downstream query with
+   * `accountId IN (...)`.
+   *
+   * Returns undefined when no slug was given (no filter to apply); an
+   * array (possibly empty) when a slug was given.
+   */
+  private async accountIdsForWorkspace(
+    slug: string | undefined | null,
+  ): Promise<bigint[] | undefined> {
+    const wsId = await this.resolveWorkspaceId(slug);
+    if (wsId === undefined) return undefined;
+    if (wsId === '__NO_MATCH__') return [];
+    const rows = await this.prisma.account.findMany({
+      where: { workspaceId: wsId },
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
+  }
 
   /**
    * Phase 1 of the rate-limit mirror. Returns the current Meta bucket
@@ -171,24 +217,42 @@ export class AdminService {
   // Overview
   // ──────────────────────────────────────────────────────────────────────────
 
-  async overview(): Promise<Record<string, unknown>> {
+  async overview(
+    workspaceSlug?: string | null,
+  ): Promise<Record<string, unknown>> {
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
+    const wsId = await this.resolveWorkspaceId(workspaceSlug);
+    const accountFilter = wsId ? { workspaceId: wsId } : {};
+    // API call log doesn't carry workspaceId; pre-resolve accountIds when
+    // a workspace filter is active so the count is meaningful.
+    const accountIdsForCallScope =
+      wsId !== undefined
+        ? await this.accountIdsForWorkspace(workspaceSlug)
+        : undefined;
+    const callIdFilter =
+      accountIdsForCallScope === undefined
+        ? {}
+        : { accountId: { in: accountIdsForCallScope } };
+
     const [total, byPlatform, byStatus, syncsLastHour, webhooksLastHour] =
       await Promise.all([
-        this.prisma.account.count(),
+        this.prisma.account.count({ where: accountFilter }),
         this.prisma.account.groupBy({
           by: ['platform'],
+          where: accountFilter,
           _count: { _all: true },
         }),
         this.prisma.account.groupBy({
           by: ['status'],
+          where: accountFilter,
           _count: { _all: true },
         }),
         this.prisma.apiCallLog.count({
-          where: { calledAt: { gte: oneHourAgo } },
+          where: { calledAt: { gte: oneHourAgo }, ...callIdFilter },
         }),
+        // Inbound webhook log has no account/workspace link — stays global.
         this.prisma.inboundWebhookLog.count({
           where: { receivedAt: { gte: oneHourAgo } },
         }),
@@ -203,6 +267,7 @@ export class AdminService {
     const dlqDepth = await this.computeDlqDepth();
 
     const lastCalls = await this.prisma.apiCallLog.findMany({
+      where: callIdFilter,
       orderBy: { calledAt: 'desc' },
       take: 500,
       select: { platform: true, calledAt: true },
@@ -827,18 +892,29 @@ export class AdminService {
   // Next runs timeline
   // ──────────────────────────────────────────────────────────────────────────
 
-  async nextRuns(horizonHours: number): Promise<Record<string, unknown>> {
+  async nextRuns(
+    horizonHours: number,
+    workspaceSlug?: string | null,
+  ): Promise<Record<string, unknown>> {
     const now = new Date();
     const horizonMs = Math.max(1, horizonHours) * 60 * 60 * 1000;
     const until = new Date(now.getTime() + horizonMs);
 
+    const wsId = await this.resolveWorkspaceId(workspaceSlug);
     const rows = await this.prisma.syncJob.findMany({
       where: {
         nextRunAt: { lte: until, not: null },
+        ...(wsId ? { account: { workspaceId: wsId } } : {}),
       },
       include: {
         account: {
-          select: { handle: true, platform: true, syncTier: true, id: true },
+          select: {
+            handle: true,
+            platform: true,
+            syncTier: true,
+            id: true,
+            workspace: { select: { slug: true } },
+          },
         },
       },
       orderBy: { nextRunAt: 'asc' },
@@ -859,6 +935,7 @@ export class AdminService {
           accountId: r.accountId.toString(),
           accountHandle: r.account?.handle ?? null,
           platform: r.account?.platform ?? null,
+          workspace_slug: r.account?.workspace?.slug ?? null,
           product: r.product,
           status: r.status,
           next_run_at: r.nextRunAt?.toISOString() ?? null,
@@ -877,9 +954,13 @@ export class AdminService {
   // Accounts
   // ──────────────────────────────────────────────────────────────────────────
 
-  async listAccountsDetailed(): Promise<Record<string, unknown>> {
+  async listAccountsDetailed(
+    workspaceSlug?: string | null,
+  ): Promise<Record<string, unknown>> {
     const now = new Date();
+    const wsId = await this.resolveWorkspaceId(workspaceSlug);
     const accounts = await this.prisma.account.findMany({
+      where: wsId ? { workspaceId: wsId } : undefined,
       include: {
         tokens: { select: { expiresAt: true } },
         syncJobs: true,
@@ -889,6 +970,7 @@ export class AdminService {
           },
           select: { product: true },
         },
+        workspace: { select: { slug: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -1101,13 +1183,26 @@ export class AdminService {
   // API call log
   // ──────────────────────────────────────────────────────────────────────────
 
-  async listApiCalls(filter: ApiCallFilter): Promise<Record<string, unknown>> {
+  async listApiCalls(
+    filter: ApiCallFilter & { workspaceSlug?: string | null },
+  ): Promise<Record<string, unknown>> {
     const where: Prisma.ApiCallLogWhereInput = {};
     if (filter.platform) where.platform = filter.platform;
     if (filter.accountId !== undefined) where.accountId = filter.accountId;
     if (filter.statusClass) {
       const range = this.statusClassRange(filter.statusClass);
       if (range) where.statusCode = range;
+    }
+
+    // Workspace filter: api_call_log carries accountId but no workspaceId.
+    // Pre-resolve the workspace's account set and add accountId IN (...).
+    // Calls without an accountId (platform-wide app calls) are excluded
+    // when a workspace filter is active — they're not attributable.
+    const scopedAccountIds = await this.accountIdsForWorkspace(
+      filter.workspaceSlug,
+    );
+    if (scopedAccountIds !== undefined) {
+      where.accountId = { in: scopedAccountIds };
     }
 
     const limit = Math.min(Math.max(filter.limit ?? 100, 1), 500);
@@ -1121,33 +1216,47 @@ export class AdminService {
       new Set(rows.map((r) => r.accountId).filter((v): v is bigint => v !== null)),
     );
 
-    const accountMap = new Map<string, string | null>();
+    const accountMap = new Map<
+      string,
+      { handle: string | null; workspaceSlug: string | null }
+    >();
     if (accountIds.length > 0) {
       const accounts = await this.prisma.account.findMany({
         where: { id: { in: accountIds } },
-        select: { id: true, handle: true },
+        select: {
+          id: true,
+          handle: true,
+          workspace: { select: { slug: true } },
+        },
       });
-      for (const a of accounts) accountMap.set(a.id.toString(), a.handle);
+      for (const a of accounts) {
+        accountMap.set(a.id.toString(), {
+          handle: a.handle,
+          workspaceSlug: a.workspace?.slug ?? null,
+        });
+      }
     }
 
     return {
-      items: rows.map((r) => ({
-        platform: r.platform,
-        endpoint: r.endpoint,
-        method: r.method,
-        status_code: r.statusCode,
-        duration_ms: r.durationMs,
-        tokens_before: r.tokensBefore,
-        tokens_after: r.tokensAfter,
-        usage_header: r.usageHeader,
-        account_id: r.accountId?.toString() ?? null,
-        account_handle: r.accountId
-          ? accountMap.get(r.accountId.toString()) ?? null
-          : null,
-        product: r.product ?? null,
-        expected: r.expected ?? false,
-        called_at: r.calledAt.toISOString(),
-      })),
+      items: rows.map((r) => {
+        const acc = r.accountId ? accountMap.get(r.accountId.toString()) : null;
+        return {
+          platform: r.platform,
+          endpoint: r.endpoint,
+          method: r.method,
+          status_code: r.statusCode,
+          duration_ms: r.durationMs,
+          tokens_before: r.tokensBefore,
+          tokens_after: r.tokensAfter,
+          usage_header: r.usageHeader,
+          account_id: r.accountId?.toString() ?? null,
+          account_handle: acc?.handle ?? null,
+          workspace_slug: acc?.workspaceSlug ?? null,
+          product: r.product ?? null,
+          expected: r.expected ?? false,
+          called_at: r.calledAt.toISOString(),
+        };
+      }),
     };
   }
 
@@ -1308,11 +1417,21 @@ export class AdminService {
   // Events (Mongo)
   // ──────────────────────────────────────────────────────────────────────────
 
-  async listEvents(filter: EventFilter): Promise<Record<string, unknown>> {
+  async listEvents(
+    filter: EventFilter & { workspaceSlug?: string | null },
+  ): Promise<Record<string, unknown>> {
     const col = this.mongo.getCollection('event_log');
     const query: Record<string, unknown> = {};
     if (filter.eventType) query.event_type = filter.eventType;
     if (filter.accountId) query.account_id = filter.accountId;
+
+    const scopedAccountIds = await this.accountIdsForWorkspace(
+      filter.workspaceSlug,
+    );
+    if (scopedAccountIds !== undefined) {
+      // event_log stores account_id as string; convert from bigint.
+      query.account_id = { $in: scopedAccountIds.map((id) => id.toString()) };
+    }
 
     const limit = Math.min(Math.max(filter.limit ?? 100, 1), 500);
     const rows = await col
@@ -1333,10 +1452,16 @@ export class AdminService {
   async listRawResponses(
     accountId: string | null,
     limit: number,
+    workspaceSlug?: string | null,
   ): Promise<Record<string, unknown>> {
     const col = this.mongo.getCollection('raw_platform_responses');
     const query: Record<string, unknown> = {};
     if (accountId) query.accountId = accountId;
+
+    const scopedAccountIds = await this.accountIdsForWorkspace(workspaceSlug);
+    if (scopedAccountIds !== undefined) {
+      query.accountId = { $in: scopedAccountIds.map((id) => id.toString()) };
+    }
 
     const safeLimit = Math.min(Math.max(limit, 1), 200);
     const rows = await col
@@ -1464,6 +1589,7 @@ export class AdminService {
         failureCount: number;
       }>;
       overrides: ReadonlyArray<{ product: string }>;
+      workspace?: { slug: string; name: string } | null;
     },
     now: Date,
   ): Promise<Record<string, unknown>> {
@@ -1483,6 +1609,8 @@ export class AdminService {
       sync_tier: account.syncTier,
       connected_at: account.connectedAt.toISOString(),
       token_expires_at: account.tokens[0]?.expiresAt?.toISOString() ?? null,
+      workspace_slug: account.workspace?.slug ?? null,
+      workspace_name: account.workspace?.name ?? null,
       products: account.syncJobs.map((j) => {
         const baseCadence = cadenceMap.get(j.product) ?? 86_400;
         const freshness = this.freshness(
@@ -2253,11 +2381,27 @@ export class AdminService {
     handle?: string;
     metadata?: Record<string, unknown>;
     workspaceId?: string;
+    workspaceSlug?: string;
     endUserId?: string;
     isTest?: boolean;
   }): Promise<{ account_id: string; sync_jobs_created: string[] }> {
     let accessToken = input.accessToken;
     let expiresAt = input.expiresAt;
+
+    // Accept either an id (legacy path, used by connect-tool with the JWT
+    // `ws` claim) or a slug (admin panel topbar selector). Slug wins when
+    // both are present to keep the operator UI authoritative.
+    let resolvedWorkspaceId = input.workspaceId;
+    if (input.workspaceSlug) {
+      try {
+        const ws = await this.workspaces.findBySlug(input.workspaceSlug);
+        resolvedWorkspaceId = ws.id;
+      } catch {
+        throw new BadRequestException(
+          `Unknown workspace slug: ${input.workspaceSlug}`,
+        );
+      }
+    }
 
     // Threads: trade a short-lived (1h) token for a long-lived one (60d).
     // Idempotent — if the token is already long-lived Meta returns it
@@ -2294,7 +2438,7 @@ export class AdminService {
       canonicalUserId: input.canonicalUserId,
       handle: input.handle,
       metadata: input.metadata,
-      workspaceId: input.workspaceId,
+      workspaceId: resolvedWorkspaceId,
       endUserId: input.endUserId,
       isTest: input.isTest,
     });
