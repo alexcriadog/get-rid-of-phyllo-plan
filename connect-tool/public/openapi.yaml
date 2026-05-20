@@ -444,6 +444,46 @@ paths:
         '204':
           description: Removed (idempotent — also returns 204 if the id never existed in this workspace).
 
+  /v1/webhook-deliveries:
+    get:
+      tags: [Webhooks]
+      summary: Inspect recent deliveries (audit log)
+      description: |
+        Returns the most-recent deliveries dispatched for this workspace,
+        across every endpoint. Filterable by `status`, `endpoint_id`, and
+        `event`. Useful for debugging signature verification or seeing why
+        an endpoint is being marked `failed`.
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, delivered, failed, abandoned]
+        - in: query
+          name: endpoint_id
+          schema: { type: string }
+        - in: query
+          name: event
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/WebhookDelivery' }
+                  meta:
+                    type: object
+                    properties:
+                      count: { type: integer }
+
 components:
   securitySchemes:
     bearerApiKey:
@@ -610,3 +650,20 @@ components:
         active: { type: boolean }
         description: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id: { type: string }
+        endpoint_id: { type: string }
+        endpoint_url: { type: string, format: uri }
+        event: { type: string }
+        attempts: { type: integer }
+        status:
+          type: string
+          enum: [pending, delivered, failed, abandoned]
+        last_response_code: { type: integer, nullable: true }
+        last_error: { type: string, nullable: true }
+        next_retry_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        delivered_at: { type: string, format: date-time, nullable: true }

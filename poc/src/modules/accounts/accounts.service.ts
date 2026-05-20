@@ -508,7 +508,15 @@ export class AccountsService {
   ): Promise<{ id: string; status: string; disconnected_at: string } | null> {
     const existing = await this.prisma.account.findUnique({
       where: { id: accountId },
-      select: { id: true, workspaceId: true, status: true },
+      select: {
+        id: true,
+        workspaceId: true,
+        status: true,
+        platform: true,
+        canonicalUserId: true,
+        endUserId: true,
+        isTest: true,
+      },
     });
     if (!existing || existing.workspaceId !== workspaceId) return null;
 
@@ -520,6 +528,21 @@ export class AccountsService {
       }),
       this.prisma.oAuthToken.deleteMany({ where: { accountId } }),
     ]);
+
+    // Fire-and-forget — webhook delivery must not block the response or
+    // roll back the disconnect. Test-mode accounts never emit (see
+    // outbound-webhooks.service for the rationale).
+    if (this.outboundWebhooks && !existing.isTest) {
+      void this.outboundWebhooks.emit(workspaceId, 'account.disconnected', {
+        account_id: existing.id.toString(),
+        platform: existing.platform,
+        workspace_id: workspaceId,
+        end_user_id: existing.endUserId ?? null,
+        canonical_user_id: existing.canonicalUserId,
+        occurred_at: disconnectedAt.toISOString(),
+      });
+    }
+
     return {
       id: updated.id.toString(),
       status: updated.status,
