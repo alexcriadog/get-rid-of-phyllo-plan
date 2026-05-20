@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Social Media Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style.css" />
+    <!-- The Camaleonic Connect SDK. Exposes window.CamaleonicConnect. -->
+    <script src="https://smconnector.camaleonicanalytics.com/connect-sdk.js"></script>
+  </head>
+  <body>
+    <nav class="topbar">
+      <span class="brand">▮▮ MIXTAPE DASH</span>
+      <span class="userbox" id="userbox"></span>
+    </nav>
+
+    <!-- Auth view ─ shown when /api/me returns 401 ─────────────────────── -->
+    <main id="auth-view" hidden>
+      <section class="section section--yellow sunburst">
+        <div class="section__inner">
+          <div class="card narrow">
+            <span class="kicker">Step 0 — sign in</span>
+            <h1 style="margin-top: 16px">Drop the needle.</h1>
+            <p class="muted" style="margin-top: 8px">
+              Email + password ≥6 chars. In-memory store — every server
+              restart wipes the user list.
+            </p>
+            <form id="auth-form">
+              <label>Email <input type="email" name="email" required autocomplete="email" /></label>
+              <label>Password <input type="password" name="password" minlength="6" required autocomplete="current-password" /></label>
+              <div class="row">
+                <button type="submit" data-action="login" class="btn btn--primary">Sign in</button>
+                <button type="submit" data-action="register" class="btn btn--ghost">Create account</button>
+              </div>
+              <p class="err" id="auth-err"></p>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Dashboard ─ shown when logged in ──────────────────────────────── -->
+    <main id="dashboard-view" hidden>
+      <!-- HERO: connect actions on electric-blue -->
+      <section class="section section--blue on-blue">
+        <div class="section__inner hero">
+          <div>
+            <span class="kicker">Your collection</span>
+            <h1 class="display-xl" style="margin-top: 16px">
+              Build the<br />mixtape.
+            </h1>
+            <p class="lede">
+              Snap a new tape from any platform. Every connected account
+              becomes a cassette in your shelf below.
+            </p>
+          </div>
+          <div>
+            <div class="connect-row">
+              <button data-platform="twitch" class="btn">+ Twitch</button>
+              <button data-platform="youtube" class="btn">+ YouTube</button>
+              <button data-platform="tiktok" class="btn">+ TikTok</button>
+              <button data-platform="threads" class="btn">+ Threads</button>
+              <button data-platform="facebook" class="btn">+ Facebook · IG</button>
+              <button data-platform="" class="btn ghost">Open chooser…</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SHELF: cassette grid on paper -->
+      <section class="section">
+        <div class="section__inner">
+          <span class="kicker" style="background: var(--mint)">Your tapes</span>
+          <h2 style="margin-top: 12px">Connected accounts</h2>
+          <p class="muted" style="margin-top: 8px; max-width: 60ch">
+            Tap a cassette to peek its normalized profile data. The
+            disconnect button revokes the stored OAuth tokens.
+          </p>
+
+          <div id="accounts-list" class="grid"></div>
+          <div id="accounts-empty" class="empty" hidden>
+            <h3>No tapes yet.</h3>
+            <p class="muted">Pick a platform up top to add your first account.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Detail modal — shown when a cassette is tapped -->
+    <dialog id="detail">
+      <header>
+        <span id="detail-title">Account detail</span>
+        <button data-close aria-label="Close">✕</button>
+      </header>
+      <pre id="detail-body">Loading…</pre>
+      <footer>
+        <button id="disconnect-btn" class="btn btn--danger">Disconnect</button>
+      </footer>
+    </dialog>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

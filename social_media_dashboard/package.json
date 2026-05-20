@@ -1,0 +1,18 @@
+{
+  "name": "social-media-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sample client app for Camaleonic Connect — login + connect social accounts + read normalized data.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.1",
+    "express-session": "^1.18.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
