@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Controller,
+  Delete,
   Get,
   Inject,
   NotFoundException,
@@ -16,8 +17,12 @@ import {
   ADAPTER_REGISTRY,
   AdapterRegistry,
 } from '@modules/platforms/platforms.module';
-import type { ProfileData } from '@modules/platforms/shared/platform-types';
+import type {
+  ContentData,
+  ProfileData,
+} from '@modules/platforms/shared/platform-types';
 import { AccountsService } from '@modules/accounts/accounts.service';
+import { FacebookExtrasService } from '@modules/platforms/facebook/fetcher/facebook-extras.service';
 import {
   BearerApiKeyGuard,
   RequestWithWorkspace,
@@ -46,6 +51,7 @@ export class V1AccountsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accounts: AccountsService,
+    private readonly facebookExtras: FacebookExtrasService,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
 
@@ -129,6 +135,65 @@ export class V1AccountsController {
       metadata,
     );
     return { platform: account.platform, data: items };
+  }
+
+  @Get('accounts/:id/engagement')
+  async getEngagement(
+    @Req() req: RequestWithWorkspace,
+    @Param('id') rawId: string,
+    @Query('limit') limitRaw: string | undefined,
+    @Query('since') since: string | undefined,
+  ): Promise<NormalizedEngagement> {
+    const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+    const limit = parseIntParam(limitRaw, 25, 1, 100);
+    const sinceDate = since ? new Date(since) : undefined;
+    if (sinceDate && Number.isNaN(sinceDate.getTime())) {
+      throw new BadRequestException(`Invalid since timestamp: ${since}`);
+    }
+    const items = await adapter.fetchContents(
+      token,
+      account.canonicalUserId,
+      { limit, since: sinceDate },
+      metadata,
+    );
+    return toEngagementView(account.platform, items, sinceDate);
+  }
+
+  @Get('accounts/:id/ratings')
+  async getRatings(
+    @Req() req: RequestWithWorkspace,
+    @Param('id') rawId: string,
+    @Query('limit') limitRaw: string | undefined,
+  ): Promise<{
+    platform: string;
+    sample_size: number;
+    average_rating: number | null;
+    captured_at: string | null;
+    data: unknown[];
+  }> {
+    const { account } = await this.resolve(req, rawId);
+    if (account.platform !== 'facebook') {
+      throw new BadRequestException(
+        `ratings not supported for ${account.platform}`,
+      );
+    }
+    const limit = parseIntParam(limitRaw, 25, 1, 100);
+    const snap = await this.facebookExtras.listRatings(account.id, limit);
+    return { platform: account.platform, ...snap };
+  }
+
+  @Delete('accounts/:id')
+  async deleteAccount(
+    @Req() req: RequestWithWorkspace,
+    @Param('id') rawId: string,
+  ): Promise<{ id: string; status: string; disconnected_at: string }> {
+    const workspaceId = this.requireWorkspace(req);
+    const id = parseBigInt(rawId);
+    const result = await this.accounts.disconnectAccount(id, workspaceId);
+    if (!result) {
+      throw new NotFoundException(`Account ${rawId} not found`);
+    }
+    return result;
   }
 
   @Get('accounts/:id/engagement-deep')
@@ -372,6 +437,80 @@ function toIdentityView(
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────
+
+interface NormalizedEngagement {
+  platform: string;
+  window: {
+    since: string | null;
+    until: string;
+    sample_size: number;
+  };
+  totals: {
+    likes: number;
+    comments: number;
+    shares: number;
+    saves: number;
+    views: number;
+    reach: number;
+  };
+  averages_per_post: {
+    likes: number | null;
+    comments: number | null;
+    shares: number | null;
+    views: number | null;
+  };
+  /**
+   * Engagement rate (likes + comments + shares) / reach, expressed as a
+   * fraction (0.0421 == 4.21%). `null` when reach is unavailable.
+   */
+  engagement_rate: number | null;
+}
+
+function toEngagementView(
+  platform: string,
+  items: ContentData[],
+  since: Date | undefined,
+): NormalizedEngagement {
+  const totals = items.reduce(
+    (acc, it) => ({
+      likes: acc.likes + (it.metrics.likes ?? 0),
+      comments: acc.comments + (it.metrics.comments ?? 0),
+      shares: acc.shares + (it.metrics.shares ?? 0),
+      saves: acc.saves + (it.metrics.saves ?? 0),
+      views: acc.views + (it.metrics.views ?? 0),
+      reach: acc.reach + (it.metrics.reach ?? 0),
+    }),
+    { likes: 0, comments: 0, shares: 0, saves: 0, views: 0, reach: 0 },
+  );
+  const n = items.length;
+  const avg = (x: number): number | null =>
+    n === 0 ? null : Number((x / n).toFixed(2));
+  const engagementRate =
+    totals.reach > 0
+      ? Number(
+          ((totals.likes + totals.comments + totals.shares) / totals.reach).toFixed(
+            4,
+          ),
+        )
+      : null;
+
+  return {
+    platform,
+    window: {
+      since: since ? since.toISOString() : null,
+      until: new Date().toISOString(),
+      sample_size: n,
+    },
+    totals,
+    averages_per_post: {
+      likes: avg(totals.likes),
+      comments: avg(totals.comments),
+      shares: avg(totals.shares),
+      views: avg(totals.views),
+    },
+    engagement_rate: engagementRate,
+  };
+}
 
 function parseBigInt(raw: string): bigint {
   if (!/^\d+$/.test(raw)) {

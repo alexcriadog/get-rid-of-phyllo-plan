@@ -492,6 +492,41 @@ export class AccountsService {
     );
   }
 
+  /**
+   * Disconnect an account: mark status='disconnected', stamp the
+   * disconnectedAt timestamp, and drop the stored OAuth tokens so a stale
+   * refresh worker can't keep calling upstream platforms with a token the
+   * end-user has effectively withdrawn consent from.
+   *
+   * Scoped to a single workspace — cross-tenant disconnect returns null and
+   * the caller surfaces a 404, never a 200 ("you can't disconnect things
+   * you can't see").
+   */
+  async disconnectAccount(
+    accountId: bigint,
+    workspaceId: string,
+  ): Promise<{ id: string; status: string; disconnected_at: string } | null> {
+    const existing = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: { id: true, workspaceId: true, status: true },
+    });
+    if (!existing || existing.workspaceId !== workspaceId) return null;
+
+    const disconnectedAt = new Date();
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.account.update({
+        where: { id: accountId },
+        data: { status: 'disconnected', disconnectedAt },
+      }),
+      this.prisma.oAuthToken.deleteMany({ where: { accountId } }),
+    ]);
+    return {
+      id: updated.id.toString(),
+      status: updated.status,
+      disconnected_at: disconnectedAt.toISOString(),
+    };
+  }
+
   async listAccounts(workspaceId?: string): Promise<unknown[]> {
     const rows = await this.prisma.account.findMany({
       where: workspaceId ? { workspaceId } : undefined,

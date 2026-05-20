@@ -220,6 +220,27 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AccountSummary' }
         '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Accounts]
+      summary: Disconnect an account
+      description: |
+        Marks the account as `disconnected`, stamps `disconnected_at`, and
+        removes the stored OAuth tokens. Idempotent — repeated calls on a
+        disconnected account return the same payload. Returns 404 when the
+        account belongs to a different workspace.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status, disconnected_at]
+                properties:
+                  id: { type: string }
+                  status: { type: string, example: disconnected }
+                  disconnected_at: { type: string, format: date-time }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /v1/accounts/{id}/identity:
     parameters: [{ $ref: '#/components/parameters/AccountId' }]
@@ -256,6 +277,30 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/PlatformPayloadList' }
 
+  /v1/accounts/{id}/engagement:
+    parameters:
+      - { $ref: '#/components/parameters/AccountId' }
+      - in: query
+        name: limit
+        schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      - in: query
+        name: since
+        schema: { type: string, format: date-time }
+    get:
+      tags: [Accounts]
+      summary: Aggregate engagement over recent content
+      description: |
+        Computes a normalized engagement snapshot from the account's most
+        recent posts: totals (likes, comments, shares, saves, views, reach),
+        averages per post, and an engagement-rate fraction (engagements ÷
+        reach). Same data source as `/content` — different shape.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Engagement' }
+
   /v1/accounts/{id}/engagement-deep:
     parameters: [{ $ref: '#/components/parameters/AccountId' }]
     get:
@@ -263,6 +308,27 @@ paths:
       summary: Per-content windowed analytics (YouTube only today)
       responses:
         '200': { $ref: '#/components/responses/PlatformPayload' }
+
+  /v1/accounts/{id}/ratings:
+    parameters:
+      - { $ref: '#/components/parameters/AccountId' }
+      - in: query
+        name: limit
+        schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    get:
+      tags: [Accounts]
+      summary: Page ratings & reviews (Facebook only)
+      description: |
+        Returns ratings and recommendation reviews most recently captured by
+        the worker for this account. Currently Facebook-only — 400 on other
+        platforms. Includes average rating across the returned sample.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ratings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 
   /v1/accounts/{id}/stories:
     parameters: [{ $ref: '#/components/parameters/AccountId' }]
@@ -473,6 +539,65 @@ components:
             Platform-specific fields not represented in the cross-platform
             core (e.g. Twitch `subscribersByTier`, YouTube `topicCategories`).
         fetched_at: { type: string, format: date-time }
+
+    Engagement:
+      type: object
+      description: |
+        Aggregate engagement snapshot computed from the most recent N posts.
+        `engagement_rate` is `(likes + comments + shares) / reach` and is
+        null when reach isn't available for the platform.
+      properties:
+        platform: { type: string }
+        window:
+          type: object
+          properties:
+            since: { type: string, format: date-time, nullable: true }
+            until: { type: string, format: date-time }
+            sample_size: { type: integer }
+        totals:
+          type: object
+          properties:
+            likes: { type: integer }
+            comments: { type: integer }
+            shares: { type: integer }
+            saves: { type: integer }
+            views: { type: integer }
+            reach: { type: integer }
+        averages_per_post:
+          type: object
+          properties:
+            likes: { type: number, nullable: true }
+            comments: { type: number, nullable: true }
+            shares: { type: number, nullable: true }
+            views: { type: number, nullable: true }
+        engagement_rate: { type: number, nullable: true }
+
+    Ratings:
+      type: object
+      description: |
+        Facebook Page ratings + recommendation reviews captured by the
+        sync worker. Read-only — the worker writes on its schedule; consumers
+        receive the latest stored snapshot.
+      properties:
+        platform: { type: string, example: facebook }
+        sample_size: { type: integer }
+        average_rating: { type: number, nullable: true }
+        captured_at: { type: string, format: date-time, nullable: true }
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              platform_review_id: { type: string }
+              rating: { type: number, nullable: true }
+              recommendation_type:
+                type: string
+                nullable: true
+                example: positive
+              review_text: { type: string, nullable: true }
+              reviewer_name: { type: string, nullable: true }
+              permalink_url: { type: string, nullable: true }
+              created_time: { type: string, format: date-time, nullable: true }
 
     WebhookEndpoint:
       type: object

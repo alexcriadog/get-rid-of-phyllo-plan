@@ -146,6 +146,55 @@ export class FacebookExtrasService {
     return { reviewsFetched: ratings.length, reviewsStored: stored };
   }
 
+  /**
+   * Read the most-recent ratings the worker has captured for an account.
+   * Always returns from Mongo — the live FB call only runs during a scheduled
+   * sync (or on `manual-refresh`), so consumers see whatever the worker
+   * stored on its last pass.
+   *
+   * Date fields come back as ISO 8601 strings so the JSON response is
+   * idempotent across Node versions.
+   */
+  async listRatings(
+    accountId: bigint,
+    limit: number,
+  ): Promise<{
+    sample_size: number;
+    average_rating: number | null;
+    captured_at: string | null;
+    data: NormalizedRatingView[];
+  }> {
+    const collection = this.mongo.getCollection(MONGO_COLLECTIONS.pageRatings);
+    const rows = await collection
+      .find({ account_id: String(accountId) })
+      .sort({ created_time: -1 })
+      .limit(limit)
+      .toArray();
+
+    const numeric = rows
+      .map((r) => (typeof r.rating === 'number' ? r.rating : null))
+      .filter((n): n is number => n !== null);
+    const averageRating = numeric.length
+      ? Number((numeric.reduce((a, b) => a + b, 0) / numeric.length).toFixed(2))
+      : null;
+
+    const newestCapturedAt =
+      rows
+        .map((r) =>
+          r.captured_at instanceof Date ? r.captured_at.toISOString() : null,
+        )
+        .filter((s): s is string => !!s)
+        .sort()
+        .pop() ?? null;
+
+    return {
+      sample_size: rows.length,
+      average_rating: averageRating,
+      captured_at: newestCapturedAt,
+      data: rows.map(toRatingView),
+    };
+  }
+
   // ───────────────────────────────────────────────────────────── ads
 
   async syncAdInsights(
@@ -489,4 +538,41 @@ function numStr(v: string | undefined): number | null {
   if (v === undefined || v === null) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Public-API view of a single FB Page rating row. */
+interface NormalizedRatingView {
+  platform_review_id: string;
+  rating: number | null;
+  recommendation_type: string | null;
+  review_text: string | null;
+  reviewer_name: string | null;
+  permalink_url: string | null;
+  created_time: string | null;
+}
+
+function toRatingView(
+  row: Record<string, unknown>,
+): NormalizedRatingView {
+  const created = row.created_time;
+  const createdIso =
+    created instanceof Date
+      ? created.toISOString()
+      : typeof created === 'string'
+        ? created
+        : null;
+  return {
+    platform_review_id: String(row.platform_review_id ?? ''),
+    rating: typeof row.rating === 'number' ? row.rating : null,
+    recommendation_type:
+      typeof row.recommendation_type === 'string'
+        ? row.recommendation_type
+        : null,
+    review_text: typeof row.review_text === 'string' ? row.review_text : null,
+    reviewer_name:
+      typeof row.reviewer_name === 'string' ? row.reviewer_name : null,
+    permalink_url:
+      typeof row.permalink_url === 'string' ? row.permalink_url : null,
+    created_time: createdIso,
+  };
 }
