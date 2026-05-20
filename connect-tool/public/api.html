@@ -28,31 +28,34 @@
     <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
     <script>
       // Redoc renders tag groups (SDK Tokens / Accounts / Webhooks) collapsed
-      // by default. Users were missing endpoints because the chevron wasn't
-      // obvious. Auto-expand all top-level tag groups once they appear.
+      // by default. label.click() is a TOGGLE — calling it on an already-open
+      // group closes it again. Use aria-expanded as the source of truth.
+      //
+      // We poll every 400ms for the first 10 seconds because Redoc's
+      // scroll-spy re-collapses groups when the user (or the load-time
+      // ScrollIntoView) lands them outside the active section. Once all 3
+      // tag groups are expanded twice in a row, stop polling.
       (function () {
-        var expanded = false;
-        function expandAllTags() {
-          if (expanded) return;
-          var tagItems = document.querySelectorAll(
+        var stableTicks = 0;
+        var interval = setInterval(function () {
+          var tags = document.querySelectorAll(
             'li[data-item-id^="tag/"]:not([data-item-id*="/paths/"])',
           );
-          if (tagItems.length === 0) return;
-          tagItems.forEach(function (item) {
+          if (tags.length === 0) return;
+          var allOpen = true;
+          tags.forEach(function (item) {
             var label = item.querySelector('label');
-            if (label) label.click();
+            if (item.getAttribute('aria-expanded') === 'false' && label) {
+              label.click();
+              allOpen = false;
+            }
           });
-          expanded = true;
-        }
-        var observer = new MutationObserver(function () {
-          expandAllTags();
-          if (expanded) observer.disconnect();
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        // Fallback: stop watching after 8s no matter what.
+          stableTicks = allOpen ? stableTicks + 1 : 0;
+          if (stableTicks >= 3) clearInterval(interval);
+        }, 400);
         setTimeout(function () {
-          observer.disconnect();
-        }, 8000);
+          clearInterval(interval);
+        }, 10_000);
       })();
     </script>
   </body>
