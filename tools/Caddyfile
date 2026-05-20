@@ -11,6 +11,13 @@ smconnector.camaleonicanalytics.com {
 		reverse_proxy api:3000
 	}
 
+	# Public SaaS API surface. Bearer cmlk_(live|test)_* auth, workspace-
+	# scoped per request. Lives directly on the API container — no path
+	# rewrite, the controllers are already mounted at /v1/*.
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+
 	# Admin dashboard. Operator-trust by default — flip on the basic_auth
 	# directive below once a real customer ships. Generate the hash with:
 	#   docker run --rm caddy:2-alpine caddy hash-password --plaintext '<pw>'
