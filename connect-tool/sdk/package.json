@@ -1,0 +1,37 @@
+{
+  "name": "@camaleonic/connect",
+  "version": "1.0.0",
+  "description": "Camaleonic Connect — embed a one-click social-account connector. Supports Facebook, Instagram, TikTok, Threads, YouTube, Twitch.",
+  "type": "module",
+  "main": "dist/index.mjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "sideEffects": false,
+  "keywords": [
+    "oauth",
+    "social",
+    "instagram",
+    "facebook",
+    "tiktok",
+    "youtube",
+    "twitch",
+    "threads",
+    "connect",
+    "camaleonic"
+  ],
+  "license": "UNLICENSED",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

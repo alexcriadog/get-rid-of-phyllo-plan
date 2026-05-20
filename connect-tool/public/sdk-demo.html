@@ -117,6 +117,29 @@
     <h3 style="margin-top: 32px">Events</h3>
     <pre id="log">(events will appear here)</pre>
 
+    <h3 style="margin-top: 32px">Drop into your own site</h3>
+    <pre style="white-space: pre-wrap"><code>&lt;script src="https://smconnector.camaleonicanalytics.com/connect-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  // sdkToken is minted SERVER-SIDE with your cmlk_live_* API key:
+  //   POST /v1/sdk-tokens  { user_id: "your-end-user-id", ttl: 1800 }
+  const handle = CamaleonicConnect.init({
+    sdkToken: SDK_TOKEN_FROM_YOUR_BACKEND,
+    workspace: "your-slug",
+    platforms: ["twitch", "instagram"],
+    onSuccess: ({ accountIds, platform }) =&gt; { /* persist accountIds */ },
+    onError:   (err) =&gt; console.warn(err),
+    onExit:    ()    =&gt; console.log("user closed"),
+  });
+  document.getElementById("connect").onclick = () =&gt; handle.open("twitch");
+&lt;/script&gt;</code></pre>
+
+    <p class="sub" style="margin-top: 12px; font-size: 12px">
+      Prefer npm? <code>npm i @camaleonic/connect</code> then
+      <code>import CamaleonicConnect from "@camaleonic/connect"</code>.
+      TypeScript types ship alongside the script tag at
+      <a href="/connect-sdk.d.ts">/connect-sdk.d.ts</a>.
+    </p>
+
     <p class="sub" style="margin-top: 24px">
       Server reference: <a href="/openapi.yaml">openapi.yaml</a> · interactive
       docs at <a href="/docs.html">/docs.html</a>.
