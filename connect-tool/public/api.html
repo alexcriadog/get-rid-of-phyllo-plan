@@ -26,5 +26,34 @@
   <body>
     <redoc spec-url="/openapi.yaml" theme='{ "colors": { "primary": { "main": "#3cffd0" } }, "typography": { "fontFamily": "system-ui, sans-serif" } }'></redoc>
     <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+    <script>
+      // Redoc renders tag groups (SDK Tokens / Accounts / Webhooks) collapsed
+      // by default. Users were missing endpoints because the chevron wasn't
+      // obvious. Auto-expand all top-level tag groups once they appear.
+      (function () {
+        var expanded = false;
+        function expandAllTags() {
+          if (expanded) return;
+          var tagItems = document.querySelectorAll(
+            'li[data-item-id^="tag/"]:not([data-item-id*="/paths/"])',
+          );
+          if (tagItems.length === 0) return;
+          tagItems.forEach(function (item) {
+            var label = item.querySelector('label');
+            if (label) label.click();
+          });
+          expanded = true;
+        }
+        var observer = new MutationObserver(function () {
+          expandAllTags();
+          if (expanded) observer.disconnect();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        // Fallback: stop watching after 8s no matter what.
+        setTimeout(function () {
+          observer.disconnect();
+        }, 8000);
+      })();
+    </script>
   </body>
 </html>
