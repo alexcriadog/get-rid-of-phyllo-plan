@@ -106,7 +106,7 @@ app.post('/api/register', (req, res) => {
     passwordHash: `${salt}:${hashPassword(password, salt)}`,
   });
   req.session.email = email.toLowerCase();
-  res.json({ email: email.toLowerCase() });
+  res.json({ email: email.toLowerCase(), workspace: WORKSPACE_SLUG });
 });
 
 app.post('/api/login', (req, res) => {
@@ -121,7 +121,7 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: 'invalid_credentials' });
   }
   req.session.email = email.toLowerCase();
-  res.json({ email: email.toLowerCase() });
+  res.json({ email: email.toLowerCase(), workspace: WORKSPACE_SLUG });
 });
 
 app.post('/api/logout', (req, res) => {
