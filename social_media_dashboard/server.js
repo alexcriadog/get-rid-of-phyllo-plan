@@ -53,6 +53,7 @@ function constantTimeEq(a, b) {
 
 // ─── Camaleonic API helpers ─────────────────────────────────────────────────
 async function camaleonic(path, init = {}) {
+  const method = init.method ?? 'GET';
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
@@ -68,6 +69,9 @@ async function camaleonic(path, init = {}) {
   } catch {
     body = text;
   }
+  const tag = res.ok ? '✓' : '✗';
+  console.log(`[camaleonic] ${tag} ${method} ${path} → ${res.status}`);
+  if (!res.ok) console.log('  body:', typeof body === 'string' ? body.slice(0, 300) : JSON.stringify(body).slice(0, 300));
   return { ok: res.ok, status: res.status, body };
 }
 

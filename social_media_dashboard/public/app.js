@@ -107,8 +107,19 @@ function initSdk() {
 async function openConnect(platform) {
   // 1) Ask our backend to mint a fresh SDK token for this user.
   const res = await fetch('/api/sdk-token', { method: 'POST' });
+  if (res.status === 401) {
+    // Session expired (e.g. server restarted, in-memory store wiped).
+    // Drop the user back at the login screen so they can refresh it.
+    currentSession = null;
+    showAuth();
+    document.getElementById('auth-err').textContent =
+      'Your session expired. Please sign in again.';
+    return;
+  }
   if (!res.ok) {
-    alert('Could not mint SDK token — check the server console.');
+    const body = await res.text();
+    console.error('mint-token failed', res.status, body);
+    alert(`Could not mint SDK token (HTTP ${res.status}). See console.`);
     return;
   }
   const { sdk_token } = await res.json();
