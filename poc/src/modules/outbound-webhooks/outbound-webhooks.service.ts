@@ -257,11 +257,13 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
         nextRetryAt,
       },
     });
+    // BullMQ rejects custom jobIds containing ':' — historical retries
+    // surfaced "Custom Id cannot contain :" on every reschedule.
     await this.bull
       .getQueue<DeliveryJob>(QUEUE)
       .add('webhook', { deliveryId: id }, {
         delay: delayMs,
-        jobId: `${id}:r${attempts}`,
+        jobId: `${id}-r${attempts}`,
       });
   }
 
