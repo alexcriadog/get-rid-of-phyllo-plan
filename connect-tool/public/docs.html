@@ -2,29 +2,624 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Camaleonic Connect API</title>
+    <title>Camaleonic Connect — Developer Portal</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Public API for the Camaleonic Connect SaaS — connect social
-        accounts and read normalized profile/audience/content data across
-        six platforms."
+      content="Embed one-click social-account connections in your app. Connect Facebook, Instagram, TikTok, Threads, YouTube, and Twitch. Token custody, webhooks, and normalized data across every platform."
     />
-    <link
-      rel="icon"
-      type="image/svg+xml"
-      href="/favicon.svg"
-    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <style>
+      :root {
+        color-scheme: dark;
+        --mint: #3cffd0;
+        --uv: #9146ff;
+        --ink: #0e0e0e;
+        --canvas: #0e0e0e;
+        --surface: #161616;
+        --surface-2: #1c1c1c;
+        --text: #f4f4f4;
+        --muted: #8b8b8b;
+        --border: #2a2a2a;
+        --maxw: 920px;
+      }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background: #fafafa;
+        background: var(--canvas);
+        color: var(--text);
+        font-family:
+          'Space Grotesk',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        line-height: 1.6;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        padding: 18px 32px;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        position: sticky;
+        top: 0;
+        background: rgba(14, 14, 14, 0.86);
+        backdrop-filter: blur(12px);
+        z-index: 5;
+      }
+      header .brand {
+        font-family: 'Anton', sans-serif;
+        font-size: 22px;
+        letter-spacing: 0.04em;
+        color: var(--mint);
+      }
+      header nav {
+        display: flex;
+        gap: 18px;
+        font-size: 14px;
+      }
+      header nav a {
+        color: var(--muted);
+        text-decoration: none;
+        transition: color 120ms ease;
+      }
+      header nav a:hover {
+        color: var(--text);
+      }
+      main {
+        max-width: var(--maxw);
+        margin: 0 auto;
+        padding: 56px 24px 96px;
+      }
+      h1 {
+        font-family: 'Anton', sans-serif;
+        font-size: clamp(48px, 7vw, 84px);
+        line-height: 1;
+        margin: 0 0 12px;
+        letter-spacing: 0.02em;
+      }
+      h2 {
+        font-family: 'Anton', sans-serif;
+        font-size: 32px;
+        margin: 64px 0 8px;
+        letter-spacing: 0.02em;
+      }
+      h3 {
+        font-size: 20px;
+        margin: 32px 0 8px;
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 18px;
+        max-width: 640px;
+        margin: 0 0 32px;
+      }
+      .pill {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--mint);
+        color: var(--mint);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-bottom: 12px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+        margin-top: 32px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 20px;
+      }
+      .card h4 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      code,
+      pre {
+        font-family: 'Space Mono', ui-monospace, SFMono-Regular, monospace;
+      }
+      code {
+        background: var(--surface-2);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.92em;
+      }
+      pre {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 22px;
+        overflow-x: auto;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      pre code {
+        background: transparent;
+        padding: 0;
+      }
+      ol li,
+      ul li {
+        margin-bottom: 8px;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: 36px 1fr;
+        gap: 18px;
+        align-items: start;
+        padding: 24px 0;
+        border-top: 1px solid var(--border);
+      }
+      .step:first-of-type {
+        border-top: 0;
+      }
+      .step .num {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--mint);
+        color: var(--ink);
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-family: 'Anton', sans-serif;
+        font-size: 18px;
+      }
+      .step .body h3 {
+        margin: 0 0 6px;
+      }
+      .step .body p {
+        margin: 0 0 12px;
+        color: var(--muted);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        font-size: 14px;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 500;
+      }
+      td code {
+        font-size: 12px;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        margin-top: 18px;
+        margin-bottom: -1px;
+      }
+      .tab {
+        padding: 8px 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-bottom: 0;
+        border-radius: 8px 8px 0 0;
+        font-size: 13px;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .tab.active {
+        color: var(--mint);
+        border-color: var(--mint);
+        background: var(--surface-2);
+      }
+      .tab-panels pre {
+        border-top-left-radius: 0;
+        margin-top: 0;
+      }
+      .tab-panel {
+        display: none;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+      .cta-row {
+        display: flex;
+        gap: 12px;
+        margin-top: 28px;
+        flex-wrap: wrap;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        padding: 12px 22px;
+        border-radius: 999px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 14px;
+        border: 1px solid transparent;
+        transition: transform 120ms ease, border-color 120ms ease;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+      }
+      .btn-primary {
+        background: var(--mint);
+        color: var(--ink);
+      }
+      .btn-ghost {
+        background: transparent;
+        color: var(--mint);
+        border-color: var(--mint);
+      }
+      .callout {
+        margin: 18px 0;
+        padding: 16px 18px;
+        border-left: 3px solid var(--mint);
+        background: rgba(60, 255, 208, 0.06);
+        border-radius: 0 10px 10px 0;
+        font-size: 14px;
+        color: var(--text);
+      }
+      .callout.warn {
+        border-left-color: #ff9b3c;
+        background: rgba(255, 155, 60, 0.07);
+      }
+      footer {
+        max-width: var(--maxw);
+        margin: 64px auto 32px;
+        padding: 24px;
+        color: var(--muted);
+        font-size: 13px;
+        border-top: 1px solid var(--border);
+      }
+      a {
+        color: var(--mint);
       }
     </style>
   </head>
   <body>
-    <redoc spec-url="/openapi.yaml" theme='{ "colors": { "primary": { "main": "#3cffd0" } }, "typography": { "fontFamily": "system-ui, sans-serif" } }'></redoc>
-    <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+    <header>
+      <span class="brand">CAMALEONIC CONNECT</span>
+      <nav>
+        <a href="#quickstart">Quickstart</a>
+        <a href="#sdk">SDK</a>
+        <a href="#webhooks">Webhooks</a>
+        <a href="#auth">Authentication</a>
+        <a href="#errors">Errors</a>
+        <a href="/api.html">API Reference →</a>
+      </nav>
+    </header>
+
+    <main>
+      <span class="pill">v1 — Developer Portal</span>
+      <h1>One click.<br />Six platforms.</h1>
+      <p class="lede">
+        Embed a hosted OAuth widget that connects your end-users' social
+        accounts in seconds. Camaleonic custodies the tokens, refreshes them
+        automatically, and exposes normalized data across every platform via
+        a single REST API.
+      </p>
+
+      <div class="grid">
+        <div class="card">
+          <h4>6 platforms</h4>
+          <p>Facebook + Instagram, TikTok, Threads, YouTube, Twitch — one shape.</p>
+        </div>
+        <div class="card">
+          <h4>Token custody</h4>
+          <p>Encrypted at rest (AES-256-GCM). We refresh, you read.</p>
+        </div>
+        <div class="card">
+          <h4>Webhooks</h4>
+          <p>Signed events on connect, disconnect, token failures. HMAC-SHA256.</p>
+        </div>
+        <div class="card">
+          <h4>Workspace isolation</h4>
+          <p>Each client gets their own keys, branding, and rate-limit budget.</p>
+        </div>
+      </div>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#quickstart">Start in 5 minutes →</a>
+        <a class="btn btn-ghost" href="/api.html">Full API reference</a>
+        <a class="btn btn-ghost" href="/sdk-demo.html">Live SDK demo</a>
+      </div>
+
+      <h2 id="quickstart">Quickstart</h2>
+      <p class="lede">
+        From zero to a connected account in five steps.
+      </p>
+
+      <section>
+        <div class="step">
+          <div class="num">1</div>
+          <div class="body">
+            <h3>Receive your API key</h3>
+            <p>
+              We issue one <code>cmlk_live_*</code> key per workspace
+              during onboarding (and an optional <code>cmlk_test_*</code> key
+              for sandbox flows that never fire webhooks). The key is the only
+              credential your backend needs.
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">2</div>
+          <div class="body">
+            <h3>Mint an SDK token (backend)</h3>
+            <p>
+              Whenever an end-user is about to connect, mint a short-lived
+              JWT that binds them to your workspace. The token expires in
+              30 minutes.
+            </p>
+            <pre><code>curl -X POST https://smconnector.camaleonicanalytics.com/v1/sdk-tokens \
+  -H "Authorization: Bearer cmlk_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"your-end-user-id","ttl":1800}'
+# → { "sdk_token": "eyJhbGciOi…", "expires_at": "…" }</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">3</div>
+          <div class="body">
+            <h3>Embed the SDK (frontend)</h3>
+            <p>
+              Drop the script tag in, or install from npm. The popup opens
+              from a real user click — no popup-blocker drama.
+            </p>
+            <div class="tabs">
+              <div class="tab active" data-tab="script">&lt;script&gt; tag</div>
+              <div class="tab" data-tab="npm">npm</div>
+            </div>
+            <div class="tab-panels">
+              <div class="tab-panel active" data-panel="script">
+                <pre><code>&lt;script src="https://smconnector.camaleonicanalytics.com/connect-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  const handle = CamaleonicConnect.init({
+    sdkToken: SDK_TOKEN_FROM_YOUR_BACKEND,
+    workspace: "your-slug",
+    platforms: ["twitch", "instagram"],
+    onSuccess: ({ accountIds, platform }) =&gt; persist(accountIds, platform),
+    onError:   (err)  =&gt; console.warn(err),
+    onExit:    ()     =&gt; console.log("user closed"),
+  });
+  button.onclick = () =&gt; handle.open("twitch");
+&lt;/script&gt;</code></pre>
+              </div>
+              <div class="tab-panel" data-panel="npm">
+                <pre><code>npm i @camaleonic/connect</code></pre>
+                <pre><code>import CamaleonicConnect from '@camaleonic/connect';
+
+const handle = CamaleonicConnect.init({
+  sdkToken, workspace: 'your-slug',
+  platforms: ['twitch', 'instagram'],
+  onSuccess: ({ accountIds, platform }) =&gt; persist(accountIds, platform),
+});
+button.onclick = () =&gt; handle.open('twitch');</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">4</div>
+          <div class="body">
+            <h3>Read normalized data</h3>
+            <p>
+              Once <code>onSuccess</code> fires you have an
+              <code>accountId</code>. Read profile, audience, content,
+              engagement, and more — same shape across every platform.
+            </p>
+            <pre><code>curl https://smconnector.camaleonicanalytics.com/v1/accounts/&lt;id&gt;/identity \
+  -H "Authorization: Bearer cmlk_live_xxx"
+# → { "platform": "twitch", "platform_user_id": "501116841",
+#     "username": "alex_cg_11", "followers_count": 1234, … }</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="num">5</div>
+          <div class="body">
+            <h3>Subscribe to webhooks (optional)</h3>
+            <p>
+              Get notified when accounts connect or disconnect, or when a
+              token fails to refresh. Signed with HMAC-SHA256.
+            </p>
+            <pre><code>curl -X POST https://smconnector.camaleonicanalytics.com/v1/webhook-endpoints \
+  -H "Authorization: Bearer cmlk_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://yourapp.com/hooks/camaleonic","events":["account.connected","account.disconnected","token.refresh_failed"]}'</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <h2 id="sdk">SDK reference</h2>
+
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Option</th><th>Type</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>sdkToken</code></td><td><code>string</code></td><td>Required. Minted server-side via <code>POST /v1/sdk-tokens</code>.</td></tr>
+          <tr><td><code>workspace</code></td><td><code>string</code></td><td>Required. Must match the <code>ws_slug</code> claim in the token.</td></tr>
+          <tr><td><code>platforms</code></td><td><code>PlatformKey[]</code></td><td>Allow-list. Calls outside the list emit <code>invalid_platform</code>.</td></tr>
+          <tr><td><code>baseUrl</code></td><td><code>string</code></td><td>Override the connect-ui origin (defaults to the script's origin).</td></tr>
+          <tr><td><code>onSuccess</code></td><td><code>(d) =&gt; void</code></td><td>Fires once on success with <code>{accountIds, platform}</code>.</td></tr>
+          <tr><td><code>onError</code></td><td><code>(e) =&gt; void</code></td><td><code>popup_blocked</code>, <code>invalid_platform</code>, <code>unknown</code>.</td></tr>
+          <tr><td><code>onExit</code></td><td><code>() =&gt; void</code></td><td>User closed the popup before finishing.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Methods</h3>
+      <ul>
+        <li><code>handle.open(platform?)</code> — open the popup. Pass a platform key (e.g. <code>"twitch"</code>) to skip the chooser. Must be called from a real user gesture (click handler) to dodge popup-blockers.</li>
+        <li><code>handle.close()</code> — force-close the popup.</li>
+      </ul>
+
+      <h2 id="webhooks">Webhook signing</h2>
+      <p class="lede">
+        Every delivery carries an <code>X-Camaleonic-Signature</code> header
+        of the form <code>t=&lt;unix-seconds&gt;,v1=&lt;hex-hmac&gt;</code>.
+        Verify by recomputing the HMAC over <code>"&lt;t&gt;.&lt;raw-body&gt;"</code>
+        with the secret you got from <code>POST /v1/webhook-endpoints</code>.
+      </p>
+
+      <div class="callout warn">
+        Use the <strong>raw request body</strong>, not <code>JSON.stringify(parsed)</code>.
+        Re-serialising introduces ordering and whitespace differences that
+        break the HMAC.
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="node">Node.js</div>
+        <div class="tab" data-tab="python">Python</div>
+      </div>
+      <div class="tab-panels">
+        <div class="tab-panel active" data-panel="node">
+          <pre><code>import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export function verify(req, secret) {
+  const sigHeader = req.headers['x-camaleonic-signature'];
+  if (!sigHeader) return false;
+  const parts = Object.fromEntries(
+    sigHeader.split(',').map((kv) =&gt; kv.split('='))
+  );
+  const t = parts.t;
+  const v1 = parts.v1;
+  if (!t || !v1) return false;
+  // Reject deliveries older than 5 minutes (replay protection).
+  if (Math.abs(Date.now() / 1000 - Number(t)) &gt; 300) return false;
+  const expected = createHmac('sha256', secret)
+    .update(`${t}.${req.rawBody}`)
+    .digest('hex');
+  const a = Buffer.from(expected, 'hex');
+  const b = Buffer.from(v1, 'hex');
+  return a.length === b.length &amp;&amp; timingSafeEqual(a, b);
+}</code></pre>
+        </div>
+        <div class="tab-panel" data-panel="python">
+          <pre><code>import hmac, hashlib, time
+
+def verify(headers, raw_body, secret):
+    sig_header = headers.get('X-Camaleonic-Signature', '')
+    parts = dict(kv.split('=', 1) for kv in sig_header.split(','))
+    t, v1 = parts.get('t'), parts.get('v1')
+    if not t or not v1:
+        return False
+    if abs(time.time() - int(t)) &gt; 300:
+        return False
+    expected = hmac.new(
+        secret.encode(),
+        f"{t}.{raw_body.decode()}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, v1)</code></pre>
+        </div>
+      </div>
+
+      <h3>Events</h3>
+      <table>
+        <thead><tr><th>Event</th><th>Fires when</th></tr></thead>
+        <tbody>
+          <tr><td><code>account.connected</code></td><td>An end-user finishes the OAuth flow and the seed succeeds.</td></tr>
+          <tr><td><code>account.disconnected</code></td><td><code>DELETE /v1/accounts/:id</code> succeeds.</td></tr>
+          <tr><td><code>account.refreshed</code></td><td>Token refresh worker swapped a fresh access token in.</td></tr>
+          <tr><td><code>token.refresh_failed</code></td><td>Platform rejected our refresh attempt — the end-user needs to reconnect.</td></tr>
+          <tr><td><code>token.expired</code></td><td>Stored token reached its issuer-side expiry without a refresh.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Retry policy</h3>
+      <p>
+        Failed deliveries retry on the following backoff:
+        <code>1m → 5m → 30m → 2h → 12h → 24h</code> (6 attempts total).
+        After that the delivery is marked <code>abandoned</code> and stops
+        retrying. Inspect deliveries via
+        <code>GET /v1/webhook-deliveries</code>.
+      </p>
+
+      <h2 id="auth">Authentication</h2>
+      <p>
+        Two credential types, two audiences. Never let the client browser
+        see a <code>cmlk_*</code> key — it can read every account in your
+        workspace.
+      </p>
+
+      <table>
+        <thead><tr><th>Credential</th><th>Where</th><th>Use</th></tr></thead>
+        <tbody>
+          <tr><td><code>cmlk_live_*</code></td><td>Your backend</td><td>All <code>/v1/*</code> calls. Long-lived. Hashed at rest, plaintext shown ONCE on issue.</td></tr>
+          <tr><td><code>cmlk_test_*</code></td><td>Your backend</td><td>Sandbox. Same surface, accounts marked <code>is_test</code>, webhooks not fired.</td></tr>
+          <tr><td><code>sdk_token</code> (JWT)</td><td>Browser</td><td>Minted per end-user via <code>POST /v1/sdk-tokens</code>. ≤30 min lifetime.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="errors">Errors</h2>
+      <table>
+        <thead><tr><th>Status</th><th>Meaning</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><code>400</code></td><td>Bad input (invalid platform, body fails schema)</td><td>Fix the request.</td></tr>
+          <tr><td><code>401</code></td><td>Missing / revoked API key, or token revoked upstream (<code>token_revoked</code>)</td><td>For <code>token_revoked</code>, prompt the end-user to reconnect via the SDK.</td></tr>
+          <tr><td><code>404</code></td><td>Account doesn't exist in this workspace</td><td>Re-check the id — cross-tenant ids return 404 by design.</td></tr>
+          <tr><td><code>429</code></td><td>Per-workspace rate limit exceeded</td><td>Back off; <code>Retry-After</code> header indicates seconds.</td></tr>
+          <tr><td><code>502</code></td><td>Upstream platform returned an unexpected error (<code>upstream_error</code>)</td><td>Transient — retry with backoff.</td></tr>
+          <tr><td><code>503</code></td><td>Upstream platform rate-limited us (<code>upstream_rate_limited</code>)</td><td>Honor <code>Retry-After</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Where to go next</h2>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="/api.html">Full API reference →</a>
+        <a class="btn btn-ghost" href="/sdk-demo.html">Live SDK demo</a>
+        <a class="btn btn-ghost" href="/openapi.yaml">openapi.yaml</a>
+      </div>
+    </main>
+
+    <footer>
+      <p>
+        Built by Camaleonic Analytics. Questions? Email
+        <a href="mailto:hello@camaleonicanalytics.com">hello@camaleonicanalytics.com</a>.
+      </p>
+    </footer>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <script>
+      // Tab switching for code-sample groups.
+      document.querySelectorAll('.tabs').forEach((tabs) => {
+        const panels = tabs.parentElement.querySelector('.tab-panels');
+        tabs.querySelectorAll('.tab').forEach((tab) => {
+          tab.addEventListener('click', () => {
+            const key = tab.dataset.tab;
+            tabs.querySelectorAll('.tab').forEach((t) =>
+              t.classList.toggle('active', t === tab),
+            );
+            panels.querySelectorAll('.tab-panel').forEach((p) =>
+              p.classList.toggle('active', p.dataset.panel === key),
+            );
+          });
+        });
+      });
+    </script>
   </body>
 </html>
