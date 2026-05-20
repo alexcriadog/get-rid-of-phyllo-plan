@@ -6,57 +6,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Public API for the Camaleonic Connect SaaS — connect social
-        accounts and read normalized profile/audience/content data across
-        six platforms."
+      content="Public API for the Camaleonic Connect SaaS — connect social accounts and read normalized profile/audience/content data across six platforms."
     />
-    <link
-      rel="icon"
-      type="image/svg+xml"
-      href="/favicon.svg"
-    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <style>
+      :root {
+        /* Brand tokens picked up by Scalar via its `--scalar-*` overrides
+           on .light-mode / .dark-mode. */
+        --scalar-color-1: #f4f4f4;
+        --scalar-color-accent: #3cffd0;
+        --scalar-background-1: #0e0e0e;
+        --scalar-background-2: #161616;
+        --scalar-background-3: #1c1c1c;
+        --scalar-border-color: #2a2a2a;
+        --scalar-font: 'Space Grotesk', system-ui, sans-serif;
+        --scalar-font-code: 'Space Mono', ui-monospace, monospace;
+      }
       body {
         margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background: #fafafa;
+        background: #0e0e0e;
       }
     </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
-    <redoc spec-url="/openapi.yaml" theme='{ "colors": { "primary": { "main": "#3cffd0" } }, "typography": { "fontFamily": "system-ui, sans-serif" } }'></redoc>
-    <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
-    <script>
-      // Redoc renders tag groups (SDK Tokens / Accounts / Webhooks) collapsed
-      // by default. label.click() is a TOGGLE — calling it on an already-open
-      // group closes it again. Use aria-expanded as the source of truth.
-      //
-      // We poll every 400ms for the first 10 seconds because Redoc's
-      // scroll-spy re-collapses groups when the user (or the load-time
-      // ScrollIntoView) lands them outside the active section. Once all 3
-      // tag groups are expanded twice in a row, stop polling.
-      (function () {
-        var stableTicks = 0;
-        var interval = setInterval(function () {
-          var tags = document.querySelectorAll(
-            'li[data-item-id^="tag/"]:not([data-item-id*="/paths/"])',
-          );
-          if (tags.length === 0) return;
-          var allOpen = true;
-          tags.forEach(function (item) {
-            var label = item.querySelector('label');
-            if (item.getAttribute('aria-expanded') === 'false' && label) {
-              label.click();
-              allOpen = false;
-            }
-          });
-          stableTicks = allOpen ? stableTicks + 1 : 0;
-          if (stableTicks >= 3) clearInterval(interval);
-        }, 400);
-        setTimeout(function () {
-          clearInterval(interval);
-        }, 10_000);
-      })();
-    </script>
+    <!-- Scalar renders every operation in the spec, grouped by tag,
+         expanded by default. No menu toggling, no missing endpoints. -->
+    <script
+      id="api-reference"
+      data-url="/openapi.yaml"
+      data-configuration='{
+        "theme": "default",
+        "darkMode": true,
+        "layout": "modern",
+        "showSidebar": true,
+        "hideDownloadButton": false,
+        "metaData": {
+          "title": "Camaleonic Connect API",
+          "description": "Public REST API to read normalized social-account data across Facebook, Instagram, TikTok, Threads, YouTube, and Twitch."
+        }
+      }'
+    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
   </body>
 </html>
