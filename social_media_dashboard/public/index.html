@@ -48,7 +48,7 @@
     <!-- Dashboard ─ shown when logged in ──────────────────────────────── -->
     <main id="dashboard-view" hidden>
       <!-- HERO: connect actions on electric-blue -->
-      <section class="section section--blue on-blue">
+      <section class="section section--blue on-blue sunburst">
         <div class="section__inner hero">
           <div>
             <span class="kicker">Your collection</span>
@@ -73,13 +73,13 @@
         </div>
       </section>
 
-      <!-- SHELF: cassette grid on paper -->
+      <!-- SHELF: cassette grid on paper. Cards are the colour story here. -->
       <section class="section">
         <div class="section__inner">
           <span class="kicker" style="background: var(--mint)">Your tapes</span>
           <h2 style="margin-top: 12px">Connected accounts</h2>
           <p class="muted" style="margin-top: 8px; max-width: 60ch">
-            Tap a cassette to peek its normalized profile data. The
+            Tap a cassette to see profile + stats + recent posts. The
             disconnect button revokes the stored OAuth tokens.
           </p>
 
@@ -98,8 +98,12 @@
         <span id="detail-title">Account detail</span>
         <button data-close aria-label="Close">✕</button>
       </header>
-      <pre id="detail-body">Loading…</pre>
+      <div id="detail-body" class="modal-body">
+        <div class="modal-loading">Loading…</div>
+      </div>
       <footer>
+        <a id="detail-link" class="btn btn--ghost" target="_blank" rel="noopener" hidden>Open on platform ↗</a>
+        <span class="grow"></span>
         <button id="disconnect-btn" class="btn btn--danger">Disconnect</button>
       </footer>
     </dialog>

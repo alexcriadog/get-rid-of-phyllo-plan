@@ -154,13 +154,33 @@ app.post('/api/sdk-token', requireAuth, async (req, res) => {
 
 // List accounts belonging to the logged-in user. Scoping is enforced
 // server-side via the `end_user_id` query param.
+//
+// To get avatars in the list (the bare /v1/accounts response doesn't
+// carry them), we fan out one /identity call per account in parallel.
+// Acceptable for demo scale (a handful of accounts per user). Each
+// /identity is a LIVE platform call; failures fall back to null and the
+// frontend renders a placeholder.
 app.get('/api/accounts', requireAuth, async (req, res) => {
   const qs = new URLSearchParams({
     end_user_id: req.session.email,
     limit: '100',
   });
-  const { status, body } = await camaleonic(`/v1/accounts?${qs}`);
-  res.status(status).json(body);
+  const list = await camaleonic(`/v1/accounts?${qs}`);
+  if (!list.ok) return res.status(list.status).json(list.body);
+
+  const rows = list.body?.data ?? [];
+  const enriched = await Promise.all(
+    rows.map(async (row) => {
+      const id = encodeURIComponent(row.id);
+      const ident = await camaleonic(`/v1/accounts/${id}/identity`);
+      return {
+        ...row,
+        profile_image_url: ident.ok ? ident.body?.profile_image_url ?? null : null,
+        username: ident.ok ? ident.body?.username ?? null : null,
+      };
+    }),
+  );
+  res.json({ data: enriched, meta: { count: enriched.length } });
 });
 
 // Read normalized identity for one of the user's accounts. Double-check
@@ -176,6 +196,31 @@ app.get('/api/accounts/:id/identity', requireAuth, async (req, res) => {
     `/v1/accounts/${encodeURIComponent(id)}/identity`,
   );
   res.status(identity.status).json(identity.body);
+});
+
+// Rich detail for one account: identity + engagement aggregate + a handful
+// of recent posts, fetched in parallel. The modal calls this once on open.
+app.get('/api/accounts/:id/detail', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const meta = await camaleonic(`/v1/accounts/${encodeURIComponent(id)}`);
+  if (!meta.ok) return res.status(meta.status).json(meta.body);
+  if (meta.body?.end_user_id !== req.session.email) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  const safeId = encodeURIComponent(id);
+  const [identity, engagement, content] = await Promise.all([
+    camaleonic(`/v1/accounts/${safeId}/identity`),
+    camaleonic(`/v1/accounts/${safeId}/engagement?limit=25`),
+    camaleonic(`/v1/accounts/${safeId}/content?limit=6`),
+  ]);
+
+  res.json({
+    account: meta.body,
+    identity: identity.ok ? identity.body : { error: identity.body },
+    engagement: engagement.ok ? engagement.body : { error: engagement.body },
+    content: content.ok ? content.body : { error: content.body },
+  });
 });
 
 // Disconnect (DELETE). Same ownership check as identity.

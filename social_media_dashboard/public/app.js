@@ -155,7 +155,7 @@ function renderAccounts(accounts) {
   accountsEmpty.hidden = accounts.length > 0;
   for (const a of accounts) {
     const badge = PLATFORM_BADGE[a.platform] ?? { tape: '#8b8f99', label: '??' };
-    const handle = a.handle || a.display_name || a.canonical_user_id;
+    const handle = a.username || a.handle || a.display_name || a.canonical_user_id;
     const card = document.createElement('button');
     card.className = 'account-card';
     card.innerHTML = `
@@ -166,6 +166,13 @@ function renderAccounts(accounts) {
       <div class="cassette__body">
         <div class="cassette__tape" style="background:${badge.tape}">
           <span class="cassette__reel"></span>
+          <div class="cassette__avatar">
+            ${
+              a.profile_image_url
+                ? `<img src="${escapeAttr(a.profile_image_url)}" alt="" referrerpolicy="no-referrer" onerror="this.replaceWith(document.createTextNode('${escape(badge.label)}'))" />`
+                : `${escape(badge.label)}`
+            }
+          </div>
           <span class="cassette__reel"></span>
         </div>
         <div class="cassette__handle">${escape(handle)}</div>
@@ -180,6 +187,10 @@ function renderAccounts(accounts) {
   }
 }
 
+function escapeAttr(s) {
+  return escape(s);
+}
+
 function statusClass(account) {
   if (account.is_test) return 'test';
   if (account.status === 'ready') return 'ready';
@@ -191,15 +202,116 @@ function statusClass(account) {
 async function openDetail(account) {
   detailAccountId = account.id;
   detailTitle.textContent = `${account.platform} · ${account.handle ?? account.canonical_user_id}`;
-  detailBody.textContent = 'Loading…';
+  detailBody.innerHTML = '<div class="modal-loading">Loading profile…</div>';
+  document.getElementById('detail-link').hidden = true;
   detail.showModal();
-  const res = await fetch(`/api/accounts/${encodeURIComponent(account.id)}/identity`);
-  const body = await res.json();
+
+  const res = await fetch(`/api/accounts/${encodeURIComponent(account.id)}/detail`);
   if (!res.ok) {
-    detailBody.textContent = `Error (HTTP ${res.status})\n\n${JSON.stringify(body, null, 2)}`;
+    const body = await res.text();
+    detailBody.innerHTML = `<pre style="padding:20px">Error (HTTP ${res.status})\n\n${escape(body)}</pre>`;
     return;
   }
-  detailBody.textContent = JSON.stringify(body, null, 2);
+  const data = await res.json();
+  renderDetail(account, data);
+}
+
+function renderDetail(account, data) {
+  const id = data.identity ?? {};
+  const eng = data.engagement ?? {};
+  const ct = data.content?.data ?? [];
+
+  // External profile link
+  const link = document.getElementById('detail-link');
+  if (id.profile_url) {
+    link.href = id.profile_url;
+    link.hidden = false;
+  } else {
+    link.hidden = true;
+  }
+
+  const badge = PLATFORM_BADGE[account.platform] ?? { tape: '#8b8f99', label: '??' };
+  const totals = eng.totals ?? {};
+  const er = typeof eng.engagement_rate === 'number' ? (eng.engagement_rate * 100).toFixed(2) + '%' : '—';
+
+  detailBody.innerHTML = `
+    <div class="profile-head">
+      <div class="profile-avatar" style="background:${badge.tape}">
+        ${
+          id.profile_image_url
+            ? `<img src="${escapeAttr(id.profile_image_url)}" alt="" referrerpolicy="no-referrer" />`
+            : escape(badge.label)
+        }
+      </div>
+      <div class="profile-meta">
+        <h2 class="profile-name">${escape(id.full_name || id.username || account.handle || account.canonical_user_id)}</h2>
+        <div class="profile-handle">
+          @${escape(id.username || account.handle || account.canonical_user_id)}
+          ${id.is_verified ? '<span class="verified">verified ✓</span>' : ''}
+        </div>
+        ${id.biography ? `<p class="profile-bio">${escape(id.biography)}</p>` : ''}
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      ${statTile('Followers', formatN(id.followers_count), 'accent')}
+      ${statTile('Following', formatN(id.following_count), 'accent-3')}
+      ${statTile('Posts',     formatN(id.posts_count),     'accent-4')}
+      ${statTile('Eng. rate', er, 'accent-2', `${eng.window?.sample_size ?? 0} posts sampled`)}
+    </div>
+
+    <div class="stat-grid">
+      ${statTile('Likes',    formatN(totals.likes),    'accent-3', 'totals')}
+      ${statTile('Comments', formatN(totals.comments), 'accent-3', 'totals')}
+      ${statTile('Shares',   formatN(totals.shares),   'accent-3', 'totals')}
+      ${statTile('Views',    formatN(totals.views),    'accent-3', 'totals')}
+    </div>
+
+    ${ct.length ? `
+      <div class="section-title">Recent content</div>
+      <div class="content-grid">
+        ${ct.slice(0, 6).map(renderThumb).join('')}
+      </div>
+    ` : ''}
+  `;
+}
+
+function statTile(label, value, accent = '', subvalue = '') {
+  return `
+    <div class="stat-tile ${accent ? 'stat-tile--' + accent : ''}">
+      <div class="label">${escape(label)}</div>
+      <div class="value">${escape(value)}</div>
+      ${subvalue ? `<div class="subvalue">${escape(subvalue)}</div>` : ''}
+    </div>
+  `;
+}
+
+function renderThumb(item) {
+  const thumb = item.thumbnailUrl || item.thumbnail_url || (item.mediaUrls && item.mediaUrls[0]) || '';
+  const caption = (item.caption || item.title || '').slice(0, 120);
+  const metrics = item.metrics ?? {};
+  const url = item.permalink || item.permalink_url || '';
+  const body = `
+    <div class="content-thumb__media" style="${thumb ? `background-image:url('${escapeAttr(thumb)}')` : ''}"></div>
+    ${caption ? `<div class="content-thumb__caption">${escape(caption)}</div>` : ''}
+    <div class="content-thumb__metrics">
+      ${metrics.likes != null ? `<span>♥ ${formatN(metrics.likes)}</span>` : ''}
+      ${metrics.comments != null ? `<span>💬 ${formatN(metrics.comments)}</span>` : ''}
+      ${metrics.views != null ? `<span>▶ ${formatN(metrics.views)}</span>` : ''}
+    </div>
+  `;
+  return url
+    ? `<a class="content-thumb" href="${escapeAttr(url)}" target="_blank" rel="noopener">${body}</a>`
+    : `<div class="content-thumb">${body}</div>`;
+}
+
+function formatN(n) {
+  if (n === null || n === undefined) return '—';
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '—';
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M';
+  if (v >= 1_000) return (v / 1_000).toFixed(1) + 'k';
+  return String(v);
 }
 
 detail.querySelector('[data-close]').onclick = () => detail.close();

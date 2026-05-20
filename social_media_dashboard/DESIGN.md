@@ -174,8 +174,10 @@ It anchors the era without being noisy.
 Or use a static SVG: 24 white rays emanating from a single corner
 (`top-left` or `bottom-right`), ~6% opacity, behind content.
 
-- The motif sits on `--yellow`, `--mint`, `--bubblegum`. **Not** on
-  `--electric-blue` (too noisy on saturated blue).
+- The motif sits on **every** coloured section (`--yellow`, `--mint`,
+  `--bubblegum`, `--electric-blue`). On dark blue the rays are pure white
+  at ~18% opacity; on light fills they're pure white at ~22%. They are
+  always visible, never decorative-only.
 - Never overlay the motif on top of cards / buttons — only on the section
   fill underneath.
 
