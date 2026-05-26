@@ -14,4 +14,7 @@ describe('connect shell machine', () => {
   it('initialStep records the fixed platform', () => {
     expect(initialStep('twitch').platform).toBe('twitch');
   });
+  it('initialStep starts at consent even with a fixed platform', () => {
+    expect(initialStep('twitch').step).toBe<Step>('consent');
+  });
 });

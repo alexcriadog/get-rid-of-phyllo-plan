@@ -2,7 +2,7 @@ import axios from 'axios';
 import { verifySdkToken } from '../../lib/oauth-context';
 import { fetchConnections } from '../../lib/connections';
 import { ConnectShell } from './ConnectShell';
-import type { PlatformKey } from './shell-machine';
+import { isPlatformKey, type PlatformKey } from './shell-machine';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +36,8 @@ export default async function ConnectPage({
   const ws = first(sp.ws);
   const token = first(sp.token);
   const origin = first(sp.origin);
-  const platform = first(sp.platform) as PlatformKey | undefined;
+  const rawPlatform = first(sp.platform);
+  const platform: PlatformKey | undefined = isPlatformKey(rawPlatform) ? rawPlatform : undefined;
 
   if (!ws || !token) {
     return (
@@ -54,11 +55,17 @@ export default async function ConnectPage({
     const claims = await verifySdkToken(token);
     endUserId = claims.sub;
   } catch (e) {
-    error = e instanceof Error ? e.message : 'Invalid connect token';
+    console.error('[connect] sdk token verify failed:', e);
+    error = 'This connect link is invalid or has expired. Restart from the app you came from.';
   }
 
   const branding = await fetchBranding(ws);
-  const connections = !error && platform ? await fetchConnections(ws, endUserId, platform) : [];
+  const connections = !error ? await fetchConnections(ws, endUserId) : [];
+
+  const brandLogo =
+    typeof branding?.logo_url === 'string' && /^https?:\/\//.test(branding.logo_url)
+      ? branding.logo_url
+      : null;
 
   return (
     <ConnectShell
@@ -67,7 +74,7 @@ export default async function ConnectPage({
       origin={origin ?? ''}
       fixedPlatform={platform}
       brandTitle={branding?.title ?? 'Camaleonic'}
-      brandLogo={branding?.logo_url ?? null}
+      brandLogo={brandLogo}
       initialConnections={connections}
       tokenError={error}
     />

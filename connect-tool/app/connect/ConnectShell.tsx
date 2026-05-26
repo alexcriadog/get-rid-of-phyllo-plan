@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Connection } from '../../lib/connections';
-import { initialStep, nextAfterConsent, type PlatformKey, type Step } from './shell-machine';
+import { initialStep, nextAfterConsent, isPlatformKey, type PlatformKey, type Step } from './shell-machine';
 
 const PLATFORMS: Array<{ key: PlatformKey; label: string; provider: string }> = [
   { key: 'facebook', label: 'Facebook', provider: 'Facebook' },
@@ -35,8 +35,10 @@ export function ConnectShell(props: Props) {
   const [platform, setPlatform] = useState<PlatformKey | undefined>(init.platform);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(props.tokenError);
+  const popupTimerRef = useRef<number | null>(null);
 
-  // Tell the host SDK to size the modal to our content.
+  // Size the modal to content. One-way: we post height; the host sets a
+  // fixed pixel size, so this does not feed back into a resize loop.
   useEffect(() => {
     const post = () =>
       window.parent?.postMessage(
@@ -56,16 +58,24 @@ export function ConnectShell(props: Props) {
       if (ev.origin !== window.location.origin) return;
       const d = ev.data as { type?: string; sessionId?: string; kind?: string; platform?: string };
       if (d?.type !== 'camaleonic.oauth.complete' || !d.sessionId) return;
+      const msgPlatform = isPlatformKey(d.platform) ? d.platform : platform;
       const originQ = props.origin ? `&origin=${encodeURIComponent(props.origin)}` : '';
       const dest =
         d.kind === 'fb-picker'
           ? `/facebook/pages?session=${encodeURIComponent(d.sessionId)}&embed=1${originQ}`
-          : `/confirm/${encodeURIComponent(d.platform || platform || '')}?session=${encodeURIComponent(d.sessionId)}&embed=1${originQ}`;
+          : `/confirm/${encodeURIComponent(msgPlatform || '')}?session=${encodeURIComponent(d.sessionId)}&embed=1${originQ}`;
+      if (d.kind !== 'fb-picker' && !msgPlatform) return; // ignore relay with no resolvable platform
       window.location.href = dest;
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
   }, [platform, props.origin]);
+
+  useEffect(() => {
+    return () => {
+      if (popupTimerRef.current !== null) window.clearInterval(popupTimerRef.current);
+    };
+  }, []);
 
   function exit() {
     window.parent?.postMessage({ type: 'camaleonic.connect.exit' }, props.origin || '*');
@@ -85,8 +95,12 @@ export function ConnectShell(props: Props) {
       return;
     }
     setConnecting(true);
-    const timer = window.setInterval(() => {
-      if (popup.closed) { window.clearInterval(timer); setConnecting(false); }
+    popupTimerRef.current = window.setInterval(() => {
+      if (popup.closed) {
+        if (popupTimerRef.current !== null) window.clearInterval(popupTimerRef.current);
+        popupTimerRef.current = null;
+        setConnecting(false);
+      }
     }, 600);
   }
 
@@ -131,13 +145,19 @@ export function ConnectShell(props: Props) {
         <div>
           <h2 className="v-display size-secondary">{labelFor(platform)} connections</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '12px 0' }}>
-            {props.initialConnections.length === 0 && <p className="v-body">No accounts connected yet.</p>}
-            {props.initialConnections.map((c) => (
-              <div key={c.id} className="v-row">
-                <span className="v-row-val">{c.handle || c.display_name || c.id}</span>
-                <span className="v-meta">{c.status}</span>
-              </div>
-            ))}
+            {(() => {
+              const conns = props.initialConnections.filter((c) => c.platform === platform);
+              return conns.length === 0 ? (
+                <p className="v-body">No accounts connected yet.</p>
+              ) : (
+                conns.map((c) => (
+                  <div key={c.id} className="v-row">
+                    <span className="v-row-val">{c.handle || c.display_name || c.id}</span>
+                    <span className="v-meta">{c.status}</span>
+                  </div>
+                ))
+              );
+            })()}
           </div>
           <button className="v-pill-primary" onClick={() => setStep('guidance')}>
             + Add {labelFor(platform)} account
@@ -148,16 +168,19 @@ export function ConnectShell(props: Props) {
         </div>
       )}
 
-      {step === 'guidance' && platform && (
+      {step === 'guidance' && platform && (() => {
+        const g = guidanceFor(platform);
+        return (
         <div>
-          <h2 className="v-display size-secondary">{guidanceFor(platform).title}</h2>
-          <p className="v-body" style={{ margin: '10px 0' }}>{guidanceFor(platform).body}</p>
+          <h2 className="v-display size-secondary">{g.title}</h2>
+          <p className="v-body" style={{ margin: '10px 0' }}>{g.body}</p>
           <button className="v-pill-primary" disabled={connecting} onClick={() => login(platform)}>
             {connecting ? 'Waiting for login…' : `Login with ${providerFor(platform)}`}
           </button>
           <button className="v-meta" style={{ marginLeft: 12 }} onClick={() => setStep('connections')}>← Back</button>
         </div>
-      )}
+        );
+      })()}
     </Frame>
   );
 }
