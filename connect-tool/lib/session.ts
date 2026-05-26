@@ -75,6 +75,9 @@ export interface OAuthContextSession {
    * page directly).
    */
   openerOrigin?: string;
+  /** True when the OAuth window was launched from the embedded iframe modal.
+   *  Drives the callback to redirect to the /oauth/complete relay page. */
+  embedded?: boolean;
   createdAt: number;
 }
 

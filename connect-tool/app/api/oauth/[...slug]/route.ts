@@ -12,10 +12,11 @@ import {
   type CallbackResult,
   type PlatformKey,
 } from '../../../../lib/platforms';
-import { putSession } from '../../../../lib/session';
+import { putSession, getOAuthContextSession } from '../../../../lib/session';
 import {
   setContextCookie,
   verifySdkToken,
+  getContextCookie,
 } from '../../../../lib/oauth-context';
 
 const VALID_PLATFORMS = new Set<PlatformKey>([
@@ -143,6 +144,7 @@ export async function GET(
           );
         }
         const origin = sp.get('origin') ?? undefined;
+        const embedded = sp.get('embed') === '1';
         contextSessionId = putSession({
           kind: 'oauth-context',
           workspaceId: claims.ws,
@@ -151,6 +153,7 @@ export async function GET(
           allowedPlatforms: claims.platforms,
           environment: claims.env,
           openerOrigin: origin,
+          embedded,
         });
       } catch (err) {
         return errorRedirect(
@@ -203,18 +206,20 @@ export async function GET(
         callbackInFlight.set(cacheKey, entry);
       }
       const result = await entry.promise;
+      const ctxId = getContextCookie(req);
+      const ctx = ctxId ? getOAuthContextSession(ctxId) : null;
+      const embedded = !!ctx?.embedded;
+
       if (result.kind === 'fb-picker') {
-        return NextResponse.redirect(
-          `${baseUrl}/facebook/pages?session=${result.sessionId}`,
-          { status: 302 },
-        );
+        const target = embedded
+          ? `${baseUrl}/oauth/complete?session=${result.sessionId}&kind=fb-picker&platform=facebook`
+          : `${baseUrl}/facebook/pages?session=${result.sessionId}`;
+        return NextResponse.redirect(target, { status: 302 });
       }
-      // TikTok / Threads / YouTube / Twitch — operator still needs to
-      // confirm products before we POST to the POC seed endpoint.
-      return NextResponse.redirect(
-        `${baseUrl}/confirm/${result.platform}?session=${result.sessionId}`,
-        { status: 302 },
-      );
+      const target = embedded
+        ? `${baseUrl}/oauth/complete?session=${result.sessionId}&kind=confirm&platform=${result.platform}`
+        : `${baseUrl}/confirm/${result.platform}?session=${result.sessionId}`;
+      return NextResponse.redirect(target, { status: 302 });
     } catch (err) {
       return errorRedirect(
         baseUrl,
