@@ -12,7 +12,10 @@ export function middleware(req: NextRequest): NextResponse {
 
   if (searchParams.get('embed') === '1') {
     const origin = searchParams.get('origin');
-    const ancestors = origin ? `'self' ${origin}` : `'self'`;
+    // Only echo a well-formed http(s) origin into the directive so a
+    // malformed/multi-value param can't produce a broken CSP header.
+    const safeOrigin = origin && /^https?:\/\/[^\s;'"]+$/.test(origin) ? origin : null;
+    const ancestors = safeOrigin ? `'self' ${safeOrigin}` : `'self'`;
     res.headers.set('Content-Security-Policy', `frame-ancestors ${ancestors};`);
     res.headers.delete('X-Frame-Options');
   } else {
