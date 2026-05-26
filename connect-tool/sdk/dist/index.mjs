@@ -8,8 +8,9 @@ var MSG = {
   success: "camaleonic.connect.success",
   error: "camaleonic.connect.error"
 };
-var DEFAULT_HEIGHT = 600;
-var MODAL_WIDTH = 460;
+var DEFAULT_HEIGHT = 480;
+var MODAL_WIDTH = 440;
+var MIN_HEIGHT = 140;
 function resolveBaseUrl(opts) {
   if (typeof opts.baseUrl === "string" && opts.baseUrl.length > 0) {
     return opts.baseUrl.replace(/\/+$/, "");
@@ -145,7 +146,7 @@ function init(opts) {
       const data = ev.data;
       if (!data || typeof data.type !== "string") return;
       if (data.type === MSG.resize && modal && typeof data.height === "number") {
-        modal.style.height = Math.max(360, data.height) + "px";
+        modal.style.height = Math.max(MIN_HEIGHT, data.height) + "px";
       } else if (data.type === MSG.success) {
         emitSuccess({ accountIds: Array.isArray(data.accountIds) ? data.accountIds : [], platform: data.platform ?? plat ?? null });
       } else if (data.type === MSG.exit) {

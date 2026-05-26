@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { useEmbedAutosize } from '../../lib/useEmbedAutosize';
+import { PlatformIcon, BRAND } from '../connect/PlatformIcon';
+import { isPlatformKey } from '../connect/shell-machine';
 
 export function SuccessClient() {
   const params = useSearchParams();
@@ -20,15 +22,10 @@ export function SuccessClient() {
     }
   }
 
-  // SDK widget integration. When the page is loaded inside a popup opened
-  // by CamaleonicConnect.init(), notify the opener and close the popup so
-  // the client app can resume its flow without manual interaction.
-  //
-  // - Depend on the RAW string query params (not the parsed array) so the
-  //   effect doesn't re-fire when React renders again with a fresh array
-  //   reference. Without this the SDK gets duplicate onSuccess calls.
-  // - Belt-and-braces: a ref guard makes the postMessage idempotent in
-  //   case Strict Mode (or a future change) fires the effect twice anyway.
+  // SDK widget integration. When loaded inside the SDK (iframe modal or
+  // legacy popup), notify the host and let it resume. Depend on the RAW
+  // string params so the effect doesn't re-fire on a fresh array reference;
+  // a ref guard keeps the postMessage idempotent under Strict Mode.
   const openerOrigin = params.get('opener_origin') ?? '';
   const embedded = params.get('embed') === '1';
   useEmbedAutosize(embedded, openerOrigin);
@@ -65,48 +62,74 @@ export function SuccessClient() {
     return () => window.clearTimeout(timer);
   }, [accountsRaw, openerOrigin, platform, embedded]);
 
-  const adminUrl =
-    process.env.NEXT_PUBLIC_POC_ADMIN_URL ?? 'http://localhost:3001/admin';
+  // ── Embedded: clean, on-brand confirmation (host SDK closes the modal) ──
+  if (embedded) {
+    const pk = isPlatformKey(platform) ? platform : null;
+    const handle = typeof summary?.handle === 'string' ? (summary.handle as string) : '';
+    return (
+      <div className="cml">
+        <header className="cml-head">
+          <div className="cml-brand"><span className="cml-brand__name">Camaleonic</span></div>
+          <button className="cml-close" aria-label="Close" onClick={() => window.parent?.postMessage({ type: 'camaleonic.connect.exit' }, openerOrigin || '*')}>✕</button>
+        </header>
+        <div className="cml-body">
+          <div className="cml-step cml-center">
+            <div className="cml-hero">
+              <span className="cml-hero__ring" style={{ width: 64, height: 64, borderRadius: 20 }}>
+                <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+              </span>
+            </div>
+            <h2 className="cml-title">You’re connected</h2>
+            <p className="cml-sub">
+              {pk ? `Your ${BRAND[pk].label} account` : 'Your account'}{handle ? ` @${handle}` : ''} is now linked to Camaleonic.
+            </p>
+            {pk && (
+              <div className="cml-list" style={{ marginTop: 18 }}>
+                {accounts.map((id) => (
+                  <div key={id} className="cml-row">
+                    <PlatformIcon platform={pk} />
+                    <div className="cml-row__meta">
+                      <div className="cml-row__name">{handle || `${BRAND[pk].label} account`}</div>
+                      <div className="cml-row__sub">Connected</div>
+                    </div>
+                    <span className="cml-status">Connected</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
+  // ── Standalone / operator view (legacy, dark theme) ──
+  const adminUrl = process.env.NEXT_PUBLIC_POC_ADMIN_URL ?? 'http://localhost:3001/admin';
   return (
-    <div className={embedded ? 'v-canvas v-canvas--embed' : 'v-canvas'}>
+    <div className="v-canvas">
       <div className="v-shell">
         <header className="v-header">
-          <Link className="v-meta" href="/">
-            ← Back
-          </Link>
+          <Link className="v-meta" href="/">← Back</Link>
           <span className="v-eyebrow">Connected</span>
         </header>
 
-        <span className="v-tag mint" style={{ marginBottom: 16 }}>
-          {platform || 'platform'}
-        </span>
+        <span className="v-tag mint" style={{ marginBottom: 16 }}>{platform || 'platform'}</span>
         <h1 className="v-display size-secondary">Token handed off.</h1>
         <p className="v-body" style={{ maxWidth: 640, marginBottom: 32 }}>
-          The POC has accepted the credentials and started seeding sync
-          jobs. Identity, audience, engagement and the rest will populate
-          on the next cadence tick.
+          The POC has accepted the credentials and started seeding sync jobs.
+          Identity, audience, engagement and the rest will populate on the
+          next cadence tick.
         </p>
 
         <div className="v-summary">
           <Row label="Platform" value={platform} />
-          <Row
-            label="Account ids"
-            value={accounts.length ? accounts.join(', ') : '—'}
-          />
-          {summary &&
-            Object.entries(summary).map(([k, v]) => (
-              <Row key={k} label={k} value={String(v)} />
-            ))}
+          <Row label="Account ids" value={accounts.length ? accounts.join(', ') : '—'} />
+          {summary && Object.entries(summary).map(([k, v]) => <Row key={k} label={k} value={String(v)} />)}
         </div>
 
         <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
-          <Link className="v-pill-primary" href={`${adminUrl}/accounts`}>
-            See accounts in POC →
-          </Link>
-          <Link className="v-pill-outline-mint" href="/">
-            Connect another
-          </Link>
+          <Link className="v-pill-primary" href={`${adminUrl}/accounts`}>See accounts in POC →</Link>
+          <Link className="v-pill-outline-mint" href="/">Connect another</Link>
         </div>
       </div>
     </div>

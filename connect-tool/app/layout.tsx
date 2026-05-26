@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import '../styles/globals.css';
+import '../styles/embed.css';
 
 export const metadata: Metadata = {
   title: 'Connect — Camaleonic',
@@ -31,7 +32,7 @@ export default function RootLayout({
         />
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
         />
         <link rel="mask-icon" href="/favicon.svg" color="#3cffd0" />
       </head>

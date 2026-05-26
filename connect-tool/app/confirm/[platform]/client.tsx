@@ -95,14 +95,13 @@ export function ConfirmClient({
           <Link className="v-meta" href="/">
             ← Back
           </Link>
-          <span className="v-eyebrow">{platform} confirm</span>
+          <span className="v-eyebrow">Almost done</span>
         </header>
 
-        <h1 className="v-display size-secondary">Pick what to sync.</h1>
+        <h1 className="v-display size-secondary">Choose what to sync</h1>
         <p className="v-body" style={{ maxWidth: 640, marginBottom: 24 }}>
-          OAuth succeeded. Select which products to enable on this account
-          before we hand the token to the POC. You can change cadence and
-          enable / disable individual products later from the admin UI.
+          Select what Camaleonic can sync from this account. You can change
+          this anytime.
         </p>
 
         <div

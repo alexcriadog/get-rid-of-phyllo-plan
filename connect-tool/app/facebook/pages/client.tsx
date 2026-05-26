@@ -149,15 +149,14 @@ export function FacebookPagesClient({
           <Link className="v-meta" href="/">
             ← Back
           </Link>
-          <span className="v-eyebrow">Facebook page picker</span>
+          <span className="v-eyebrow">Almost done</span>
         </header>
 
-        <h1 className="v-display size-secondary">Pick which to connect.</h1>
+        <h1 className="v-display size-secondary">Choose your Pages</h1>
         <p className="v-body" style={{ maxWidth: 640, marginBottom: 24 }}>
-          {pages.length} {pages.length === 1 ? 'Page' : 'Pages'} discovered.
-          Tick a Page to seed it as a Facebook account on the POC. If the
-          Page has an Instagram business account attached, the IG checkbox
-          appears too — tick it to also seed IG with the same Page token.
+          {pages.length} {pages.length === 1 ? 'Page' : 'Pages'} found. Select the
+          ones you’d like to connect. If a Page has an Instagram business account
+          linked, tick “+ IG” to connect it too.
         </p>
 
         {err && <div className="v-banner danger">↯ {err}</div>}

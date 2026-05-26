@@ -3,20 +3,30 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Connection } from '../../lib/connections';
 import { initialStep, nextAfterConsent, isPlatformKey, type PlatformKey, type Step } from './shell-machine';
+import { PlatformIcon, BRAND } from './PlatformIcon';
 
-const PLATFORMS: Array<{ key: PlatformKey; label: string; provider: string }> = [
-  { key: 'facebook', label: 'Facebook', provider: 'Facebook' },
-  { key: 'instagram', label: 'Instagram', provider: 'Facebook' },
-  { key: 'youtube', label: 'YouTube', provider: 'Google' },
-  { key: 'tiktok', label: 'TikTok', provider: 'TikTok' },
-  { key: 'threads', label: 'Threads', provider: 'Threads' },
-  { key: 'twitch', label: 'Twitch', provider: 'Twitch' },
-];
+const ORDER: PlatformKey[] = ['instagram', 'facebook', 'youtube', 'tiktok', 'twitch', 'threads'];
 
 // Instagram connects via Facebook OAuth (see lib/platforms.ts).
-function startPlatform(p: PlatformKey): PlatformKey {
-  return p === 'instagram' ? 'facebook' : p;
-}
+const startPlatform = (p: PlatformKey): PlatformKey => (p === 'instagram' ? 'facebook' : p);
+
+const ShieldIcon = (
+  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3l7 3v5.5c0 4.3-3 7.7-7 9.5-4-1.8-7-5.2-7-9.5V6l7-3z" />
+    <path d="M9 12l2.2 2.2L15.5 10" />
+  </svg>
+);
+const CheckIcon = (
+  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 12.5l4 4L19 7" />
+  </svg>
+);
+
+const TRUST = [
+  { t: 'Your account is in safe hands', d: 'We never post or change anything without your action.' },
+  { t: 'You stay in control', d: 'Approve only the accounts and permissions you choose.' },
+  { t: 'Encrypted & secure', d: 'Your data is encrypted in transit and at rest.' },
+];
 
 interface Props {
   ws: string;
@@ -35,21 +45,21 @@ export function ConnectShell(props: Props) {
   const [platform, setPlatform] = useState<PlatformKey | undefined>(init.platform);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(props.tokenError);
-  const popupTimerRef = useRef<number | null>(null);
+  const popupTimer = useRef<number | null>(null);
 
   // Size the modal to content. One-way: we post height; the host sets a
   // fixed pixel size, so this does not feed back into a resize loop.
   useEffect(() => {
     const post = () =>
       window.parent?.postMessage(
-        { type: 'camaleonic.connect.resize', height: document.body.scrollHeight + 24 },
+        { type: 'camaleonic.connect.resize', height: document.body.scrollHeight },
         props.origin || '*',
       );
     post();
     const ro = new ResizeObserver(post);
     ro.observe(document.body);
     return () => ro.disconnect();
-  }, [step, props.origin]);
+  }, [step, error, connecting, props.origin]);
 
   // Relay from the provider-login window → navigate the iframe to the
   // existing confirm / page-picker page in embed mode.
@@ -64,18 +74,14 @@ export function ConnectShell(props: Props) {
         d.kind === 'fb-picker'
           ? `/facebook/pages?session=${encodeURIComponent(d.sessionId)}&embed=1${originQ}`
           : `/confirm/${encodeURIComponent(msgPlatform || '')}?session=${encodeURIComponent(d.sessionId)}&embed=1${originQ}`;
-      if (d.kind !== 'fb-picker' && !msgPlatform) return; // ignore relay with no resolvable platform
+      if (d.kind !== 'fb-picker' && !msgPlatform) return;
       window.location.href = dest;
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
   }, [platform, props.origin]);
 
-  useEffect(() => {
-    return () => {
-      if (popupTimerRef.current !== null) window.clearInterval(popupTimerRef.current);
-    };
-  }, []);
+  useEffect(() => () => { if (popupTimer.current !== null) window.clearInterval(popupTimer.current); }, []);
 
   function exit() {
     window.parent?.postMessage({ type: 'camaleonic.connect.exit' }, props.origin || '*');
@@ -84,10 +90,9 @@ export function ConnectShell(props: Props) {
   function login(p: PlatformKey) {
     const sp = startPlatform(p);
     const qs = new URLSearchParams({ ws: props.ws, token: props.token, origin: props.origin, embed: '1' });
-    const url = `/api/oauth/start/${sp}?${qs.toString()}`;
-    const popup = window.open(url, 'camaleonic-oauth', 'popup=yes,width=560,height=720');
+    const popup = window.open(`/api/oauth/start/${sp}?${qs.toString()}`, 'camaleonic-oauth', 'popup=yes,width=560,height=720');
     if (!popup) {
-      setError('Your browser blocked the login window. Allow popups and try again.');
+      setError('Your browser blocked the login window. Please allow pop-ups and try again.');
       window.parent?.postMessage(
         { type: 'camaleonic.connect.error', code: 'popup_blocked', message: 'Provider login popup blocked' },
         props.origin || '*',
@@ -95,125 +100,132 @@ export function ConnectShell(props: Props) {
       return;
     }
     setConnecting(true);
-    popupTimerRef.current = window.setInterval(() => {
+    popupTimer.current = window.setInterval(() => {
       if (popup.closed) {
-        if (popupTimerRef.current !== null) window.clearInterval(popupTimerRef.current);
-        popupTimerRef.current = null;
+        if (popupTimer.current !== null) window.clearInterval(popupTimer.current);
+        popupTimer.current = null;
         setConnecting(false);
       }
     }, 600);
   }
 
-  if (error) {
-    return (
-      <Frame title={props.brandTitle} logo={props.brandLogo} onClose={exit}>
-        <div className="v-banner danger">↯ {error}</div>
-      </Frame>
-    );
-  }
+  const conns = platform ? props.initialConnections.filter((c) => c.platform === platform) : [];
 
   return (
-    <Frame title={props.brandTitle} logo={props.brandLogo} onClose={exit}>
-      {step === 'consent' && (
-        <div style={{ textAlign: 'center' }}>
-          <h2 className="v-display size-secondary">{props.brandTitle} uses Camaleonic to link your accounts</h2>
-          <ul style={{ listStyle: 'none', padding: 0, textAlign: 'left', margin: '16px 0' }}>
-            <li className="v-body">✓ Your account is in safe hands</li>
-            <li className="v-body">✓ Your consent matters</li>
-            <li className="v-body">✓ Your data is safe and encrypted</li>
-          </ul>
-          <button className="v-pill-primary" onClick={() => setStep(nextAfterConsent(props.fixedPlatform))}>
-            Continue
-          </button>
+    <div className="cml">
+      <header className="cml-head">
+        <div className="cml-brand">
+          {props.brandLogo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="cml-brand__logo" src={props.brandLogo} alt="" />
+          ) : (
+            <span className="cml-brand__name">Camaleonic</span>
+          )}
         </div>
-      )}
+        <button className="cml-close" aria-label="Close" onClick={exit}>✕</button>
+      </header>
 
-      {step === 'chooser' && (
-        <div>
-          <h2 className="v-display size-secondary">Select a platform</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
-            {PLATFORMS.map((p) => (
-              <button key={p.key} className="v-pill-outline-mint" onClick={() => { setPlatform(p.key); setStep('connections'); }}>
-                {p.label}
-              </button>
-            ))}
+      <div className="cml-body">
+        {error ? (
+          <div className="cml-step">
+            <div className="cml-banner cml-banner--danger">{error}</div>
+            <div className="cml-link-row" style={{ marginTop: 16 }}>
+              <button className="cml-ghost" onClick={exit}>Close</button>
+            </div>
           </div>
-        </div>
-      )}
-
-      {step === 'connections' && platform && (
-        <div>
-          <h2 className="v-display size-secondary">{labelFor(platform)} connections</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '12px 0' }}>
-            {(() => {
-              const conns = props.initialConnections.filter((c) => c.platform === platform);
-              return conns.length === 0 ? (
-                <p className="v-body">No accounts connected yet.</p>
+        ) : step === 'consent' ? (
+          <div className="cml-step cml-center">
+            <div className="cml-hero"><span className="cml-hero__ring">{ShieldIcon}</span></div>
+            <h2 className="cml-title">Connect your accounts</h2>
+            <p className="cml-sub">Camaleonic Analytics will securely link your social accounts. You decide what to share.</p>
+            <ul className="cml-trust">
+              {TRUST.map((b) => (
+                <li key={b.t}>
+                  <span className="cml-trust__chk">{CheckIcon}</span>
+                  <span><span className="cml-trust__t">{b.t}</span><span className="cml-trust__d">{b.d}</span></span>
+                </li>
+              ))}
+            </ul>
+            <button className="cml-btn cml-btn--accent" onClick={() => setStep(nextAfterConsent(props.fixedPlatform))}>Continue</button>
+          </div>
+        ) : step === 'chooser' ? (
+          <div className="cml-step">
+            <h2 className="cml-title">Select a platform</h2>
+            <p className="cml-sub">Choose where you’d like to connect an account.</p>
+            <div className="cml-grid">
+              {ORDER.map((p) => (
+                <button key={p} className="cml-tile" onClick={() => { setPlatform(p); setStep('connections'); }}>
+                  <PlatformIcon platform={p} />
+                  <span className="cml-tile__label">{BRAND[p].label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : step === 'connections' && platform ? (
+          <div className="cml-step">
+            <h2 className="cml-title">{BRAND[platform].label} accounts</h2>
+            <p className="cml-sub">Manage your connected accounts or add a new one.</p>
+            <div className="cml-list">
+              {conns.length === 0 ? (
+                <div className="cml-empty">No {BRAND[platform].label} accounts connected yet.</div>
               ) : (
                 conns.map((c) => (
-                  <div key={c.id} className="v-row">
-                    <span className="v-row-val">{c.handle || c.display_name || c.id}</span>
-                    <span className="v-meta">{c.status}</span>
+                  <div key={c.id} className="cml-row">
+                    <PlatformIcon platform={platform} />
+                    <div className="cml-row__meta">
+                      <div className="cml-row__name">{c.handle || c.display_name || c.id}</div>
+                      <div className="cml-row__sub">{c.status}</div>
+                    </div>
+                    {c.status === 'ready' && <span className="cml-status">Connected</span>}
                   </div>
                 ))
-              );
-            })()}
+              )}
+            </div>
+            <button className="cml-btn cml-btn--accent" onClick={() => setStep('guidance')}>
+              + Add {BRAND[platform].label} account
+            </button>
+            {!props.fixedPlatform && (
+              <div className="cml-link-row"><button className="cml-ghost" onClick={() => setStep('chooser')}>← All platforms</button></div>
+            )}
           </div>
-          <button className="v-pill-primary" onClick={() => setStep('guidance')}>
-            + Add {labelFor(platform)} account
-          </button>
-          {!props.fixedPlatform && (
-            <button className="v-meta" style={{ marginLeft: 12 }} onClick={() => setStep('chooser')}>← Back</button>
-          )}
-        </div>
-      )}
-
-      {step === 'guidance' && platform && (() => {
-        const g = guidanceFor(platform);
-        return (
-        <div>
-          <h2 className="v-display size-secondary">{g.title}</h2>
-          <p className="v-body" style={{ margin: '10px 0' }}>{g.body}</p>
-          <button className="v-pill-primary" disabled={connecting} onClick={() => login(platform)}>
-            {connecting ? 'Waiting for login…' : `Login with ${providerFor(platform)}`}
-          </button>
-          <button className="v-meta" style={{ marginLeft: 12 }} onClick={() => setStep('connections')}>← Back</button>
-        </div>
-        );
-      })()}
-    </Frame>
-  );
-}
-
-function Frame({ title, logo, onClose, children }: {
-  title: string; logo: string | null; onClose: () => void; children: React.ReactNode;
-}) {
-  return (
-    <div className="v-canvas v-canvas--embed">
-      <div className="v-shell">
-        <header className="v-header">
-          {logo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt="" style={{ height: 24 }} />
-          ) : (
-            <span className="v-kicker mint">{title}</span>
-          )}
-          <button className="v-meta" aria-label="Close" onClick={onClose}>✕</button>
-        </header>
-        {children}
+        ) : step === 'guidance' && platform ? (
+          <div className="cml-step cml-center">
+            <div className="cml-hero"><PlatformIcon platform={platform} large /></div>
+            <h2 className="cml-title">{guidance(platform).title}</h2>
+            <p className="cml-sub">{guidance(platform).body}</p>
+            <div className="cml-btn__row">
+              <button
+                className="cml-btn cml-btn--brand"
+                style={{ background: BRAND[startPlatform(platform)].bg }}
+                disabled={connecting}
+                onClick={() => login(platform)}
+              >
+                {connecting ? 'Waiting for login…' : `Continue with ${BRAND[platform].provider}`}
+              </button>
+            </div>
+            <div className="cml-link-row"><button className="cml-ghost" onClick={() => setStep('connections')}>← Back</button></div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function labelFor(p: PlatformKey): string { return PLATFORMS.find((x) => x.key === p)?.label ?? p; }
-function providerFor(p: PlatformKey): string { return PLATFORMS.find((x) => x.key === p)?.provider ?? p; }
-function guidanceFor(p: PlatformKey): { title: string; body: string } {
+function guidance(p: PlatformKey): { title: string; body: string } {
   if (p === 'instagram') {
-    return { title: 'Connecting Instagram works via Facebook', body: 'Select the Facebook Page linked to your Instagram business account and grant all requested permissions.' };
+    return {
+      title: 'Connect Instagram via Facebook',
+      body: 'Instagram business accounts connect through Facebook. Select the linked Page and grant all requested permissions.',
+    };
   }
   if (p === 'facebook') {
-    return { title: 'Login with Facebook', body: 'Select the Page(s) you want to connect and grant all requested permissions.' };
+    return {
+      title: 'Connect with Facebook',
+      body: 'Select the Page(s) you want to connect and grant all requested permissions on the next screen.',
+    };
   }
-  return { title: `Login with ${providerFor(p)}`, body: 'You will be asked to approve read access to your profile and content. Grant all requested permissions.' };
+  return {
+    title: `Connect with ${BRAND[p].label}`,
+    body: `You’ll be asked to approve read access to your ${BRAND[p].label} profile and content. Please grant all requested permissions.`,
+  };
 }
