@@ -36,3 +36,6 @@ npm-debug.log*
 
 # OS
 Thumbs.db
+
+# superpowers brainstorm artifacts
+.superpowers/
