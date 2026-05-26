@@ -66,3 +66,16 @@ a { color: inherit; }
 .v-summary { display: grid; gap: 8px; padding: 18px; border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; background: rgba(255,255,255,0.03); }
 .v-row { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 12px; }
 .v-row-val { font-family: var(--v-mono); font-size: 12px; color: #fff; word-break: break-all; }
+
+/* Embedded iframe-modal mode: drop the full-screen canvas chrome so the
+   connect-ui fits inside the SDK's modal card. */
+.v-canvas--embed {
+  min-height: 0;
+  padding: 20px;
+  background: #ffffff;
+  color: #14141a;
+}
+.v-canvas--embed .v-shell { max-width: 100%; margin: 0; gap: 14px; }
+.v-canvas--embed .v-header { margin-bottom: 8px; }
+.v-canvas--embed .v-display.size-secondary { font-size: 22px; line-height: 1.15; color: #14141a; }
+.v-canvas--embed .v-body { color: #4a4a55; }
