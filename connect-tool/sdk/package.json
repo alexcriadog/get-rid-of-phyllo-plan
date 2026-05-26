@@ -1,6 +1,6 @@
 {
   "name": "@camaleonic/connect",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Camaleonic Connect — embed a one-click social-account connector. Supports Facebook, Instagram, TikTok, Threads, YouTube, Twitch.",
   "type": "module",
   "main": "dist/index.mjs",

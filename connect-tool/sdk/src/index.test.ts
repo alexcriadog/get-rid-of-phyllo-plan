@@ -88,4 +88,34 @@ describe('CamaleonicConnect iframe modal', () => {
     handle.close();
     expect(document.querySelector('iframe')).toBeNull();
   });
+
+  it('relays an error message to onError and keeps the modal open (recoverable)', () => {
+    const onError = vi.fn();
+    initWith({ onError }).open();
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: BASE,
+      data: { type: 'camaleonic.connect.error', code: 'popup_blocked', message: 'blocked' },
+    }));
+    expect(onError).toHaveBeenCalledWith({ code: 'popup_blocked', message: 'blocked' });
+    expect(document.querySelector('iframe')).toBeTruthy(); // modal stays for retry
+  });
+
+  it('calls onSuccess only once even if two success messages arrive', () => {
+    const onSuccess = vi.fn();
+    initWith({ onSuccess }).open();
+    const fire = () => window.dispatchEvent(new MessageEvent('message', {
+      origin: BASE, data: { type: 'camaleonic.connect.success', accountIds: ['1'], platform: 'tiktok' },
+    }));
+    fire(); fire();
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires onExit once when Escape is pressed', () => {
+    const onExit = vi.fn();
+    initWith({ onExit }).open();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('iframe')).toBeNull();
+  });
 });

@@ -121,6 +121,8 @@ function init(opts: CamaleonicConnectOptions): CamaleonicConnectHandle {
   function close(): void { teardown(); }
 
   function emitExit(): void {
+    if (done) return;
+    done = true;
     teardown();
     if (typeof opts.onExit === 'function') { try { opts.onExit(); } catch { /* swallow */ } }
   }
@@ -129,6 +131,7 @@ function init(opts: CamaleonicConnectOptions): CamaleonicConnectHandle {
     if (typeof opts.onSuccess === 'function') { try { opts.onSuccess(p); } catch { /* swallow */ } }
   }
   function emitError(code: ErrorPayload['code'], message: string): void {
+    if (done) return;
     if (typeof opts.onError === 'function') { try { opts.onError({ code, message }); } catch { /* swallow */ } }
   }
 
