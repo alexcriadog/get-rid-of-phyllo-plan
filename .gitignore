@@ -39,3 +39,7 @@ Thumbs.db
 
 # superpowers brainstorm artifacts
 .superpowers/
+
+# Playwright artifacts
+connect-tool/test-results/
+connect-tool/playwright-report/
