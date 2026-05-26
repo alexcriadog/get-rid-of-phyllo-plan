@@ -1,55 +1,31 @@
 /**
- * Camaleonic Connect SDK — v1.
+ * Camaleonic Connect SDK — v2.
  *
- * Embed:
- *   <script src="https://smconnector.camaleonicanalytics.com/connect-sdk.js"></script>
- *   <script>
- *     const handle = CamaleonicConnect.init({
- *       sdkToken: "<jwt minted server-side via POST /v1/sdk-tokens>",
- *       workspace: "<workspace slug, e.g. 'acme'>",
- *       platforms: ["twitch", "instagram"],   // optional whitelist
- *       onSuccess: (data) => console.log(data),
- *       onError:   (err)  => console.warn(err),
- *       onExit:    ()     => console.log("user closed"),
- *     });
- *     button.onclick = () => handle.open("twitch");
- *   </script>
+ * Renders the connect flow as an in-page iframe modal (not a popup window).
+ * Only the real provider login breaks out to its own window; the iframe
+ * relays the result back and the modal shows confirm → success in place.
  *
- * Or as an npm package:
- *   import CamaleonicConnect from "@camaleonic/connect";
- *
- * The popup talks to the hosted connect-ui at <baseUrl>. On success it
- * sends a postMessage { type, accountIds, platform } back to the opener;
- * we filter by `event.origin === baseUrl` so a tab loaded from somewhere
- * else can't spoof a success event.
+ *   const handle = CamaleonicConnect.init({
+ *     sdkToken: "<jwt>", workspace: "<slug>",
+ *     platform: "tiktok",                 // optional — skip the chooser
+ *     onSuccess, onError, onExit,
+ *   });
+ *   button.onclick = () => handle.open();  // or handle.open("tiktok")
  */
 
 export type PlatformKey =
-  | 'facebook'
-  | 'instagram'
-  | 'youtube'
-  | 'tiktok'
-  | 'threads'
-  | 'twitch';
+  | 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'threads' | 'twitch';
 
-export interface SuccessPayload {
-  accountIds: string[];
-  platform: PlatformKey | null;
-}
-
-export interface ErrorPayload {
-  code: 'popup_blocked' | 'invalid_platform' | 'unknown';
-  message: string;
-}
+export interface SuccessPayload { accountIds: string[]; platform: PlatformKey | null; }
+export interface ErrorPayload { code: 'popup_blocked' | 'invalid_platform' | 'token' | 'unknown'; message: string; }
 
 export interface CamaleonicConnectOptions {
-  /** Ephemeral HS256 JWT minted via `POST /v1/sdk-tokens`. */
   sdkToken: string;
-  /** Workspace slug — must match the slug claim in the SDK token. */
   workspace: string;
-  /** Allow-list of platforms the popup may target. */
+  /** Skip the chooser and start at this platform. */
+  platform?: PlatformKey;
+  /** Allow-list; if exactly one entry and no `platform`, treated as the single platform. */
   platforms?: ReadonlyArray<PlatformKey>;
-  /** Override the connect-ui origin. Defaults to the script's origin. */
   baseUrl?: string;
   onSuccess?: (data: SuccessPayload) => void;
   onError?: (err: ErrorPayload) => void;
@@ -57,16 +33,19 @@ export interface CamaleonicConnectOptions {
 }
 
 export interface CamaleonicConnectHandle {
-  /** Open the popup. Pass a platform key to skip the chooser. */
   open: (platform?: PlatformKey) => void;
-  /** Force-close the popup. */
   close: () => void;
 }
 
-const POPUP_WIDTH = 500;
-const POPUP_HEIGHT = 700;
-const MESSAGE_TYPE = 'camaleonic.connect.success';
-const VERSION = '1.0.0';
+const VERSION = '2.0.0';
+const MSG = {
+  resize: 'camaleonic.connect.resize',
+  exit: 'camaleonic.connect.exit',
+  success: 'camaleonic.connect.success',
+  error: 'camaleonic.connect.error',
+} as const;
+const DEFAULT_HEIGHT = 600;
+const MODAL_WIDTH = 460;
 
 function resolveBaseUrl(opts: CamaleonicConnectOptions): string {
   if (typeof opts.baseUrl === 'string' && opts.baseUrl.length > 0) {
@@ -76,74 +55,44 @@ function resolveBaseUrl(opts: CamaleonicConnectOptions): string {
     const scripts = document.getElementsByTagName('script');
     for (let i = scripts.length - 1; i >= 0; i--) {
       const s = scripts[i];
-      if (s.src && s.src.indexOf('connect-sdk.js') !== -1) {
-        return new URL(s.src).origin;
-      }
+      if (s.src && s.src.indexOf('connect-sdk.js') !== -1) return new URL(s.src).origin;
     }
   } catch {
-    // fall through to window origin
+    /* fall through */
   }
   return typeof window !== 'undefined' ? window.location.origin : '';
 }
 
-function buildPopupUrl(
+function requireOpt(opts: CamaleonicConnectOptions, key: 'sdkToken' | 'workspace'): void {
+  const v = opts[key];
+  if (typeof v !== 'string' || v.length === 0) {
+    throw new Error('CamaleonicConnect.init: missing option "' + String(key) + '"');
+  }
+}
+
+function effectivePlatform(
+  opts: CamaleonicConnectOptions,
+  arg: PlatformKey | undefined,
+): PlatformKey | undefined {
+  if (arg) return arg;
+  if (opts.platform) return opts.platform;
+  if (opts.platforms && opts.platforms.length === 1) return opts.platforms[0];
+  return undefined;
+}
+
+function buildConnectUrl(
   baseUrl: string,
   opts: CamaleonicConnectOptions,
   platform: PlatformKey | undefined,
 ): string {
-  const qs =
-    'ws=' +
-    encodeURIComponent(opts.workspace) +
-    '&token=' +
-    encodeURIComponent(opts.sdkToken) +
-    '&origin=' +
-    encodeURIComponent(window.location.origin);
-  if (platform) {
-    return (
-      baseUrl + '/api/oauth/start/' + encodeURIComponent(platform) + '?' + qs
-    );
-  }
-  return baseUrl + '/?' + qs;
-}
-
-function centerFeatures(): string {
-  const w = window;
-  const dualScreenLeft =
-    typeof w.screenLeft !== 'undefined' ? w.screenLeft : w.screenX || 0;
-  const dualScreenTop =
-    typeof w.screenTop !== 'undefined' ? w.screenTop : w.screenY || 0;
-  const width =
-    w.innerWidth ||
-    (document.documentElement && document.documentElement.clientWidth) ||
-    screen.width;
-  const height =
-    w.innerHeight ||
-    (document.documentElement && document.documentElement.clientHeight) ||
-    screen.height;
-  const left = (width - POPUP_WIDTH) / 2 + dualScreenLeft;
-  const top = (height - POPUP_HEIGHT) / 2 + dualScreenTop;
-  return (
-    'popup=yes,width=' +
-    POPUP_WIDTH +
-    ',height=' +
-    POPUP_HEIGHT +
-    ',top=' +
-    top +
-    ',left=' +
-    left
-  );
-}
-
-function requireOpt(
-  opts: CamaleonicConnectOptions,
-  key: 'sdkToken' | 'workspace',
-): void {
-  const v = opts[key];
-  if (typeof v !== 'string' || v.length === 0) {
-    throw new Error(
-      'CamaleonicConnect.init: missing option "' + String(key) + '"',
-    );
-  }
+  const qs = new URLSearchParams({
+    ws: opts.workspace,
+    token: opts.sdkToken,
+    origin: window.location.origin,
+    embed: '1',
+  });
+  if (platform) qs.set('platform', platform);
+  return baseUrl + '/connect?' + qs.toString();
 }
 
 function init(opts: CamaleonicConnectOptions): CamaleonicConnectHandle {
@@ -152,123 +101,100 @@ function init(opts: CamaleonicConnectOptions): CamaleonicConnectHandle {
   }
   requireOpt(opts, 'sdkToken');
   requireOpt(opts, 'workspace');
-
   const baseUrl = resolveBaseUrl(opts);
-  if (!baseUrl) {
-    throw new Error('CamaleonicConnect.init: could not resolve baseUrl');
-  }
+  if (!baseUrl) throw new Error('CamaleonicConnect.init: could not resolve baseUrl');
 
-  let popup: Window | null = null;
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let overlay: HTMLDivElement | null = null;
+  let modal: HTMLDivElement | null = null;
   let messageListener: ((ev: MessageEvent) => void) | null = null;
-  let lastPlatform: PlatformKey | undefined;
+  let keyListener: ((ev: KeyboardEvent) => void) | null = null;
   let done = false;
 
-  function cleanup(): void {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-    if (messageListener) {
-      window.removeEventListener('message', messageListener);
-      messageListener = null;
-    }
+  function teardown(): void {
+    if (messageListener) { window.removeEventListener('message', messageListener); messageListener = null; }
+    if (keyListener) { window.removeEventListener('keydown', keyListener); keyListener = null; }
+    if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    overlay = null;
+    modal = null;
   }
 
-  function close(): void {
-    try {
-      if (popup && !popup.closed) popup.close();
-    } catch {
-      // popup may be cross-origin; ignore
-    }
-    cleanup();
-  }
-
-  function emitError(code: ErrorPayload['code'], message: string): void {
-    if (done) return;
-    done = true;
-    cleanup();
-    if (typeof opts.onError === 'function') {
-      try {
-        opts.onError({ code, message });
-      } catch {
-        // swallow handler errors so we never explode the host app
-      }
-    }
-  }
-
-  function emitSuccess(payload: SuccessPayload): void {
-    if (done) return;
-    done = true;
-    cleanup();
-    if (typeof opts.onSuccess === 'function') {
-      try {
-        opts.onSuccess(payload);
-      } catch {
-        // swallow
-      }
-    }
-  }
+  function close(): void { teardown(); }
 
   function emitExit(): void {
-    if (done) return;
-    done = true;
-    cleanup();
-    if (typeof opts.onExit === 'function') {
-      try {
-        opts.onExit();
-      } catch {
-        // swallow
-      }
-    }
+    teardown();
+    if (typeof opts.onExit === 'function') { try { opts.onExit(); } catch { /* swallow */ } }
+  }
+  function emitSuccess(p: SuccessPayload): void {
+    if (done) return; done = true; teardown();
+    if (typeof opts.onSuccess === 'function') { try { opts.onSuccess(p); } catch { /* swallow */ } }
+  }
+  function emitError(code: ErrorPayload['code'], message: string): void {
+    if (typeof opts.onError === 'function') { try { opts.onError({ code, message }); } catch { /* swallow */ } }
+  }
+
+  function buildOverlay(url: string): void {
+    overlay = document.createElement('div');
+    overlay.setAttribute('data-camaleonic-overlay', '');
+    overlay.style.cssText =
+      'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;' +
+      'justify-content:center;background:rgba(8,8,12,0.6);backdrop-filter:blur(4px);';
+
+    modal = document.createElement('div');
+    modal.setAttribute('data-camaleonic-modal', '');
+    modal.style.cssText =
+      'position:relative;width:' + MODAL_WIDTH + 'px;max-width:calc(100vw - 32px);' +
+      'height:' + DEFAULT_HEIGHT + 'px;max-height:calc(100vh - 48px);' +
+      'border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.5);background:#fff;';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText =
+      'position:absolute;top:10px;right:10px;z-index:2;width:28px;height:28px;border:0;' +
+      'border-radius:50%;background:rgba(0,0,0,0.06);cursor:pointer;font-size:14px;line-height:28px;';
+    closeBtn.onclick = () => emitExit();
+
+    const iframe = document.createElement('iframe');
+    iframe.src = url;
+    iframe.title = 'Camaleonic Connect';
+    iframe.allow = 'clipboard-write';
+    iframe.style.cssText = 'width:100%;height:100%;border:0;display:block;';
+
+    modal.appendChild(closeBtn);
+    modal.appendChild(iframe);
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) emitExit(); });
+    document.body.appendChild(overlay);
   }
 
   function open(platform?: PlatformKey): void {
-    if (
-      platform &&
-      opts.platforms &&
-      opts.platforms.length > 0 &&
-      opts.platforms.indexOf(platform) === -1
-    ) {
-      emitError(
-        'invalid_platform',
-        'platform "' + platform + '" is not in the configured allow-list',
-      );
-      return;
-    }
-
-    lastPlatform = platform;
+    if (overlay) return; // already open
     done = false;
-
-    const url = buildPopupUrl(baseUrl, opts, platform);
-    popup = window.open(url, 'camaleonic-connect', centerFeatures());
-    if (!popup) {
-      emitError('popup_blocked', 'Browser blocked the connect popup');
+    const plat = effectivePlatform(opts, platform);
+    if (plat && opts.platforms && opts.platforms.length > 1 && opts.platforms.indexOf(plat) === -1) {
+      emitError('invalid_platform', 'platform "' + plat + '" is not in the configured allow-list');
       return;
     }
+    buildOverlay(buildConnectUrl(baseUrl, opts, plat));
 
     messageListener = (ev: MessageEvent) => {
-      // Strict origin check — only the hosted UI may signal success.
       if (ev.origin !== baseUrl) return;
-      const data = ev.data as {
-        type?: string;
-        accountIds?: string[];
-        platform?: PlatformKey;
-      };
-      if (!data || data.type !== MESSAGE_TYPE) return;
-      emitSuccess({
-        accountIds: Array.isArray(data.accountIds) ? data.accountIds : [],
-        platform: data.platform ?? lastPlatform ?? null,
-      });
-      // Popup self-closes, but defensively close so a user-blocked
-      // window.close() doesn't leak the window.
-      setTimeout(close, 100);
+      const data = ev.data as { type?: string; height?: number; accountIds?: string[]; platform?: PlatformKey; code?: string; message?: string };
+      if (!data || typeof data.type !== 'string') return;
+      if (data.type === MSG.resize && modal && typeof data.height === 'number') {
+        modal.style.height = Math.max(360, data.height) + 'px';
+      } else if (data.type === MSG.success) {
+        emitSuccess({ accountIds: Array.isArray(data.accountIds) ? data.accountIds : [], platform: data.platform ?? plat ?? null });
+      } else if (data.type === MSG.exit) {
+        emitExit();
+      } else if (data.type === MSG.error) {
+        emitError((data.code as ErrorPayload['code']) ?? 'unknown', data.message ?? 'Connect error');
+      }
     };
     window.addEventListener('message', messageListener);
 
-    pollTimer = setInterval(() => {
-      if (popup && popup.closed) emitExit();
-    }, 600);
+    keyListener = (ev: KeyboardEvent) => { if (ev.key === 'Escape') emitExit(); };
+    window.addEventListener('keydown', keyListener);
   }
 
   return { open, close };
