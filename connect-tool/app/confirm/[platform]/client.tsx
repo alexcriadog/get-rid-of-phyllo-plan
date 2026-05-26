@@ -18,6 +18,8 @@ interface Props {
   preview: Preview;
   products: ProductDef[];
   defaultIds: string[];
+  embed: boolean;
+  origin: string;
 }
 
 export function ConfirmClient({
@@ -26,6 +28,8 @@ export function ConfirmClient({
   preview,
   products,
   defaultIds,
+  embed,
+  origin,
 }: Props) {
   const router = useRouter();
   const [picked, setPicked] = useState<Set<string>>(() => new Set(defaultIds));
@@ -70,6 +74,8 @@ export function ConfirmClient({
       ) {
         params.set('opener_origin', json.opener_origin);
       }
+      if (embed) params.set('embed', '1');
+      if (origin) params.set('origin', origin);
       router.push(`/success?${params.toString()}`);
     } catch (e) {
       setErr((e as Error).message);

@@ -18,6 +18,8 @@ interface Props {
   fbDefaults: string[];
   igProducts: ProductDef[];
   igDefaults: string[];
+  embed: boolean;
+  origin: string;
 }
 
 interface ResultRow {
@@ -35,6 +37,8 @@ export function FacebookPagesClient({
   fbDefaults,
   igProducts,
   igDefaults,
+  embed,
+  origin,
 }: Props) {
   const router = useRouter();
   const [picked, setPicked] = useState<Set<string>>(
@@ -125,7 +129,7 @@ export function FacebookPagesClient({
       setTimeout(
         () =>
           router.push(
-            `/success?platform=facebook&accounts=${accounts}&summary=${summary}${openerOrigin}`,
+            `/success?platform=facebook&accounts=${accounts}&summary=${summary}${openerOrigin}${embed ? '&embed=1' : ''}${origin ? `&origin=${encodeURIComponent(origin)}` : ''}`,
           ),
         1200,
       );

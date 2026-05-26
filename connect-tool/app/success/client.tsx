@@ -29,31 +29,39 @@ export function SuccessClient() {
   // - Belt-and-braces: a ref guard makes the postMessage idempotent in
   //   case Strict Mode (or a future change) fires the effect twice anyway.
   const openerOrigin = params.get('opener_origin') ?? '';
+  const embedded = params.get('embed') === '1';
   const sentRef = useRef(false);
   useEffect(() => {
     if (sentRef.current) return;
     if (typeof window === 'undefined') return;
-    const opener = window.opener;
-    if (!opener || opener === window) return;
     const ids = accountsRaw ? accountsRaw.split(',').filter(Boolean) : [];
     if (ids.length === 0) return;
+    const payload = { type: 'camaleonic.connect.success', accountIds: ids, platform };
+
+    if (embedded && window.parent && window.parent !== window) {
+      // Inside the modal iframe — notify the host SDK; do NOT close (we are
+      // an iframe, not a popup). The SDK tears down the overlay.
+      sentRef.current = true;
+      try {
+        window.parent.postMessage(payload, openerOrigin && openerOrigin.length > 0 ? openerOrigin : '*');
+      } catch {
+        /* host cross-origin policy — host's problem */
+      }
+      return;
+    }
+
+    // Legacy popup-window flow: notify opener and close.
+    const opener = window.opener;
+    if (!opener || opener === window) return;
     sentRef.current = true;
     try {
-      opener.postMessage(
-        {
-          type: 'camaleonic.connect.success',
-          accountIds: ids,
-          platform,
-        },
-        openerOrigin && openerOrigin.length > 0 ? openerOrigin : '*',
-      );
+      opener.postMessage(payload, openerOrigin && openerOrigin.length > 0 ? openerOrigin : '*');
     } catch {
-      // postMessage to a cross-origin opener may throw if the origin
-      // policy disallowed it — that's the opener's problem, not ours.
+      /* opener cross-origin */
     }
     const timer = window.setTimeout(() => window.close(), 250);
     return () => window.clearTimeout(timer);
-  }, [accountsRaw, openerOrigin, platform]);
+  }, [accountsRaw, openerOrigin, platform, embedded]);
 
   const adminUrl =
     process.env.NEXT_PUBLIC_POC_ADMIN_URL ?? 'http://localhost:3001/admin';
