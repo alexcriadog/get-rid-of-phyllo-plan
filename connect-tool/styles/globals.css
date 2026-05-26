@@ -75,7 +75,32 @@ a { color: inherit; }
   background: #ffffff;
   color: #14141a;
 }
-.v-canvas--embed .v-shell { max-width: 100%; margin: 0; gap: 14px; }
+.v-canvas--embed .v-shell { max-width: 100%; margin: 0; padding: 0; gap: 14px; }
 .v-canvas--embed .v-header { margin-bottom: 8px; }
-.v-canvas--embed .v-display.size-secondary { font-size: 22px; line-height: 1.15; color: #14141a; }
-.v-canvas--embed .v-body { color: #4a4a55; }
+.v-canvas--embed .v-display { color: #14141a; }
+.v-canvas--embed .v-display.size-hero { font-size: 26px; }
+.v-canvas--embed .v-display.size-secondary { font-size: 22px; line-height: 1.15; }
+.v-canvas--embed .v-display.size-tertiary { font-size: 18px; }
+.v-canvas--embed .v-body { color: #4a4a55; font-size: 14px; }
+
+/* The embed pages reuse dark-theme elements (white text / translucent-white
+   borders). On the white modal those must flip to dark-on-light to stay legible. */
+.v-canvas--embed .v-kicker { color: #6b6b76; }
+.v-canvas--embed .v-kicker.mint { color: #0a8f6f; }
+.v-canvas--embed .v-meta { color: #6b6b76; }
+.v-canvas--embed .v-page-name,
+.v-canvas--embed .v-row-val { color: #14141a; }
+.v-canvas--embed .v-page-id { color: #8a8a94; }
+.v-canvas--embed .v-page-row { border-color: rgba(0,0,0,0.14); }
+.v-canvas--embed .v-page-row.picked { border-color: #0a8f6f; background: rgba(60,255,208,0.14); }
+.v-canvas--embed .v-summary { border-color: rgba(0,0,0,0.10); background: rgba(0,0,0,0.02); }
+.v-canvas--embed .v-pill-outline-mint { color: #0a8f6f; border-color: #0a8f6f; }
+.v-canvas--embed .v-pill-outline-mint:hover { background: rgba(60,255,208,0.14); }
+.v-canvas--embed .v-banner.danger { color: #c0344b; }
+.v-canvas--embed .v-ig-toggle { border-color: rgba(0,0,0,0.16); }
+.v-canvas--embed .v-ig-toggle span { color: #0a8f6f; }
+
+/* Force a white page background on embed routes so any iframe area the
+   white content card doesn't cover shows white, not the dark canvas. */
+html:has(.v-canvas--embed),
+body:has(.v-canvas--embed) { background: #ffffff; }

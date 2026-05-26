@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { ProductDef } from '../../../lib/products';
 import type { PlatformKey } from '../../../lib/platforms';
+import { useEmbedAutosize } from '../../../lib/useEmbedAutosize';
 
 interface Preview {
   handle?: string;
@@ -32,6 +33,7 @@ export function ConfirmClient({
   origin,
 }: Props) {
   const router = useRouter();
+  useEmbedAutosize(embed, origin);
   const [picked, setPicked] = useState<Set<string>>(() => new Set(defaultIds));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export function ConfirmClient({
   const total = useMemo(() => products.length, [products]);
 
   return (
-    <div className="v-canvas">
+    <div className={embed ? 'v-canvas v-canvas--embed' : 'v-canvas'}>
       <div className="v-shell">
         <header className="v-header">
           <Link className="v-meta" href="/">

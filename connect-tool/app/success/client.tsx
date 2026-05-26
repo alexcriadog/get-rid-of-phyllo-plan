@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
+import { useEmbedAutosize } from '../../lib/useEmbedAutosize';
 
 export function SuccessClient() {
   const params = useSearchParams();
@@ -30,6 +31,7 @@ export function SuccessClient() {
   //   case Strict Mode (or a future change) fires the effect twice anyway.
   const openerOrigin = params.get('opener_origin') ?? '';
   const embedded = params.get('embed') === '1';
+  useEmbedAutosize(embedded, openerOrigin);
   const sentRef = useRef(false);
   useEffect(() => {
     if (sentRef.current) return;
@@ -67,7 +69,7 @@ export function SuccessClient() {
     process.env.NEXT_PUBLIC_POC_ADMIN_URL ?? 'http://localhost:3001/admin';
 
   return (
-    <div className="v-canvas">
+    <div className={embedded ? 'v-canvas v-canvas--embed' : 'v-canvas'}>
       <div className="v-shell">
         <header className="v-header">
           <Link className="v-meta" href="/">

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { ProductDef } from '../../../lib/products';
+import { useEmbedAutosize } from '../../../lib/useEmbedAutosize';
 
 interface PageItem {
   id: string;
@@ -41,6 +42,7 @@ export function FacebookPagesClient({
   origin,
 }: Props) {
   const router = useRouter();
+  useEmbedAutosize(embed, origin);
   const [picked, setPicked] = useState<Set<string>>(
     () => new Set(pages.map((p) => p.id)),
   );
@@ -141,7 +143,7 @@ export function FacebookPagesClient({
   };
 
   return (
-    <div className="v-canvas">
+    <div className={embed ? 'v-canvas v-canvas--embed' : 'v-canvas'}>
       <div className="v-shell">
         <header className="v-header">
           <Link className="v-meta" href="/">
