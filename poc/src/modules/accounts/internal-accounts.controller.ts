@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { PrismaService } from '@shared/database/prisma.service';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
 
@@ -29,11 +29,15 @@ export class InternalAccountsController {
       status: string;
     }>;
   }> {
+    if (!wsSlug || !endUserId) {
+      throw new BadRequestException('ws_slug and end_user_id are required');
+    }
     const ws = await this.workspaces.findBySlug(wsSlug);
     const rows = await this.prisma.account.findMany({
       where: {
         workspaceId: ws.id,
         endUserId,
+        status: { not: 'disconnected' },
         ...(platform ? { platform } : {}),
       },
       orderBy: { connectedAt: 'desc' },
