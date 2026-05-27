@@ -172,7 +172,10 @@ export function FacebookPagesClient({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: anyIgChecked(withIg, picked) ? '1fr 1fr' : '1fr',
+            // In the embedded modal (narrow) always stack FB + IG panels into
+            // one column; only go side-by-side on the wide standalone page.
+            gridTemplateColumns:
+              !embed && anyIgChecked(withIg, picked) ? '1fr 1fr' : '1fr',
             gap: 16,
             marginBottom: 24,
           }}
