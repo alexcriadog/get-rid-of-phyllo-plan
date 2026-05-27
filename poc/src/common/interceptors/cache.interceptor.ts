@@ -52,6 +52,16 @@ export class V1CacheInterceptor implements NestInterceptor {
       return next.handle();
     }
 
+    // Only cache the expensive per-product reads (/v1/accounts/:id/<product>).
+    // The bare list (/v1/accounts) and single-account metadata (/v1/accounts/:id)
+    // are cheap DB reads and MUST stay fresh — otherwise a just-connected (or
+    // disconnected) account is hidden for the whole cache TTL.
+    const reqPath = (req.originalUrl ?? req.url ?? '').split('?')[0];
+    if (!/\/accounts\/[^/]+\/[^/]+/.test(reqPath)) {
+      res.setHeader('X-Cache', 'SKIP');
+      return next.handle();
+    }
+
     const key = this.buildKey(ws, req);
     let cached: string | null = null;
     try {
