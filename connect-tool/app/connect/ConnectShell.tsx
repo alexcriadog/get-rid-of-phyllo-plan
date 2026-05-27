@@ -39,6 +39,7 @@ interface Props {
   brandLogo: string | null;
   initialConnections: Connection[];
   tokenError: string | null;
+  offeredPlatforms: string[] | null;
 }
 
 export function ConnectShell(props: Props) {
@@ -159,7 +160,7 @@ export function ConnectShell(props: Props) {
             <h2 className="cml-title">Select a platform</h2>
             <p className="cml-sub">Choose where you’d like to connect an account.</p>
             <div className="cml-grid">
-              {ORDER.map((p) => (
+              {ORDER.filter((p) => !props.offeredPlatforms || props.offeredPlatforms.includes(p)).map((p) => (
                 <button key={p} className="cml-tile" onClick={() => { setPlatform(p); setStep('connections'); }}>
                   <PlatformIcon platform={p} />
                   <span className="cml-tile__label">{BRAND[p].label}</span>
