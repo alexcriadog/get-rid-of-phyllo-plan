@@ -12,6 +12,8 @@ import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { OutboundWebhooksService } from '@modules/outbound-webhooks/outbound-webhooks.service';
 import { PRODUCTS_BY_PLATFORM, type Platform } from './products.catalog';
+import { WorkspacesService } from '@modules/workspaces/workspaces.service';
+import { enforceWorkspaceProducts } from './seed-products-enforcement';
 
 export type { Platform };
 
@@ -76,6 +78,7 @@ export class AccountsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
+    private readonly workspaces: WorkspacesService,
     // Optional: when AccountsModule is imported into a process that doesn't
     // wire OutboundWebhooks (e.g. the worker), seeding still succeeds —
     // emit is just a no-op.
@@ -109,6 +112,14 @@ export class AccountsService {
           `Allowed: ${allProducts.join(', ')}`,
       );
     }
+
+    const workspaceId = input.workspaceId ?? DEFAULT_WORKSPACE_ID;
+
+    // Per-workspace enforcement: a workspace may offer only a subset of the
+    // platform catalog. Trim to its allow-list (defense in depth — the UI
+    // already shows only these, but never trust the caller).
+    const allowed = await this.workspaces.resolveProducts(workspaceId, input.platform);
+    const enforcedProducts = enforceWorkspaceProducts(products, allowed);
 
     // For Meta family (FB + IG) we MUST end up persisting a Page token so
     // calls don't get charged against the App-Level rate limit (200 ×
@@ -152,8 +163,6 @@ export class AccountsService {
       input.metadata && Object.keys(input.metadata).length > 0
         ? (input.metadata as Prisma.InputJsonValue)
         : Prisma.JsonNull;
-
-    const workspaceId = input.workspaceId ?? DEFAULT_WORKSPACE_ID;
 
     return this.prisma.$transaction(async (tx) => {
       // Look up first so we can decide whether re-OAuth should also resume an
@@ -245,7 +254,7 @@ export class AccountsService {
       });
 
       const jobIds: string[] = [];
-      for (const product of products) {
+      for (const product of enforcedProducts) {
         const job = await tx.syncJob.upsert({
           where: {
             accountId_product: { accountId: account.id, product },
