@@ -238,7 +238,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const PRODUCT_CATALOG: Record<string, { id: string; label: string }[]> = {
   facebook: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'stories', label: 'Stories' }, { id: 'mentions', label: 'Tagged posts' }, { id: 'comments', label: 'Comments' }, { id: 'ratings', label: 'Page reviews' }, { id: 'ads', label: 'Ad insights' }],
   instagram: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'stories', label: 'Stories' }],
-  youtube: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Videos + metrics' }, { id: 'engagement_deep', label: 'Per-video analytics' }],
+  youtube: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Videos + metrics' }, { id: 'engagement_deep', label: 'Per-video analytics' }, { id: 'comments', label: 'Comments' }, { id: 'ads', label: 'Ad insights' }],
   tiktok: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'comments', label: 'Comments' }],
   threads: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'comments', label: 'Comments' }, { id: 'mentions', label: 'Mentions' }],
   twitch: [{ id: 'identity', label: 'Profile' }, { id: 'engagement_new', label: 'Streams + metrics' }],
