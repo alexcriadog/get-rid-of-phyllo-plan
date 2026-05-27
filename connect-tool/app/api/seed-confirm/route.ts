@@ -51,10 +51,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     new Set([...required, ...parsed.data.productIds]),
   );
 
+  // Prefer the context captured on the session at the OAuth callback (works
+  // inside a third-party iframe). Fall back to the cookie for the legacy
+  // top-level popup flow.
   const contextSessionId = getContextCookie(req);
-  const context = contextSessionId
-    ? getOAuthContextSession(contextSessionId)
-    : null;
+  const context =
+    session.ctx ??
+    (contextSessionId ? getOAuthContextSession(contextSessionId) : null);
 
   const seedBody = {
     ...session.seedBody,

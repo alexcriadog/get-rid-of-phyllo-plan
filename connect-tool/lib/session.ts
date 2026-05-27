@@ -21,11 +21,25 @@ export interface FbPageInSession {
   instagram_business_account?: { id: string };
 }
 
+/**
+ * Tenant context captured at /api/oauth/start and copied onto the result
+ * session at the callback. Lets the seed handlers read workspace/end-user
+ * WITHOUT depending on the context cookie — which is withheld when the
+ * connect-ui runs inside a third-party iframe (SameSite=Lax).
+ */
+export interface SessionContext {
+  workspaceId: string;
+  endUserId: string;
+  environment?: 'live' | 'test';
+  openerOrigin?: string;
+}
+
 /** FB sessions are special — they need a Page picker before seeding. */
 export interface FbSession {
   kind: 'fb';
   userToken: string;
   pages: FbPageInSession[];
+  ctx?: SessionContext;
   createdAt: number;
 }
 
@@ -46,6 +60,7 @@ export interface SimpleSession {
     name?: string;
     extras?: Record<string, unknown>;
   };
+  ctx?: SessionContext;
   createdAt: number;
 }
 
@@ -150,6 +165,19 @@ export function getOAuthContextSession(id: string): OAuthContextSession | null {
 
 export function dropSession(id: string): void {
   store.delete(id);
+}
+
+/**
+ * Copy the tenant context onto a result (simple/fb) session. Called at the
+ * OAuth callback (which still runs top-level in the popup, so the context
+ * cookie is readable there) so the seed handlers can read workspace/end-user
+ * from the session id — not the cookie, which a third-party iframe withholds.
+ */
+export function attachContext(id: string, ctx: SessionContext): void {
+  const s = store.get(id);
+  if (s && (s.kind === 'simple' || s.kind === 'fb')) {
+    s.ctx = ctx;
+  }
 }
 
 function pruneExpired(): void {

@@ -12,7 +12,7 @@ import {
   type CallbackResult,
   type PlatformKey,
 } from '../../../../lib/platforms';
-import { putSession, getOAuthContextSession } from '../../../../lib/session';
+import { putSession, getOAuthContextSession, attachContext } from '../../../../lib/session';
 import {
   setContextCookie,
   verifySdkToken,
@@ -209,6 +209,20 @@ export async function GET(
       const ctxId = getContextCookie(req);
       const ctx = ctxId ? getOAuthContextSession(ctxId) : null;
       const embedded = !!ctx?.embedded;
+
+      // Persist tenant context ON the result session (keyed by sessionId,
+      // which is forwarded via the URL). The seed handlers read it from the
+      // session instead of the context cookie, which a third-party iframe
+      // withholds (SameSite=Lax). This callback runs top-level in the popup,
+      // so the cookie is still readable here.
+      if (ctx) {
+        attachContext(result.sessionId, {
+          workspaceId: ctx.workspaceId,
+          endUserId: ctx.endUserId,
+          environment: ctx.environment,
+          openerOrigin: ctx.openerOrigin,
+        });
+      }
 
       if (result.kind === 'fb-picker') {
         const target = embedded
