@@ -62,7 +62,7 @@ function resolveTheme(opts: CamaleonicConnectOptions): 'light' | 'dark' {
 }
 const SURFACE: Record<'light' | 'dark', string> = { light: '#ffffff', dark: '#1a1a1f' };
 const CLOSE_FG: Record<'light' | 'dark', string> = { light: '#71717a', dark: '#a1a1aa' };
-const CLOSE_BG: Record<'light' | 'dark', string> = { light: 'rgba(0,0,0,0.04)', dark: 'rgba(255,255,255,0.08)' };
+const CLOSE_HOVER: Record<'light' | 'dark', string> = { light: '#18181b', dark: '#f4f4f5' };
 
 function resolveBaseUrl(opts: CamaleonicConnectOptions): string {
   if (typeof opts.baseUrl === 'string' && opts.baseUrl.length > 0) {
@@ -174,15 +174,20 @@ function init(opts: CamaleonicConnectOptions): CamaleonicConnectHandle {
     // consistent on every screen (works even if the iframe fails to load).
     const closeBtn = document.createElement('button');
     closeBtn.setAttribute('aria-label', 'Close');
-    closeBtn.innerHTML = '&#10005;';
-    const closeBg = CLOSE_BG[theme];
+    // Inline SVG X (stroke = currentColor) so it renders identically on any
+    // host site, independent of the host page's font. No background, no
+    // border — just a simple, neutral cross.
+    closeBtn.innerHTML =
+      '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.5" stroke-linecap="round" style="display:block"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
     const closeFg = CLOSE_FG[theme];
+    const closeHover = CLOSE_HOVER[theme];
     closeBtn.style.cssText =
-      'position:absolute;top:14px;right:14px;z-index:2;width:28px;height:28px;border:0;' +
-      'border-radius:8px;background:transparent;color:' + closeFg + ';cursor:pointer;' +
-      'font-size:13px;line-height:28px;text-align:center;padding:0;transition:background .15s;';
-    closeBtn.onmouseenter = () => { closeBtn.style.background = closeBg; };
-    closeBtn.onmouseleave = () => { closeBtn.style.background = 'transparent'; };
+      'position:absolute;top:13px;right:13px;z-index:2;width:24px;height:24px;border:0;' +
+      'background:transparent;color:' + closeFg + ';cursor:pointer;padding:0;' +
+      'display:flex;align-items:center;justify-content:center;transition:color .15s;';
+    closeBtn.onmouseenter = () => { closeBtn.style.color = closeHover; };
+    closeBtn.onmouseleave = () => { closeBtn.style.color = closeFg; };
     closeBtn.onclick = () => emitExit();
 
     const iframe = document.createElement('iframe');
