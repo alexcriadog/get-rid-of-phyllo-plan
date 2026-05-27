@@ -19,6 +19,8 @@ interface Props {
   fbDefaults: string[];
   igProducts: ProductDef[];
   igDefaults: string[];
+  lockedFb: string[] | null;
+  lockedIg: string[] | null;
   embed: boolean;
   origin: string;
   theme: 'light' | 'dark';
@@ -40,6 +42,8 @@ export function FacebookPagesClient({
   fbDefaults,
   igProducts,
   igDefaults,
+  lockedFb,
+  lockedIg,
   embed,
   origin,
   theme,
@@ -98,8 +102,8 @@ export function FacebookPagesClient({
           sessionId,
           pageIds: Array.from(picked),
           includeInstagram: withIg,
-          productsFb: Array.from(productsFb),
-          productsIg: Array.from(productsIg),
+          productsFb: lockedFb ?? Array.from(productsFb),
+          productsIg: lockedIg ?? Array.from(productsIg),
         }),
       });
       if (!res.ok) {
@@ -185,6 +189,7 @@ export function FacebookPagesClient({
             subtitle="Applied to every Page you select"
             products={fbProducts}
             picked={productsFb}
+            lockedList={lockedFb}
             onToggle={(id) =>
               setProductsFb((prev) => {
                 const next = new Set(prev);
@@ -200,6 +205,7 @@ export function FacebookPagesClient({
               subtitle="Applied to every IG account marked above"
               products={igProducts}
               picked={productsIg}
+              lockedList={lockedIg}
               onToggle={(id) =>
                 setProductsIg((prev) => {
                   const next = new Set(prev);
@@ -290,12 +296,14 @@ function ProductsPanel({
   subtitle,
   products,
   picked,
+  lockedList,
   onToggle,
 }: {
   title: string;
   subtitle: string;
   products: ProductDef[];
   picked: Set<string>;
+  lockedList: string[] | null;
   onToggle: (id: string) => void;
 }) {
   return (
@@ -316,51 +324,70 @@ function ProductsPanel({
         }}
       >
         <span className="v-kicker mint">{title}</span>
-        <span className="v-meta">
-          {picked.size}/{products.length}
-        </span>
+        {!lockedList && (
+          <span className="v-meta">
+            {picked.size}/{products.length}
+          </span>
+        )}
       </div>
       <div className="v-meta" style={{ marginBottom: 10 }}>
         {subtitle}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {products.map((p) => {
-          const locked = !!p.required;
-          const on = picked.has(p.id);
-          return (
-            <label
-              key={p.id}
-              className={'v-page-row ' + (on ? 'picked' : '')}
-              style={{
-                cursor: locked ? 'default' : 'pointer',
-                opacity: locked ? 0.85 : 1,
-                padding: '10px 12px',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={on}
-                disabled={locked}
-                onChange={() => {
-                  if (!locked) onToggle(p.id);
-                }}
-              />
-              <div className="v-page-meta">
-                <div className="v-page-name">
-                  {p.label}
-                  {locked && (
-                    <span className="v-meta" style={{ marginLeft: 8 }}>
-                      required
-                    </span>
-                  )}
+      {lockedList ? (
+        <div className="cml-list">
+          {lockedList.map((id) => {
+            const def = products.find((p) => p.id === id);
+            return (
+              <div key={id} className="cml-row">
+                <div className="cml-row__meta">
+                  <div className="cml-row__name">{def?.label ?? id}</div>
+                  {def?.hint && <div className="cml-row__sub">{def.hint}</div>}
                 </div>
-                {p.hint && <div className="v-page-id">{p.hint}</div>}
+                <span className="cml-status">Included</span>
               </div>
-              <span className="v-meta">{p.id}</span>
-            </label>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {products.map((p) => {
+            const locked = !!p.required;
+            const on = picked.has(p.id);
+            return (
+              <label
+                key={p.id}
+                className={'v-page-row ' + (on ? 'picked' : '')}
+                style={{
+                  cursor: locked ? 'default' : 'pointer',
+                  opacity: locked ? 0.85 : 1,
+                  padding: '10px 12px',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={locked}
+                  onChange={() => {
+                    if (!locked) onToggle(p.id);
+                  }}
+                />
+                <div className="v-page-meta">
+                  <div className="v-page-name">
+                    {p.label}
+                    {locked && (
+                      <span className="v-meta" style={{ marginLeft: 8 }}>
+                        required
+                      </span>
+                    )}
+                  </div>
+                  {p.hint && <div className="v-page-id">{p.hint}</div>}
+                </div>
+                <span className="v-meta">{p.id}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

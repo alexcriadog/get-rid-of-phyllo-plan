@@ -9,6 +9,7 @@ import {
   defaultSelectedProducts,
 } from '../../../lib/products';
 import type { PlatformKey } from '../../../lib/platforms';
+import { fetchWorkspaceProducts, displayProducts } from '../../../lib/workspace-config';
 import { ConfirmClient } from './client';
 
 type Search = {
@@ -58,6 +59,10 @@ export default async function ConfirmPage({
     redirect('/?error=' + encodeURIComponent('Session/platform mismatch'));
   }
 
+  const wsSlug = session?.ctx?.workspaceSlug ?? null;
+  const cfg = wsSlug ? await fetchWorkspaceProducts(wsSlug) : null;
+  const lockedProducts = displayProducts(cfg, platform); // string[] | null
+
   return (
     <ConfirmClient
       sessionId={sessionId}
@@ -65,6 +70,7 @@ export default async function ConfirmPage({
       preview={session.preview}
       products={PRODUCT_CATALOG[platform]}
       defaultIds={defaultSelectedProducts(platform)}
+      lockedProducts={lockedProducts}
       embed={embed === '1'}
       origin={typeof origin === 'string' ? origin : ''}
       theme={theme}
