@@ -7,6 +7,8 @@ import {
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
+import { resolveWorkspaceProducts } from './workspace-products';
+import { PRODUCTS_BY_PLATFORM } from '../accounts/products.catalog';
 
 const WORKSPACE_SECRET_BYTES = 32;
 const DEMO_WORKSPACE_ID = 'wkspc_demo';
@@ -77,6 +79,12 @@ export class WorkspacesService implements OnModuleInit {
       throw new NotFoundException(`Workspace not found: ${id}`);
     }
     return this.toView(row);
+  }
+
+  /** Resolve this workspace's allowed products for a platform (see helper). */
+  async resolveProducts(workspaceId: string, platform: string): Promise<string[] | null> {
+    const ws = await this.findById(workspaceId);
+    return resolveWorkspaceProducts(ws.products, platform, PRODUCTS_BY_PLATFORM);
   }
 
   /**
