@@ -21,6 +21,8 @@ interface Props {
   igDefaults: string[];
   embed: boolean;
   origin: string;
+  theme: 'light' | 'dark';
+  accent: string | null;
 }
 
 interface ResultRow {
@@ -40,6 +42,8 @@ export function FacebookPagesClient({
   igDefaults,
   embed,
   origin,
+  theme,
+  accent,
 }: Props) {
   const router = useRouter();
   useEmbedAutosize(embed, origin);
@@ -131,7 +135,7 @@ export function FacebookPagesClient({
       setTimeout(
         () =>
           router.push(
-            `/success?platform=facebook&accounts=${accounts}&summary=${summary}${openerOrigin}${embed ? '&embed=1' : ''}${origin ? `&origin=${encodeURIComponent(origin)}` : ''}`,
+            `/success?platform=facebook&accounts=${accounts}&summary=${summary}${openerOrigin}${embed ? '&embed=1' : ''}${origin ? `&origin=${encodeURIComponent(origin)}` : ''}${embed ? `&theme=${theme}` : ''}${accent ? `&accent=${encodeURIComponent(accent)}` : ''}`,
           ),
         1200,
       );
@@ -143,7 +147,11 @@ export function FacebookPagesClient({
   };
 
   return (
-    <div className={embed ? 'v-canvas v-canvas--embed' : 'v-canvas'}>
+    <div
+      className={embed ? 'v-canvas v-canvas--embed' : 'v-canvas'}
+      data-theme={embed ? theme : undefined}
+      style={embed && accent ? ({ ['--e-accent']: accent, ['--e-on-accent']: '#ffffff' } as React.CSSProperties) : undefined}
+    >
       <div className="v-shell">
         <header className="v-header">
           <Link className="v-meta" href="/">

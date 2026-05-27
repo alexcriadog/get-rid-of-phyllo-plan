@@ -10,7 +10,13 @@ import {
 } from '../../../lib/products';
 import { FacebookPagesClient } from './client';
 
-type Search = { session?: string | string[]; embed?: string | string[]; origin?: string | string[] };
+type Search = {
+  session?: string | string[];
+  embed?: string | string[];
+  origin?: string | string[];
+  theme?: string | string[];
+  accent?: string | string[];
+};
 
 function first(v: string | string[] | undefined): string | null {
   if (Array.isArray(v)) return v[0] ?? null;
@@ -26,6 +32,8 @@ export default async function FacebookPagesPage({
   const sessionId = first(sp.session);
   const embed = first(sp.embed);
   const origin = first(sp.origin);
+  const theme = first(sp.theme) === 'dark' ? 'dark' : 'light';
+  const accent = first(sp.accent);
   if (!sessionId) {
     redirect('/?error=' + encodeURIComponent('Missing session id'));
   }
@@ -53,6 +61,8 @@ export default async function FacebookPagesPage({
       igDefaults={defaultSelectedProducts('instagram')}
       embed={embed === '1'}
       origin={typeof origin === 'string' ? origin : ''}
+      theme={theme}
+      accent={accent}
     />
   );
 }

@@ -21,6 +21,8 @@ interface Props {
   defaultIds: string[];
   embed: boolean;
   origin: string;
+  theme: 'light' | 'dark';
+  accent: string | null;
 }
 
 export function ConfirmClient({
@@ -31,6 +33,8 @@ export function ConfirmClient({
   defaultIds,
   embed,
   origin,
+  theme,
+  accent,
 }: Props) {
   const router = useRouter();
   useEmbedAutosize(embed, origin);
@@ -78,6 +82,8 @@ export function ConfirmClient({
       }
       if (embed) params.set('embed', '1');
       if (origin) params.set('origin', origin);
+      if (embed) params.set('theme', theme);
+      if (accent) params.set('accent', accent);
       router.push(`/success?${params.toString()}`);
     } catch (e) {
       setErr((e as Error).message);
@@ -89,7 +95,11 @@ export function ConfirmClient({
   const total = useMemo(() => products.length, [products]);
 
   return (
-    <div className={embed ? 'v-canvas v-canvas--embed' : 'v-canvas'}>
+    <div
+      className={embed ? 'v-canvas v-canvas--embed' : 'v-canvas'}
+      data-theme={embed ? theme : undefined}
+      style={embed && accent ? ({ ['--e-accent']: accent, ['--e-on-accent']: '#ffffff' } as React.CSSProperties) : undefined}
+    >
       <div className="v-shell">
         <header className="v-header">
           <Link className="v-meta" href="/">

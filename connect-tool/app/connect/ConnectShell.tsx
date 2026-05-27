@@ -33,6 +33,8 @@ interface Props {
   token: string;
   origin: string;
   fixedPlatform?: PlatformKey;
+  theme: 'light' | 'dark';
+  accent: string | null;
   brandTitle: string;
   brandLogo: string | null;
   initialConnections: Connection[];
@@ -70,16 +72,17 @@ export function ConnectShell(props: Props) {
       if (d?.type !== 'camaleonic.oauth.complete' || !d.sessionId) return;
       const msgPlatform = isPlatformKey(d.platform) ? d.platform : platform;
       const originQ = props.origin ? `&origin=${encodeURIComponent(props.origin)}` : '';
+      const themeQ = `&theme=${props.theme}` + (props.accent ? `&accent=${encodeURIComponent(props.accent)}` : '');
       const dest =
         d.kind === 'fb-picker'
-          ? `/facebook/pages?session=${encodeURIComponent(d.sessionId)}&embed=1${originQ}`
-          : `/confirm/${encodeURIComponent(msgPlatform || '')}?session=${encodeURIComponent(d.sessionId)}&embed=1${originQ}`;
+          ? `/facebook/pages?session=${encodeURIComponent(d.sessionId)}&embed=1${originQ}${themeQ}`
+          : `/confirm/${encodeURIComponent(msgPlatform || '')}?session=${encodeURIComponent(d.sessionId)}&embed=1${originQ}${themeQ}`;
       if (d.kind !== 'fb-picker' && !msgPlatform) return;
       window.location.href = dest;
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [platform, props.origin]);
+  }, [platform, props.origin, props.theme, props.accent]);
 
   useEffect(() => () => { if (popupTimer.current !== null) window.clearInterval(popupTimer.current); }, []);
 
@@ -111,8 +114,12 @@ export function ConnectShell(props: Props) {
 
   const conns = platform ? props.initialConnections.filter((c) => c.platform === platform) : [];
 
+  const rootStyle = props.accent
+    ? ({ ['--cml-accent']: props.accent, ['--cml-on-accent']: '#ffffff' } as React.CSSProperties)
+    : undefined;
+
   return (
-    <div className="cml">
+    <div className="cml" data-theme={props.theme} style={rootStyle}>
       <header className="cml-head">
         <div className="cml-brand">
           {props.brandLogo ? (

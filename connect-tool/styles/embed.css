@@ -1,133 +1,113 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   Camaleonic Connect — embedded modal design system (light, trustworthy).
-   Self-contained `cml-*` classes scoped under `.cml`. Used only by the
-   in-iframe connect flow; does NOT touch the dark `v-*` marketing theme.
+   Camaleonic Connect — embedded modal design system.
+
+   Neutral + theme-aware so the widget blends into ANY host site:
+   • Light / dark via `data-theme` on `.cml` (resolved by the SDK from the
+     `theme` option, default = host's prefers-color-scheme).
+   • Accent defaults to a neutral ink; the workspace's brand colour overrides
+     `--cml-accent` (set inline from branding.primary_color) and flows into
+     buttons, the hero icon, checks, status, links.
+   Self-contained `cml-*` classes; never touches the dark `v-*` marketing theme.
    ───────────────────────────────────────────────────────────────────────── */
 
 .cml {
-  --cml-ink: #15161c;
-  --cml-muted: #6c6c78;
-  --cml-faint: #9a9aa6;
-  --cml-line: #ececf1;
-  --cml-line-strong: #dcdce4;
+  /* Light theme (default) — neutral greyscale. */
   --cml-surface: #ffffff;
-  --cml-surface-2: #f7f7fa;
-  --cml-accent: #0a8f6f;       /* deep mint — legible on white */
-  --cml-accent-bg: #e8fbf4;
-  --cml-mint: #3cffd0;          /* bright brand mint — button fills */
-  --cml-danger: #c0344b;
+  --cml-surface-2: #f4f4f5;
+  --cml-ink: #18181b;
+  --cml-muted: #6b7280;
+  --cml-faint: #9ca3af;
+  --cml-line: #e6e6ea;
+  --cml-line-strong: #d4d4d8;
+  --cml-accent: #18181b;          /* neutral default; brand colour overrides */
+  --cml-on-accent: #ffffff;       /* text/icon on accent fills */
+  --cml-danger: #d92d4b;
+  --cml-danger-bg: #fdecef;
   --cml-radius: 16px;
   --cml-radius-sm: 11px;
 
-  font-family: var(--v-sans, 'Space Grotesk', system-ui, sans-serif);
+  font-family: var(--v-sans, 'Space Grotesk', system-ui, -apple-system, sans-serif);
   color: var(--cml-ink);
   background: var(--cml-surface);
   -webkit-font-smoothing: antialiased;
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
 }
 
-/* The page background behind the iframe content must be white so no dark
-   canvas peeks through any uncovered area. */
-html:has(.cml), body:has(.cml) { background: #ffffff; }
+.cml[data-theme='dark'] {
+  --cml-surface: #1a1a1f;
+  --cml-surface-2: #26262d;
+  --cml-ink: #f4f4f5;
+  --cml-muted: #9ca3af;
+  --cml-faint: #6b7280;
+  --cml-line: #303038;
+  --cml-line-strong: #3f3f47;
+  --cml-accent: #f4f4f5;          /* neutral default for dark; brand overrides */
+  --cml-on-accent: #18181b;
+  --cml-danger: #ff8a9b;
+  --cml-danger-bg: rgba(255,90,110,0.12);
+}
+
+/* Paint the iframe page bg so no host/canvas colour peeks through. */
+html:has(.cml), body:has(.cml) { background: var(--cml-surface); }
 
 .cml * { box-sizing: border-box; }
 
+/* Derived accent tint (works for neutral default AND brand colours). */
+.cml { --cml-accent-soft: color-mix(in srgb, var(--cml-accent) 12%, var(--cml-surface)); }
+
 /* ── Header ──────────────────────────────────────────────────────────── */
-.cml-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 18px 6px;
-}
+.cml-head { display: flex; align-items: center; min-height: 30px; padding: 16px 18px 4px; }
 .cml-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .cml-brand__logo { height: 22px; width: auto; border-radius: 5px; }
-.cml-brand__name {
-  font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
-  color: var(--cml-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.cml-close {
-  flex: none; width: 30px; height: 30px; border: 0; border-radius: 50%;
-  background: var(--cml-surface-2); color: var(--cml-muted);
-  font-size: 15px; line-height: 1; cursor: pointer;
-  display: grid; place-items: center; transition: background .15s, color .15s;
-}
-.cml-close:hover { background: #efeff3; color: var(--cml-ink); }
+.cml-brand__name { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--cml-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── Body / steps ────────────────────────────────────────────────────── */
-.cml-body { padding: 8px 22px 22px; flex: 1; }
-.cml-step { animation: cml-in .28s cubic-bezier(.16,1,.3,1) both; }
-@keyframes cml-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.cml-body { padding: 10px 22px 22px; }
+.cml-step { animation: cml-in .26s cubic-bezier(.16,1,.3,1) both; }
+@keyframes cml-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .cml-step { animation: none; } }
 
 .cml-title { font-size: 19px; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; margin: 0 0 6px; color: var(--cml-ink); }
 .cml-sub { font-size: 13.5px; line-height: 1.5; color: var(--cml-muted); margin: 0; }
 .cml-center { text-align: center; }
 
-/* ── Hero icon (consent / guidance) ──────────────────────────────────── */
-.cml-hero { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 6px 0 16px; }
-.cml-hero__ring {
-  width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center;
-  background: var(--cml-accent-bg); color: var(--cml-accent);
-  box-shadow: 0 1px 0 rgba(0,0,0,.02), inset 0 0 0 1px rgba(10,143,111,.12);
-}
+/* ── Hero icon ───────────────────────────────────────────────────────── */
+.cml-hero { display: flex; align-items: center; justify-content: center; margin: 4px 0 16px; }
+.cml-hero__ring { width: 60px; height: 60px; border-radius: 19px; display: grid; place-items: center; background: var(--cml-accent-soft); color: var(--cml-accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cml-accent) 16%, transparent); }
 
-/* ── Trust bullets ───────────────────────────────────────────────────── */
+/* ── Trust bullets — centered block, left-aligned rows ───────────────── */
 .cml-trust { list-style: none; margin: 18px auto 22px; padding: 0; display: flex; flex-direction: column; gap: 14px; max-width: 300px; text-align: left; }
 .cml-trust li { display: flex; gap: 11px; align-items: flex-start; }
-.cml-trust__chk {
-  flex: none; width: 22px; height: 22px; border-radius: 50%; margin-top: 1px;
-  background: var(--cml-accent-bg); color: var(--cml-accent);
-  display: grid; place-items: center;
-}
+.cml-trust__chk { flex: none; width: 22px; height: 22px; border-radius: 50%; margin-top: 1px; background: var(--cml-accent-soft); color: var(--cml-accent); display: grid; place-items: center; }
 .cml-trust__t { display: block; font-size: 13px; font-weight: 600; color: var(--cml-ink); line-height: 1.3; }
 .cml-trust__d { display: block; font-size: 12px; color: var(--cml-muted); line-height: 1.4; margin-top: 2px; }
-.cml-trust > li > span:last-child { display: block; }
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
-.cml-btn {
-  width: 100%; height: 46px; border: 0; border-radius: 12px; cursor: pointer;
-  font-family: inherit; font-size: 14px; font-weight: 600; letter-spacing: 0.01em;
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  background: var(--cml-ink); color: #fff; transition: transform .12s ease, filter .15s ease, background .15s;
-}
-.cml-btn:hover { filter: brightness(1.08); }
+.cml-btn { width: 100%; height: 46px; border: 0; border-radius: 12px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; letter-spacing: 0.01em; display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--cml-accent); color: var(--cml-on-accent); transition: filter .15s ease, transform .12s ease; }
+.cml-btn:hover { filter: brightness(1.1); }
 .cml-btn:active { transform: translateY(1px); }
-.cml-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; filter: none; }
-.cml-btn--accent { background: var(--cml-mint); color: #04231b; }
-.cml-btn--brand { color: #fff; }   /* brand color set inline per provider */
+.cml-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; filter: none; }
+.cml-btn--brand { color: #fff; }   /* provider brand colour set inline */
 .cml-btn__row { margin-top: 18px; }
 
-.cml-ghost {
-  background: none; border: 0; cursor: pointer; font-family: inherit;
-  font-size: 13px; font-weight: 600; color: var(--cml-muted);
-  padding: 10px 4px; transition: color .15s;
-}
+.cml-ghost { background: none; border: 0; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--cml-muted); padding: 10px 4px; transition: color .15s; }
 .cml-ghost:hover { color: var(--cml-ink); }
-.cml-link-row { display: flex; justify-content: center; margin-top: 6px; }
+.cml-link-row { display: flex; justify-content: center; margin-top: 8px; }
 
 /* ── Platform chooser grid ───────────────────────────────────────────── */
 .cml-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
-.cml-tile {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
-  padding: 14px; border: 1px solid var(--cml-line); border-radius: var(--cml-radius-sm);
-  background: var(--cml-surface); cursor: pointer; text-align: left;
-  font-family: inherit; transition: border-color .15s, box-shadow .15s, transform .12s;
-}
-.cml-tile:hover { border-color: var(--cml-line-strong); box-shadow: 0 6px 20px rgba(20,20,30,.07); transform: translateY(-1px); }
+.cml-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid var(--cml-line); border-radius: var(--cml-radius-sm); background: var(--cml-surface); cursor: pointer; text-align: left; font-family: inherit; transition: border-color .15s, box-shadow .15s, transform .12s; }
+.cml-tile:hover { border-color: var(--cml-line-strong); box-shadow: 0 6px 20px color-mix(in srgb, var(--cml-ink) 8%, transparent); transform: translateY(-1px); }
 .cml-tile__label { font-size: 13.5px; font-weight: 600; color: var(--cml-ink); }
 
 /* ── Connections list ────────────────────────────────────────────────── */
 .cml-list { display: flex; flex-direction: column; gap: 9px; margin: 16px 0 18px; }
-.cml-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 11px 13px; border: 1px solid var(--cml-line); border-radius: var(--cml-radius-sm); background: var(--cml-surface);
-}
+.cml-row { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--cml-line); border-radius: var(--cml-radius-sm); background: var(--cml-surface); }
 .cml-row__meta { flex: 1; min-width: 0; }
 .cml-row__name { font-size: 13.5px; font-weight: 600; color: var(--cml-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cml-row__sub { font-size: 11.5px; color: var(--cml-faint); margin-top: 1px; text-transform: capitalize; }
-.cml-status { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--cml-accent); }
-.cml-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--cml-accent); }
-.cml-empty { text-align: center; color: var(--cml-muted); font-size: 13px; padding: 20px 0; }
+.cml-status { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: #16a34a; }
+.cml-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #16a34a; }
+.cml-empty { text-align: center; color: var(--cml-muted); font-size: 13px; padding: 18px 0; }
 
 /* ── Platform icon badge ─────────────────────────────────────────────── */
 .cml-ico { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; }
@@ -135,30 +115,36 @@ html:has(.cml), body:has(.cml) { background: #ffffff; }
 .cml-ico--lg { width: 48px; height: 48px; border-radius: 14px; }
 .cml-ico--lg svg { width: 26px; height: 26px; }
 
-/* ── Harmonize legacy v-* post-OAuth pages (confirm / picker / success) ──
-   They reuse the dark marketing classes; in embed mode flip them to the
-   clean light cml look (sans headings, soft buttons, lighter chrome). */
-.v-canvas--embed { padding: 26px 22px 22px; }
-/* The single close lives in the modal chrome (SDK). Hide the legacy
-   "← Back / eyebrow" header on the embedded confirm + page-picker so it
-   doesn't collide with the chrome close. */
+/* ── Banner / spinner ────────────────────────────────────────────────── */
+.cml-banner { padding: 13px 15px; border-radius: 12px; font-size: 13px; line-height: 1.45; background: var(--cml-danger-bg); color: var(--cml-danger); border: 1px solid color-mix(in srgb, var(--cml-danger) 30%, transparent); }
+.cml-spin { width: 30px; height: 30px; border-radius: 50%; border: 3px solid var(--cml-line); border-top-color: var(--cml-accent); margin: 24px auto; animation: cml-spin .7s linear infinite; }
+@keyframes cml-spin { to { transform: rotate(360deg); } }
+
+/* ── Legacy v-* post-OAuth pages (confirm / picker / success) ────────────
+   These reuse the dark marketing classes; in embed mode flip them to a
+   clean, theme-aware surface. Tokens mirror the cml light/dark palette. */
+.v-canvas--embed { --e-surface: #fff; --e-ink: #18181b; --e-muted: #6b7280; --e-line: #e6e6ea; --e-accent: #18181b; --e-on-accent: #fff;
+  min-height: 0; padding: 26px 22px 22px; background: var(--e-surface); color: var(--e-ink);
+  font-family: var(--v-sans, 'Space Grotesk', system-ui, sans-serif); }
+.v-canvas--embed[data-theme='dark'] { --e-surface: #1a1a1f; --e-ink: #f4f4f5; --e-muted: #9ca3af; --e-line: #303038; --e-accent: #f4f4f5; --e-on-accent: #18181b; }
+html:has(.v-canvas--embed), body:has(.v-canvas--embed) { background: var(--e-surface, #fff); }
 .v-canvas--embed .v-header { display: none; }
-.v-canvas--embed .v-display { font-family: var(--v-sans, 'Space Grotesk', system-ui, sans-serif); font-weight: 600; letter-spacing: -0.01em; color: #15161c; }
+.v-canvas--embed .v-shell { max-width: 100%; margin: 0; padding: 0; gap: 14px; }
+.v-canvas--embed .v-display { font-family: var(--v-sans, 'Space Grotesk', system-ui, sans-serif); font-weight: 600; letter-spacing: -0.01em; color: var(--e-ink); }
 .v-canvas--embed .v-display.size-hero { font-size: 22px; line-height: 1.2; }
 .v-canvas--embed .v-display.size-secondary { font-size: 20px; line-height: 1.2; }
 .v-canvas--embed .v-display.size-tertiary { font-size: 17px; }
-.v-canvas--embed .v-eyebrow { font-size: 12px; letter-spacing: 0.04em; text-transform: none; color: #6c6c78; }
-.v-canvas--embed .v-tag.mint { background: #3cffd0; color: #04231b; }
-.v-canvas--embed .v-pill-primary { background: #3cffd0; color: #04231b; border-radius: 12px; padding: 12px 18px; font-size: 13px; }
-.v-canvas--embed .v-pill-primary:hover { filter: brightness(1.05); background: #3cffd0; }
-.v-canvas--embed .v-pill-outline-mint { border-radius: 10px; }
-.v-canvas--embed .v-summary { padding: 14px; }
-/* Hide the internal product-id tag (e.g. "identity") on picker rows — it's
-   developer metadata, not for end users. */
+.v-canvas--embed .v-body { color: var(--e-muted); font-size: 14px; }
+.v-canvas--embed .v-kicker, .v-canvas--embed .v-eyebrow { color: var(--e-muted); }
+.v-canvas--embed .v-page-name, .v-canvas--embed .v-row-val { color: var(--e-ink); }
+.v-canvas--embed .v-page-id, .v-canvas--embed .v-meta { color: var(--e-muted); }
 .v-canvas--embed .v-page-row > .v-meta { display: none; }
-
-/* ── Banner / states ─────────────────────────────────────────────────── */
-.cml-banner { padding: 13px 15px; border-radius: 12px; font-size: 13px; line-height: 1.45; }
-.cml-banner--danger { background: #fdeef0; color: var(--cml-danger); border: 1px solid #f6d3d9; }
-.cml-spin { width: 30px; height: 30px; border-radius: 50%; border: 3px solid var(--cml-line); border-top-color: var(--cml-accent); margin: 24px auto; animation: cml-spin 0.7s linear infinite; }
-@keyframes cml-spin { to { transform: rotate(360deg); } }
+.v-canvas--embed .v-page-row { border-color: var(--e-line); }
+.v-canvas--embed .v-page-row.picked { border-color: var(--e-accent); background: color-mix(in srgb, var(--e-accent) 8%, transparent); }
+.v-canvas--embed .v-page-row input[type='checkbox'] { accent-color: var(--e-accent); }
+.v-canvas--embed .v-summary { padding: 14px; border-color: var(--e-line); background: color-mix(in srgb, var(--e-ink) 3%, transparent); }
+.v-canvas--embed .v-tag.mint { background: var(--e-accent); color: var(--e-on-accent); }
+.v-canvas--embed .v-pill-primary { background: var(--e-accent); color: var(--e-on-accent); border-radius: 12px; padding: 12px 18px; font-size: 13px; border: 0; }
+.v-canvas--embed .v-pill-primary:hover { filter: brightness(1.1); }
+.v-canvas--embed .v-pill-outline-mint { border-radius: 10px; color: var(--e-ink); border-color: var(--e-line); }
+.v-canvas--embed .v-banner.danger { color: var(--cml-danger, #d92d4b); }

@@ -66,8 +66,13 @@ export function SuccessClient() {
   if (embedded) {
     const pk = isPlatformKey(platform) ? platform : null;
     const handle = typeof summary?.handle === 'string' ? (summary.handle as string) : '';
+    const theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+    const accent = params.get('accent');
+    const rootStyle = accent
+      ? ({ ['--cml-accent']: accent, ['--cml-on-accent']: '#ffffff' } as React.CSSProperties)
+      : undefined;
     return (
-      <div className="cml">
+      <div className="cml" data-theme={theme} style={rootStyle}>
         <header className="cml-head">
           <div className="cml-brand"><span className="cml-brand__name">Camaleonic</span></div>
         </header>

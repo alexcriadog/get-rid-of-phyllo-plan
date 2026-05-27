@@ -26,6 +26,8 @@ export interface CamaleonicConnectOptions {
   platform?: PlatformKey;
   /** Allow-list; if exactly one entry and no `platform`, treated as the single platform. */
   platforms?: ReadonlyArray<PlatformKey>;
+  /** Colour theme. 'auto' (default) follows the host's prefers-color-scheme. */
+  theme?: 'light' | 'dark' | 'auto';
   baseUrl?: string;
   onSuccess?: (data: SuccessPayload) => void;
   onError?: (err: ErrorPayload) => void;
@@ -47,6 +49,20 @@ const MSG = {
 const DEFAULT_HEIGHT = 480;
 const MODAL_WIDTH = 440;
 const MIN_HEIGHT = 140;
+
+function resolveTheme(opts: CamaleonicConnectOptions): 'light' | 'dark' {
+  if (opts.theme === 'light' || opts.theme === 'dark') return opts.theme;
+  try {
+    if (typeof window !== 'undefined' && window.matchMedia &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+  } catch {
+    /* ignore */
+  }
+  return 'light';
+}
+const SURFACE: Record<'light' | 'dark', string> = { light: '#ffffff', dark: '#1a1a1f' };
+const CLOSE_FG: Record<'light' | 'dark', string> = { light: '#71717a', dark: '#a1a1aa' };
+const CLOSE_BG: Record<'light' | 'dark', string> = { light: 'rgba(0,0,0,0.04)', dark: 'rgba(255,255,255,0.08)' };
 
 function resolveBaseUrl(opts: CamaleonicConnectOptions): string {
   if (typeof opts.baseUrl === 'string' && opts.baseUrl.length > 0) {
@@ -93,6 +109,7 @@ function buildConnectUrl(
     embed: '1',
   });
   if (platform) qs.set('platform', platform);
+  qs.set('theme', resolveTheme(opts));
   return baseUrl + '/connect?' + qs.toString();
 }
 
@@ -137,30 +154,35 @@ function init(opts: CamaleonicConnectOptions): CamaleonicConnectHandle {
   }
 
   function buildOverlay(url: string): void {
+    const theme = resolveTheme(opts);
+
     overlay = document.createElement('div');
     overlay.setAttribute('data-camaleonic-overlay', '');
     overlay.style.cssText =
       'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;' +
-      'justify-content:center;background:rgba(8,8,12,0.6);backdrop-filter:blur(4px);';
+      'justify-content:center;background:rgba(8,8,12,0.55);backdrop-filter:blur(3px);';
 
     modal = document.createElement('div');
     modal.setAttribute('data-camaleonic-modal', '');
     modal.style.cssText =
       'position:relative;width:' + MODAL_WIDTH + 'px;max-width:calc(100vw - 32px);' +
       'height:' + DEFAULT_HEIGHT + 'px;max-height:calc(100vh - 48px);' +
-      'border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.5);background:#fff;';
+      'border-radius:18px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,0.35);background:' +
+      SURFACE[theme] + ';';
 
-    // Single close affordance, owned by the modal chrome so it is present and
-    // consistent on every screen (and works even if the iframe fails to load).
+    // Single, neutral close affordance owned by the modal chrome — present and
+    // consistent on every screen (works even if the iframe fails to load).
     const closeBtn = document.createElement('button');
     closeBtn.setAttribute('aria-label', 'Close');
     closeBtn.innerHTML = '&#10005;';
+    const closeBg = CLOSE_BG[theme];
+    const closeFg = CLOSE_FG[theme];
     closeBtn.style.cssText =
-      'position:absolute;top:14px;right:14px;z-index:2;width:30px;height:30px;border:0;' +
-      'border-radius:50%;background:rgba(20,20,30,0.05);color:#6c6c78;cursor:pointer;' +
-      'font-size:13px;line-height:30px;text-align:center;padding:0;transition:background .15s,color .15s;';
-    closeBtn.onmouseenter = () => { closeBtn.style.background = 'rgba(20,20,30,0.10)'; closeBtn.style.color = '#15161c'; };
-    closeBtn.onmouseleave = () => { closeBtn.style.background = 'rgba(20,20,30,0.05)'; closeBtn.style.color = '#6c6c78'; };
+      'position:absolute;top:14px;right:14px;z-index:2;width:28px;height:28px;border:0;' +
+      'border-radius:8px;background:transparent;color:' + closeFg + ';cursor:pointer;' +
+      'font-size:13px;line-height:28px;text-align:center;padding:0;transition:background .15s;';
+    closeBtn.onmouseenter = () => { closeBtn.style.background = closeBg; };
+    closeBtn.onmouseleave = () => { closeBtn.style.background = 'transparent'; };
     closeBtn.onclick = () => emitExit();
 
     const iframe = document.createElement('iframe');

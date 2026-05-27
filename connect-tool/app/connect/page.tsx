@@ -38,10 +38,11 @@ export default async function ConnectPage({
   const origin = first(sp.origin);
   const rawPlatform = first(sp.platform);
   const platform: PlatformKey | undefined = isPlatformKey(rawPlatform) ? rawPlatform : undefined;
+  const theme: 'light' | 'dark' = first(sp.theme) === 'dark' ? 'dark' : 'light';
 
   if (!ws || !token) {
     return (
-      <div className="v-canvas v-canvas--embed">
+      <div className="v-canvas v-canvas--embed" data-theme={theme}>
         <div className="v-shell">
           <p className="v-body">Missing connect context. Restart from the app you came from.</p>
         </div>
@@ -66,6 +67,10 @@ export default async function ConnectPage({
     typeof branding?.logo_url === 'string' && /^https?:\/\//.test(branding.logo_url)
       ? branding.logo_url
       : null;
+  const accent =
+    typeof branding?.primary_color === 'string' && branding.primary_color.trim().length > 0
+      ? branding.primary_color.trim()
+      : null;
 
   return (
     <ConnectShell
@@ -73,6 +78,8 @@ export default async function ConnectPage({
       token={token}
       origin={origin ?? ''}
       fixedPlatform={platform}
+      theme={theme}
+      accent={accent}
       brandTitle={branding?.title ?? 'Camaleonic'}
       brandLogo={brandLogo}
       initialConnections={connections}
