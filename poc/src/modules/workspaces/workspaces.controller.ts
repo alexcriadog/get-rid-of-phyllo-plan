@@ -17,8 +17,8 @@ export class WorkspacesController {
   @Get(':slug/branding')
   async getBranding(
     @Param('slug') slug: string,
-  ): Promise<{ slug: string; branding: WorkspaceBranding | null }> {
+  ): Promise<{ slug: string; branding: WorkspaceBranding | null; products: Record<string, string[]> | null }> {
     const ws = await this.workspaces.findBySlug(slug);
-    return { slug: ws.slug, branding: ws.branding };
+    return { slug: ws.slug, branding: ws.branding, products: ws.products };
   }
 }
