@@ -33,6 +33,7 @@ export interface WorkspaceView {
   slug: string;
   name: string;
   branding: WorkspaceBranding | null;
+  products: Record<string, string[]> | null;
   planTier: string;
 }
 
@@ -132,6 +133,7 @@ export class WorkspacesService implements OnModuleInit {
     slug: string;
     name: string;
     branding: unknown;
+    products: unknown;
     planTier: string;
   }): WorkspaceView {
     return {
@@ -139,6 +141,7 @@ export class WorkspacesService implements OnModuleInit {
       slug: row.slug,
       name: row.name,
       branding: this.parseBranding(row.branding),
+      products: this.parseProducts(row.products),
       planTier: row.planTier,
     };
   }
@@ -146,6 +149,15 @@ export class WorkspacesService implements OnModuleInit {
   private parseBranding(raw: unknown): WorkspaceBranding | null {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     return raw as WorkspaceBranding;
+  }
+
+  private parseProducts(raw: unknown): Record<string, string[]> | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const out: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (Array.isArray(v)) out[k] = v.filter((x): x is string => typeof x === 'string');
+    }
+    return out;
   }
 }
 
