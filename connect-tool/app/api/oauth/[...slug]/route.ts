@@ -221,6 +221,7 @@ export async function GET(
           endUserId: ctx.endUserId,
           environment: ctx.environment,
           openerOrigin: ctx.openerOrigin,
+          workspaceSlug: ctx.workspaceSlug,
         });
       }
 
