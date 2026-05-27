@@ -70,7 +70,6 @@ export function SuccessClient() {
       <div className="cml">
         <header className="cml-head">
           <div className="cml-brand"><span className="cml-brand__name">Camaleonic</span></div>
-          <button className="cml-close" aria-label="Close" onClick={() => window.parent?.postMessage({ type: 'camaleonic.connect.exit' }, openerOrigin || '*')}>✕</button>
         </header>
         <div className="cml-body">
           <div className="cml-step cml-center">

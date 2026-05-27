@@ -72,7 +72,7 @@ html:has(.cml), body:has(.cml) { background: #ffffff; }
 }
 
 /* ── Trust bullets ───────────────────────────────────────────────────── */
-.cml-trust { list-style: none; margin: 18px 0 22px; padding: 0; display: flex; flex-direction: column; gap: 13px; }
+.cml-trust { list-style: none; margin: 18px auto 22px; padding: 0; display: flex; flex-direction: column; gap: 14px; max-width: 300px; text-align: left; }
 .cml-trust li { display: flex; gap: 11px; align-items: flex-start; }
 .cml-trust__chk {
   flex: none; width: 22px; height: 22px; border-radius: 50%; margin-top: 1px;
@@ -138,7 +138,11 @@ html:has(.cml), body:has(.cml) { background: #ffffff; }
 /* ── Harmonize legacy v-* post-OAuth pages (confirm / picker / success) ──
    They reuse the dark marketing classes; in embed mode flip them to the
    clean light cml look (sans headings, soft buttons, lighter chrome). */
-.v-canvas--embed { padding: 22px; }
+.v-canvas--embed { padding: 26px 22px 22px; }
+/* The single close lives in the modal chrome (SDK). Hide the legacy
+   "← Back / eyebrow" header on the embedded confirm + page-picker so it
+   doesn't collide with the chrome close. */
+.v-canvas--embed .v-header { display: none; }
 .v-canvas--embed .v-display { font-family: var(--v-sans, 'Space Grotesk', system-ui, sans-serif); font-weight: 600; letter-spacing: -0.01em; color: #15161c; }
 .v-canvas--embed .v-display.size-hero { font-size: 22px; line-height: 1.2; }
 .v-canvas--embed .v-display.size-secondary { font-size: 20px; line-height: 1.2; }

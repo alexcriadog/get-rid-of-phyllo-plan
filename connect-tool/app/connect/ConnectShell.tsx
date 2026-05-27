@@ -122,7 +122,6 @@ export function ConnectShell(props: Props) {
             <span className="cml-brand__name">Camaleonic</span>
           )}
         </div>
-        <button className="cml-close" aria-label="Close" onClick={exit}>✕</button>
       </header>
 
       <div className="cml-body">

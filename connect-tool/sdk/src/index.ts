@@ -150,12 +150,17 @@ function init(opts: CamaleonicConnectOptions): CamaleonicConnectHandle {
       'height:' + DEFAULT_HEIGHT + 'px;max-height:calc(100vh - 48px);' +
       'border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.5);background:#fff;';
 
+    // Single close affordance, owned by the modal chrome so it is present and
+    // consistent on every screen (and works even if the iframe fails to load).
     const closeBtn = document.createElement('button');
     closeBtn.setAttribute('aria-label', 'Close');
-    closeBtn.textContent = '✕';
+    closeBtn.innerHTML = '&#10005;';
     closeBtn.style.cssText =
-      'position:absolute;top:10px;right:10px;z-index:2;width:28px;height:28px;border:0;' +
-      'border-radius:50%;background:rgba(0,0,0,0.06);cursor:pointer;font-size:14px;line-height:28px;';
+      'position:absolute;top:14px;right:14px;z-index:2;width:30px;height:30px;border:0;' +
+      'border-radius:50%;background:rgba(20,20,30,0.05);color:#6c6c78;cursor:pointer;' +
+      'font-size:13px;line-height:30px;text-align:center;padding:0;transition:background .15s,color .15s;';
+    closeBtn.onmouseenter = () => { closeBtn.style.background = 'rgba(20,20,30,0.10)'; closeBtn.style.color = '#15161c'; };
+    closeBtn.onmouseleave = () => { closeBtn.style.background = 'rgba(20,20,30,0.05)'; closeBtn.style.color = '#6c6c78'; };
     closeBtn.onclick = () => emitExit();
 
     const iframe = document.createElement('iframe');
