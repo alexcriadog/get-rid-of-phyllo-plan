@@ -32,6 +32,7 @@ export interface SessionContext {
   endUserId: string;
   environment?: 'live' | 'test';
   openerOrigin?: string;
+  workspaceSlug?: string;
 }
 
 /** FB sessions are special — they need a Page picker before seeding. */

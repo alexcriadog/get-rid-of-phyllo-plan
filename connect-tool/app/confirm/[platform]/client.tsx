@@ -19,6 +19,7 @@ interface Props {
   preview: Preview;
   products: ProductDef[];
   defaultIds: string[];
+  lockedProducts: string[] | null;
   embed: boolean;
   origin: string;
   theme: 'light' | 'dark';
@@ -31,6 +32,7 @@ export function ConfirmClient({
   preview,
   products,
   defaultIds,
+  lockedProducts,
   embed,
   origin,
   theme,
@@ -56,10 +58,11 @@ export function ConfirmClient({
     setBusy(true);
     setErr(null);
     try {
+      const submitIds = lockedProducts ?? Array.from(picked);
       const res = await fetch('/api/seed-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, productIds: Array.from(picked) }),
+        body: JSON.stringify({ sessionId, productIds: submitIds }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -153,46 +156,65 @@ export function ConfirmClient({
           }}
         >
           <span className="v-kicker mint">Products</span>
-          <span className="v-meta">
-            {picked.size}/{total} selected
-          </span>
+          {!lockedProducts && (
+            <span className="v-meta">
+              {picked.size}/{total} selected
+            </span>
+          )}
         </div>
 
-        <div className="v-pages">
-          {products.map((p) => {
-            const checked = picked.has(p.id);
-            const locked = !!p.required;
-            return (
-              <label
-                key={p.id}
-                className={'v-page-row ' + (checked ? 'picked' : '')}
-                style={{
-                  cursor: locked ? 'default' : 'pointer',
-                  opacity: locked ? 0.85 : 1,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(p.id, locked)}
-                  disabled={locked}
-                />
-                <div className="v-page-meta">
-                  <div className="v-page-name">
-                    {p.label}
-                    {locked && (
-                      <span className="v-meta" style={{ marginLeft: 8 }}>
-                        required
-                      </span>
-                    )}
+        {lockedProducts ? (
+          <div className="cml-list">
+            {lockedProducts.map((id) => {
+              const def = products.find((p) => p.id === id);
+              return (
+                <div key={id} className="cml-row">
+                  <div className="cml-row__meta">
+                    <div className="cml-row__name">{def?.label ?? id}</div>
+                    {def?.hint && <div className="cml-row__sub">{def.hint}</div>}
                   </div>
-                  {p.hint && <div className="v-page-id">{p.hint}</div>}
+                  <span className="cml-status">Included</span>
                 </div>
-                <span className="v-meta">{p.id}</span>
-              </label>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="v-pages">
+            {products.map((p) => {
+              const checked = picked.has(p.id);
+              const locked = !!p.required;
+              return (
+                <label
+                  key={p.id}
+                  className={'v-page-row ' + (checked ? 'picked' : '')}
+                  style={{
+                    cursor: locked ? 'default' : 'pointer',
+                    opacity: locked ? 0.85 : 1,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(p.id, locked)}
+                    disabled={locked}
+                  />
+                  <div className="v-page-meta">
+                    <div className="v-page-name">
+                      {p.label}
+                      {locked && (
+                        <span className="v-meta" style={{ marginLeft: 8 }}>
+                          required
+                        </span>
+                      )}
+                    </div>
+                    {p.hint && <div className="v-page-id">{p.hint}</div>}
+                  </div>
+                  <span className="v-meta">{p.id}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
 
         <div
           style={{
@@ -204,12 +226,14 @@ export function ConfirmClient({
         >
           <button
             className="v-pill-primary"
-            disabled={busy || picked.size === 0}
+            disabled={busy || (!lockedProducts && picked.size === 0)}
             onClick={onSubmit}
           >
             {busy
               ? 'Connecting…'
-              : `Connect with ${picked.size} product${picked.size === 1 ? '' : 's'}`}
+              : lockedProducts
+                ? 'Connect'
+                : `Connect with ${picked.size} product${picked.size === 1 ? '' : 's'}`}
           </button>
         </div>
       </div>

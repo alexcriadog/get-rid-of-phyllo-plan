@@ -48,6 +48,8 @@ const BrandingSchema = z
   })
   .strict();
 
+const ProductsSchema = z.record(z.array(z.string())).default({});
+
 const IssueKeySchema = z
   .object({
     environment: z.enum(['live', 'test']).default('live'),
@@ -167,6 +169,7 @@ export class AdminSaasController {
       name: ws.name,
       plan_tier: ws.planTier,
       branding: ws.branding,
+      products: ws.products,
       account_count: accountCount,
       active_api_key_count: apiKeyCount,
       webhook_endpoint_count: endpointCount,
@@ -198,6 +201,29 @@ export class AdminSaasController {
       },
     });
     return { slug, branding: isClear ? null : parsed.data };
+  }
+
+  @Patch('workspaces/:slug/products')
+  async updateProducts(
+    @Param('slug') slug: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    const parsed = ProductsSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: 'Invalid products payload',
+        issues: parsed.error.issues,
+      });
+    }
+    const ws = await this.workspaces.findBySlug(slug);
+    const isClear = Object.keys(parsed.data).length === 0;
+    await this.prisma.workspace.update({
+      where: { id: ws.id },
+      data: {
+        products: isClear ? Prisma.JsonNull : (parsed.data as Prisma.InputJsonValue),
+      },
+    });
+    return { slug, products: isClear ? null : parsed.data };
   }
 
   // ─── API keys ───────────────────────────────────────────────────────────

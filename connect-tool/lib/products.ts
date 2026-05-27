@@ -52,7 +52,9 @@ export const PRODUCT_CATALOG: Record<PlatformKey, ProductDef[]> = {
     { id: 'identity', label: 'Channel info', required: true, default: true },
     { id: 'audience', label: 'Audience', default: true, hint: 'Analytics API' },
     { id: 'engagement_new', label: 'Videos + metrics', default: true },
+    { id: 'engagement_deep', label: 'Per-video analytics', default: true, hint: 'Watch time, retention, traffic sources' },
     { id: 'comments', label: 'Comments on top videos', default: true },
+    { id: 'ads', label: 'Ad insights', default: false, hint: 'Requires linked ads access' },
   ],
   twitch: [
     {

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { verifySdkToken } from '../../lib/oauth-context';
 import { fetchConnections } from '../../lib/connections';
+import { fetchWorkspaceProducts, offeredPlatforms } from '../../lib/workspace-config';
 import { ConnectShell } from './ConnectShell';
 import { isPlatformKey, type PlatformKey } from './shell-machine';
 
@@ -61,6 +62,8 @@ export default async function ConnectPage({
   }
 
   const branding = await fetchBranding(ws);
+  const productsConfig = await fetchWorkspaceProducts(ws);
+  const offered = offeredPlatforms(productsConfig); // string[] | null
   const connections = !error ? await fetchConnections(ws, endUserId) : [];
 
   const brandLogo =
@@ -84,6 +87,7 @@ export default async function ConnectPage({
       brandLogo={brandLogo}
       initialConnections={connections}
       tokenError={error}
+      offeredPlatforms={offered}
     />
   );
 }

@@ -11,17 +11,14 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { OutboundWebhooksService } from '@modules/outbound-webhooks/outbound-webhooks.service';
+import { PRODUCTS_BY_PLATFORM, type Platform } from './products.catalog';
+import { WorkspacesService } from '@modules/workspaces/workspaces.service';
+import { enforceWorkspaceProducts } from './seed-products-enforcement';
+
+export type { Platform };
 
 const META_GRAPH = 'https://graph.facebook.com/v22.0';
 const NORMALIZE_TIMEOUT_MS = 15_000;
-
-export type Platform =
-  | 'instagram'
-  | 'facebook'
-  | 'tiktok'
-  | 'threads'
-  | 'youtube'
-  | 'twitch';
 
 export interface SeedAccountInput {
   platform: Platform;
@@ -73,49 +70,6 @@ export interface SeedAccountResult {
   sync_jobs_created: string[];
 }
 
-/**
- * Products we create sync_jobs for on seed. Day 1 we just write these rows —
- * Day 2 the scheduler picks them up.
- */
-const PRODUCTS_BY_PLATFORM: Record<Platform, ReadonlyArray<string>> = {
-  instagram: ['identity', 'audience', 'engagement_new', 'stories'],
-  // Page Stories API is GA in v22 — see FacebookAdapter.fetchStories.
-  // pages_read_user_content (May 2026 grant) unlocked `mentions` (/tagged),
-  // user-identity in `comments`, and Page `ratings`. ads_read added `ads`.
-  // public_pages monitor (PPCA) is NOT a per-account product — it's a
-  // separate watchlist on `public_page_snapshots`.
-  facebook: [
-    'identity',
-    'audience',
-    'engagement_new',
-    'stories',
-    'mentions',
-    'comments',
-    'ratings',
-    'ads',
-  ],
-  // TikTok BC v1.3: stories don't exist; mentions probe pending.
-  tiktok: ['identity', 'audience', 'engagement_new', 'comments'],
-  // Threads has no stories. /me/mentioned_threads is the mentions surface.
-  threads: ['identity', 'audience', 'engagement_new', 'comments', 'mentions'],
-  // YouTube: no stories, no mentions surface in the public API.
-  // engagement_deep: per-video Analytics drill-down + retention curve.
-  // ads: Google Ads campaigns (requires GOOGLE_ADS_DEVELOPER_TOKEN).
-  youtube: [
-    'identity',
-    'audience',
-    'engagement_new',
-    'engagement_deep',
-    'comments',
-    'ads',
-  ],
-  // Twitch: VODs + clips only (no live tracking). Followers + subscriber
-  // counts live inside the `identity` snapshot because Helix doesn't expose
-  // demographic distributions. No engagement_deep (no Analytics API), no
-  // comments (chat is real-time), no ads (no revenue $ via Helix), no
-  // stories/mentions/ratings (concepts don't exist on Twitch).
-  twitch: ['identity', 'engagement_new'],
-};
 
 @Injectable()
 export class AccountsService {
@@ -124,6 +78,7 @@ export class AccountsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
+    private readonly workspaces: WorkspacesService,
     // Optional: when AccountsModule is imported into a process that doesn't
     // wire OutboundWebhooks (e.g. the worker), seeding still succeeds —
     // emit is just a no-op.
@@ -157,6 +112,14 @@ export class AccountsService {
           `Allowed: ${allProducts.join(', ')}`,
       );
     }
+
+    const workspaceId = input.workspaceId ?? DEFAULT_WORKSPACE_ID;
+
+    // Per-workspace enforcement: a workspace may offer only a subset of the
+    // platform catalog. Trim to its allow-list (defense in depth — the UI
+    // already shows only these, but never trust the caller).
+    const allowed = await this.workspaces.resolveProducts(workspaceId, input.platform);
+    const enforcedProducts = enforceWorkspaceProducts(products, allowed);
 
     // For Meta family (FB + IG) we MUST end up persisting a Page token so
     // calls don't get charged against the App-Level rate limit (200 ×
@@ -200,8 +163,6 @@ export class AccountsService {
       input.metadata && Object.keys(input.metadata).length > 0
         ? (input.metadata as Prisma.InputJsonValue)
         : Prisma.JsonNull;
-
-    const workspaceId = input.workspaceId ?? DEFAULT_WORKSPACE_ID;
 
     return this.prisma.$transaction(async (tx) => {
       // Look up first so we can decide whether re-OAuth should also resume an
@@ -293,7 +254,7 @@ export class AccountsService {
       });
 
       const jobIds: string[] = [];
-      for (const product of products) {
+      for (const product of enforcedProducts) {
         const job = await tx.syncJob.upsert({
           where: {
             accountId_product: { accountId: account.id, product },

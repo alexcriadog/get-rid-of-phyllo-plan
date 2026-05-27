@@ -150,6 +150,9 @@ model Workspace {
   // Brandable theme JSON read by connect.camaleonic.io. Shape documented in
   // the spec; null means "use platform defaults".
   branding  Json?
+  // Per-workspace platform + product allow-list. Shape: Record<platform,string[]>.
+  // null → all env-enabled platforms + full catalog (default).
+  products  Json?
   planTier  String   @default("standard") @map("plan_tier")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

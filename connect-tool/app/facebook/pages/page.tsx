@@ -8,6 +8,7 @@ import {
   PRODUCT_CATALOG,
   defaultSelectedProducts,
 } from '../../../lib/products';
+import { fetchWorkspaceProducts, displayProducts } from '../../../lib/workspace-config';
 import { FacebookPagesClient } from './client';
 
 type Search = {
@@ -47,6 +48,11 @@ export default async function FacebookPagesPage({
     );
   }
 
+  const wsSlug = session?.ctx?.workspaceSlug ?? null;
+  const cfg = wsSlug ? await fetchWorkspaceProducts(wsSlug) : null;
+  const lockedFb = displayProducts(cfg, 'facebook');   // string[] | null
+  const lockedIg = displayProducts(cfg, 'instagram');  // string[] | null
+
   return (
     <FacebookPagesClient
       sessionId={sessionId}
@@ -59,6 +65,8 @@ export default async function FacebookPagesPage({
       fbDefaults={defaultSelectedProducts('facebook')}
       igProducts={PRODUCT_CATALOG.instagram}
       igDefaults={defaultSelectedProducts('instagram')}
+      lockedFb={lockedFb}
+      lockedIg={lockedIg}
       embed={embed === '1'}
       origin={typeof origin === 'string' ? origin : ''}
       theme={theme}

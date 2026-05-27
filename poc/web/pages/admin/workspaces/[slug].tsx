@@ -18,6 +18,7 @@ type WorkspaceDetail = {
   name: string;
   plan_tier: string;
   branding: Branding | null;
+  products?: Record<string, string[]> | null;
   account_count: number;
   active_api_key_count: number;
   webhook_endpoint_count: number;
@@ -79,6 +80,7 @@ export default function WorkspaceDetail() {
     >
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <BrandingSection slug={slug} ws={ws.data} onSaved={ws.refresh} />
+        <ProductsSection slug={slug} ws={ws.data} onSaved={ws.refresh} />
         <SummarySection ws={ws.data} />
         <ApiKeysSection slug={slug} keys={keys.data ?? []} onChange={keys.refresh} />
         <WebhooksSection endpoints={endpoints.data ?? []} />
@@ -228,6 +230,174 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </label>
       {children}
     </div>
+  );
+}
+
+// ─── Products ─────────────────────────────────────────────────────────────
+
+const PRODUCT_CATALOG: Record<string, { id: string; label: string }[]> = {
+  facebook: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'stories', label: 'Stories' }, { id: 'mentions', label: 'Tagged posts' }, { id: 'comments', label: 'Comments' }, { id: 'ratings', label: 'Page reviews' }, { id: 'ads', label: 'Ad insights' }],
+  instagram: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'stories', label: 'Stories' }],
+  youtube: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Videos + metrics' }, { id: 'engagement_deep', label: 'Per-video analytics' }, { id: 'comments', label: 'Comments' }, { id: 'ads', label: 'Ad insights' }],
+  tiktok: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'comments', label: 'Comments' }],
+  threads: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'comments', label: 'Comments' }, { id: 'mentions', label: 'Mentions' }],
+  twitch: [{ id: 'identity', label: 'Profile' }, { id: 'engagement_new', label: 'Streams + metrics' }],
+};
+
+type PlatformState = {
+  enabled: boolean;
+  products: Record<string, boolean>;
+};
+
+function buildInitialState(ws: WorkspaceDetail | null): Record<string, PlatformState> {
+  const saved = ws?.products ?? null;
+  return Object.fromEntries(
+    Object.keys(PRODUCT_CATALOG).map((platform) => {
+      const catalog = PRODUCT_CATALOG[platform];
+      if (saved === null) {
+        // No config saved yet — all platforms disabled by default in editor
+        return [platform, { enabled: false, products: Object.fromEntries(catalog.map((p) => [p.id, false])) }];
+      }
+      const enabled = platform in saved;
+      const savedProducts = saved[platform] ?? [];
+      return [
+        platform,
+        {
+          enabled,
+          products: Object.fromEntries(
+            catalog.map((p) => [p.id, p.id === 'identity' ? true : savedProducts.includes(p.id)]),
+          ),
+        },
+      ];
+    }),
+  );
+}
+
+function ProductsSection({
+  slug,
+  ws,
+  onSaved,
+}: {
+  slug: string;
+  ws: WorkspaceDetail | null;
+  onSaved: () => void;
+}) {
+  const [state, setState] = useState<Record<string, PlatformState>>({});
+  const [hydrated, setHydrated] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Hydrate once when ws loads, mirror BrandingSection's guard pattern
+  if (!busy && ws && !hydrated) {
+    setState(buildInitialState(ws));
+    setHydrated(true);
+  }
+
+  const togglePlatform = (platform: string, enabled: boolean) => {
+    setState((prev) => ({
+      ...prev,
+      [platform]: { ...prev[platform], enabled },
+    }));
+  };
+
+  const toggleProduct = (platform: string, productId: string, checked: boolean) => {
+    setState((prev) => ({
+      ...prev,
+      [platform]: {
+        ...prev[platform],
+        products: { ...prev[platform].products, [productId]: checked },
+      },
+    }));
+  };
+
+  const onSave = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const payload: Record<string, string[]> = {};
+      for (const [platform, ps] of Object.entries(state)) {
+        if (!ps.enabled) continue;
+        payload[platform] = Object.entries(ps.products)
+          .filter(([id, on]) => on && id !== 'identity')
+          .map(([id]) => id);
+      }
+      await adminPatch(`/admin/workspaces/${slug}/products`, payload);
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onClear = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await adminPatch(`/admin/workspaces/${slug}/products`, {});
+      setState(buildInitialState(null));
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 p-4">
+        <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Platforms &amp; Products
+        </div>
+        {Object.keys(PRODUCT_CATALOG).map((platform) => {
+          const ps = state[platform];
+          if (!ps) return null;
+          const catalog = PRODUCT_CATALOG[platform];
+          return (
+            <div key={platform} className="rounded-md border border-border/40 bg-secondary/20 p-3">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={ps.enabled}
+                  onChange={(e) => togglePlatform(platform, e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary"
+                />
+                <span className="text-sm font-medium capitalize">{platform}</span>
+              </label>
+              {ps.enabled && (
+                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 pl-5">
+                  {catalog.map((product) => (
+                    <label
+                      key={product.id}
+                      className={`flex items-center gap-1.5 text-xs ${product.id === 'identity' ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={product.id === 'identity' ? true : (ps.products[product.id] ?? false)}
+                        disabled={product.id === 'identity'}
+                        onChange={(e) => toggleProduct(platform, product.id, e.target.checked)}
+                        className="h-3 w-3 rounded border-border accent-primary"
+                      />
+                      {product.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {err && <div className="text-sm text-danger">↯ {err}</div>}
+        <div className="flex gap-2 pt-1">
+          <Button size="sm" disabled={busy} onClick={onSave}>
+            {busy ? 'Saving…' : 'Save'}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={onClear}>
+            Clear products
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
