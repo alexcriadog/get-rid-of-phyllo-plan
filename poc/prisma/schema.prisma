@@ -157,6 +157,15 @@ model Workspace {
   // full catalog (preserving previous "unrestricted" behaviour). Admins
   // tighten via PATCH /admin/workspaces/:slug/products.
   products  Json
+  // Operator-set per-product webhook delivery cadence. Shape:
+  // Record<product, "immediate" | "hourly" | "daily">. Missing key → the
+  // safe default "immediate" (operator dials hourly/daily for noisy
+  // products like engagement_new or stories). Snapshot products
+  // (identity, audience, engagement_deep, ratings, ads) ignore the value
+  // — there's no meaningful items_added delta to digest, so they always
+  // fire on each successful sync. PATCHed from the admin UI via
+  // PATCH /admin/workspaces/:slug/webhook-cadence.
+  webhookCadence Json? @map("webhook_cadence")
   planTier  String   @default("standard") @map("plan_tier")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -221,10 +230,46 @@ model WebhookEndpoint {
   updatedAt   DateTime @updatedAt @map("updated_at")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  deliveries WebhookDelivery[]
+  deliveries     WebhookDelivery[]
+  pendingEvents  PendingWebhookEvent[]
 
   @@index([workspaceId])
   @@map("webhook_endpoints")
+}
+
+// Hourly/daily digest buffer for data-update webhooks.
+//
+// When a sync_job finishes with items_added > 0 AND the workspace's
+// webhookCadence for that product is "hourly" or "daily", the worker
+// upserts a row here keyed by (endpoint, account, product). Subsequent
+// syncs in the same window increment items_added atomically and append
+// to sampleIds (capped at 20).
+//
+// The cron in webhooks-digest.service.ts flushes:
+//   - cadence=hourly buckets where firstSeenAt < now() - 1h    (every :05)
+//   - cadence=daily  buckets where firstSeenAt < now() - 24h   (09:05 UTC)
+//
+// onDelete: Cascade — if the endpoint is removed, drop the pending buffer.
+model PendingWebhookEvent {
+  id          String   @id @default(cuid())
+  endpointId  String   @map("endpoint_id")
+  accountId   BigInt   @map("account_id")
+  product     String
+  // "hourly" | "daily" — the cron flushes by this column.
+  cadence     String
+  itemsAdded  Int      @default(0) @map("items_added")
+  // JSON array of platform_content_id strings; capped at 20 entries by the
+  // dispatcher. Used to populate sample_ids in the digest payload.
+  sampleIds   Json     @default("[]") @map("sample_ids")
+  // When the first new item in this bucket landed — becomes window_start in
+  // the digest payload and is what the cron's cutoff compares against.
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @updatedAt @map("last_seen_at")
+  endpoint    WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@unique([endpointId, accountId, product])
+  @@index([cadence, firstSeenAt])
+  @@map("pending_webhook_events")
 }
 
 model WebhookDelivery {
