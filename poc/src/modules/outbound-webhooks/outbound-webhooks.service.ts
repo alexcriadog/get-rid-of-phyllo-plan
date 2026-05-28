@@ -136,6 +136,225 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
     return rows.map((r) => this.toView(r));
   }
 
+  async update(
+    workspaceId: string,
+    id: string,
+    patch: {
+      url?: string;
+      events?: ReadonlyArray<string>;
+      description?: string | null;
+      active?: boolean;
+    },
+  ): Promise<RegisteredEndpoint> {
+    const row = await this.prisma.webhookEndpoint.findUnique({ where: { id } });
+    if (!row || row.workspaceId !== workspaceId) {
+      throw new BadRequestException('Webhook endpoint not found');
+    }
+    // events: validate against the allowlist BEFORE writing. We accept
+    // any subset; the controller already enforces min/max size.
+    const events =
+      patch.events === undefined
+        ? undefined
+        : patch.events.filter((e) => ALLOWED_EVENTS.includes(e));
+    if (events !== undefined && events.length === 0) {
+      throw new BadRequestException(
+        `events must include at least one of: ${ALLOWED_EVENTS.join(', ')}`,
+      );
+    }
+    const updated = await this.prisma.webhookEndpoint.update({
+      where: { id },
+      data: {
+        ...(patch.url !== undefined ? { url: patch.url } : {}),
+        ...(events !== undefined ? { events: events as string[] } : {}),
+        ...(patch.description !== undefined
+          ? { description: patch.description }
+          : {}),
+        ...(patch.active !== undefined ? { active: patch.active } : {}),
+      },
+    });
+    return this.toView(updated);
+  }
+
+  /**
+   * Rotate the signing secret. The old secret becomes invalid immediately
+   * (no grace period). Returns the new value once — losing it requires
+   * another rotation.
+   */
+  async rotateSecret(
+    workspaceId: string,
+    id: string,
+  ): Promise<{ id: string; secret: string; rotated_at: string }> {
+    const row = await this.prisma.webhookEndpoint.findUnique({ where: { id } });
+    if (!row || row.workspaceId !== workspaceId) {
+      throw new BadRequestException('Webhook endpoint not found');
+    }
+    const secret = `whsec_${randomBytes(24).toString('base64url')}`;
+    const updated = await this.prisma.webhookEndpoint.update({
+      where: { id },
+      data: { secret },
+    });
+    return {
+      id: updated.id,
+      secret,
+      rotated_at: updated.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * Enqueue a webhook.test delivery to this endpoint. Bypasses the
+   * subscription filter — the client doesn't need to subscribe to
+   * webhook.test to receive an explicitly-requested test.
+   */
+  async sendTest(
+    workspaceId: string,
+    id: string,
+  ): Promise<{ delivery_id: string; status: 'queued' }> {
+    const row = await this.prisma.webhookEndpoint.findUnique({ where: { id } });
+    if (!row || row.workspaceId !== workspaceId || !row.active) {
+      throw new BadRequestException('Webhook endpoint not found or inactive');
+    }
+    const delivery = await this.prisma.webhookDelivery.create({
+      data: {
+        endpointId: row.id,
+        event: 'webhook.test',
+        payload: {
+          endpoint_id: row.id,
+          message: 'test',
+          occurred_at: new Date().toISOString(),
+        },
+        status: 'pending',
+      },
+    });
+    await this.bull
+      .getQueue<DeliveryJob>(QUEUE)
+      .add('webhook', { deliveryId: delivery.id }, { jobId: delivery.id });
+    return { delivery_id: delivery.id, status: 'queued' };
+  }
+
+  /**
+   * List deliveries for a given endpoint, paginated by createdAt+id
+   * cursor. Returns a Paginated<DeliverySummary> envelope. Cross-tenant
+   * lookups return an empty page.
+   */
+  async listDeliveries(
+    workspaceId: string,
+    endpointId: string,
+    opts: { limit: number; cursor: string | null },
+  ): Promise<{
+    data: Array<{
+      id: string;
+      event: string;
+      status: string;
+      attempts: number;
+      last_response_code: number | null;
+      last_error: string | null;
+      next_retry_at: string | null;
+      created_at: string;
+      delivered_at: string | null;
+    }>;
+    meta: { count: number; has_more: boolean; next_cursor: string | null };
+  }> {
+    const endpoint = await this.prisma.webhookEndpoint.findUnique({
+      where: { id: endpointId },
+    });
+    if (!endpoint || endpoint.workspaceId !== workspaceId) {
+      return { data: [], meta: { count: 0, has_more: false, next_cursor: null } };
+    }
+
+    // We use a composite createdAt+id cursor (delivery PKs are cuid).
+    // Imported lazily to keep this service's import footprint minimal.
+    const {
+      decodeCompositeCursor,
+      encodeCompositeCursor,
+      paginate,
+    } = await import('@shared/pagination/cursor');
+    const cursor = decodeCompositeCursor(opts.cursor);
+    return paginate(
+      opts.limit,
+      (take) =>
+        this.prisma.webhookDelivery.findMany({
+          where: {
+            endpointId,
+            ...(cursor
+              ? {
+                  OR: [
+                    { createdAt: { lt: cursor.timestamp } },
+                    {
+                      AND: [
+                        { createdAt: cursor.timestamp },
+                        { id: { lt: cursor.id } },
+                      ],
+                    },
+                  ],
+                }
+              : {}),
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take,
+        }),
+      (r) => ({
+        id: r.id,
+        event: r.event,
+        status: r.status,
+        attempts: r.attempts,
+        last_response_code: r.lastResponseCode,
+        last_error: r.lastError,
+        next_retry_at: r.nextRetryAt ? r.nextRetryAt.toISOString() : null,
+        created_at: r.createdAt.toISOString(),
+        delivered_at: r.deliveredAt ? r.deliveredAt.toISOString() : null,
+      }),
+      (r) => encodeCompositeCursor(r.createdAt, r.id),
+    );
+  }
+
+  /**
+   * Single-delivery detail for the client. Includes payload but NOT
+   * response_body — that's admin-only (Phase D capture). Cross-tenant
+   * reads return null.
+   */
+  async getDelivery(
+    workspaceId: string,
+    endpointId: string,
+    deliveryId: string,
+  ): Promise<{
+    id: string;
+    endpoint_id: string;
+    event: string;
+    payload: unknown;
+    status: string;
+    attempts: number;
+    last_response_code: number | null;
+    last_error: string | null;
+    next_retry_at: string | null;
+    created_at: string;
+    delivered_at: string | null;
+  } | null> {
+    const row = await this.prisma.webhookDelivery.findUnique({
+      where: { id: deliveryId },
+      include: { endpoint: { select: { workspaceId: true } } },
+    });
+    if (
+      !row ||
+      row.endpointId !== endpointId ||
+      row.endpoint.workspaceId !== workspaceId
+    ) {
+      return null;
+    }
+    return {
+      id: row.id,
+      endpoint_id: row.endpointId,
+      event: row.event,
+      payload: row.payload,
+      status: row.status,
+      attempts: row.attempts,
+      last_response_code: row.lastResponseCode,
+      last_error: row.lastError,
+      next_retry_at: row.nextRetryAt ? row.nextRetryAt.toISOString() : null,
+      created_at: row.createdAt.toISOString(),
+      delivered_at: row.deliveredAt ? row.deliveredAt.toISOString() : null,
+    };
+  }
+
   async remove(workspaceId: string, id: string): Promise<void> {
     const row = await this.prisma.webhookEndpoint.findUnique({ where: { id } });
     if (!row || row.workspaceId !== workspaceId) {
