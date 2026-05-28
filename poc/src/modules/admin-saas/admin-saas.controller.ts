@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Logger,
   NotFoundException,
   Param,
   Patch,
@@ -108,6 +109,8 @@ type TokenProduct = (typeof ALLOWED_TOKEN_PRODUCTS)[number];
  */
 @Controller('admin')
 export class AdminSaasController {
+  private readonly logger = new Logger(AdminSaasController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
@@ -258,14 +261,49 @@ export class AdminSaasController {
       });
     }
     const ws = await this.workspaces.findBySlug(slug);
-    const isClear = Object.keys(parsed.data).length === 0;
-    await this.prisma.workspace.update({
-      where: { id: ws.id },
-      data: {
-        products: isClear ? Prisma.JsonNull : (parsed.data as Prisma.InputJsonValue),
-      },
+    const newConfig = parsed.data as Record<string, string[]>;
+
+    // Persist the new allow-list AND prune stale sync_jobs in the same
+    // transaction. Existing accounts (seeded before this admin tightening)
+    // have sync_jobs for products that may no longer be in the allow-list
+    // — without this prune step the scheduler would keep firing them
+    // (scheduler.service.ts picks rows by status+nextRunAt, not by
+    // workspace.products). For platforms removed entirely from the config,
+    // every sync_job on the workspace's accounts of that platform is dropped.
+    // The account row + OAuth tokens are preserved so the admin can re-enable
+    // the platform later (a follow-up "rehydrate" admin action will then
+    // re-seed sync_jobs from the catalog).
+    const prunedTotal = await this.prisma.$transaction(async (tx) => {
+      await tx.workspace.update({
+        where: { id: ws.id },
+        data: { products: newConfig as Prisma.InputJsonValue },
+      });
+
+      const accountsInWs = await tx.account.findMany({
+        where: { workspaceId: ws.id },
+        select: { id: true, platform: true },
+      });
+
+      let pruned = 0;
+      for (const acc of accountsInWs) {
+        const allowedForPlatform = newConfig[acc.platform];
+        const result = allowedForPlatform
+          ? await tx.syncJob.deleteMany({
+              where: {
+                accountId: acc.id,
+                product: { notIn: allowedForPlatform },
+              },
+            })
+          : await tx.syncJob.deleteMany({ where: { accountId: acc.id } });
+        pruned += result.count;
+      }
+      return pruned;
     });
-    return { slug, products: isClear ? null : parsed.data };
+
+    this.logger.log(
+      `updateProducts(${slug}): pruned ${prunedTotal} sync_job(s) for products outside the new allow-list`,
+    );
+    return { slug, products: newConfig, pruned_sync_jobs: prunedTotal };
   }
 
   // ─── API keys ───────────────────────────────────────────────────────────
