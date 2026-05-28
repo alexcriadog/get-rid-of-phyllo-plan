@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Copy, KeyRound, Plus, Trash2, Webhook } from 'lucide-react';
 import AdminLayout from '../../../components/AdminLayout';
 import { useLive } from '../../../lib/useLive';
-import { adminPatch, adminPost, CONNECTOR_API_URL } from '../../../lib/api';
+import { adminPatch, adminPost } from '../../../lib/api';
 import { fmtRelative } from '../../../lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -109,13 +109,19 @@ export default function WorkspaceDetail({ catalog }: PageProps) {
 // SSR: pull the single-source-of-truth catalog from POC so the platforms ×
 // products grid never drifts from what the OAuth flow actually computes
 // scopes against.
+//
+// URL resolution differs from CONNECTOR_API_URL in lib/api.ts: that one is
+// optimised for browser-side and prefers NEXT_PUBLIC_* (bakeable at build
+// time), which points at the public domain. SSR runs inside the docker
+// network and should hit api:3000 directly, so we prefer the server-only
+// CONNECTOR_API_URL env (set on the web service to `http://api:3000`).
 export const getServerSideProps: GetServerSideProps<PageProps> = async () => {
-  const url = `${CONNECTOR_API_URL}/internal/products-catalog`;
-  const headers: Record<string, string> = { accept: 'application/json' };
-  if (process.env.CONNECT_TOOL_SECRET) {
-    headers.authorization = `Bearer ${process.env.CONNECT_TOOL_SECRET}`;
-  }
-  const res = await fetch(url, { headers });
+  const baseUrl =
+    process.env.CONNECTOR_API_URL ||
+    process.env.NEXT_PUBLIC_CONNECTOR_API_URL ||
+    'http://localhost:3000';
+  const url = `${baseUrl}/internal/products-catalog`;
+  const res = await fetch(url, { headers: { accept: 'application/json' } });
   if (!res.ok) {
     throw new Error(
       `Failed to load products catalog from ${url}: ${res.status} ${res.statusText}`,

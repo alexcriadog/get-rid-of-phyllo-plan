@@ -5,12 +5,15 @@
 // workspace using PLATFORM_CATALOG[platform][product].scopes. The admin UI
 // fetches it from getServerSideProps to render the product-selection grid.
 //
-// Carries ConnectToolGuard so calls from outside the docker network must
-// present the shared bearer; loopback (operator curl, local dev without
-// CONNECT_TOOL_SECRET) is allowed unconditionally.
+// Unguarded by design: the catalog is static, identical for every customer,
+// and consists entirely of public information (the platforms we support,
+// product labels, and the OAuth scope strings that already appear on every
+// provider's consent screen). No workspace-specific data, no secrets — so
+// the operational cost of distributing CONNECT_TOOL_SECRET to every Next.js
+// container that does SSR isn't worth it. If the catalog ever starts
+// carrying sensitive material, re-introduce @UseGuards(ConnectToolGuard).
 
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { ConnectToolGuard } from '@modules/admin/connect-tool.guard';
+import { Controller, Get } from '@nestjs/common';
 import {
   PLATFORM_CATALOG,
   PLATFORM_IDS,
@@ -28,7 +31,6 @@ interface CatalogResponse {
 @Controller('internal/products-catalog')
 export class ProductsCatalogController {
   @Get()
-  @UseGuards(ConnectToolGuard)
   get(): CatalogResponse {
     return {
       platforms: PLATFORM_IDS,
