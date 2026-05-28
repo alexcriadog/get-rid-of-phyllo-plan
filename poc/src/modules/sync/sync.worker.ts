@@ -34,6 +34,7 @@ import {
 } from '@modules/platforms/shared/platform-errors';
 import { FacebookExtrasService } from '@modules/platforms/facebook/fetcher/facebook-extras.service';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
+import { DataEventDispatcher } from '@modules/outbound-webhooks/data-event-dispatcher.service';
 
 const SYNC_QUEUE_NAME = 'sync';
 const DEFAULT_CONCURRENCY = 4;
@@ -153,6 +154,7 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
     private readonly throttle: ThrottleLockService,
     private readonly facebookExtras: FacebookExtrasService,
     private readonly lifecycle: TokenLifecycleEmitter,
+    private readonly dataEvents: DataEventDispatcher,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
 
@@ -334,8 +336,17 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         return;
       }
 
-      await this.persistToMongo(accountIdBig, account.platform, fetchResult);
+      const delta = await this.persistToMongo(accountIdBig, account.platform, fetchResult);
       await this.emitEvent(accountIdBig, product, fetchResult);
+      // Public-facing webhook for clients: fire data.<product>.updated.
+      // Cadence (immediate / hourly / daily) is resolved per workspace
+      // inside the dispatcher; snapshot products always fire immediately.
+      await this.dataEvents.fire({
+        accountId: accountIdBig,
+        product,
+        itemsAdded: delta.itemsAdded,
+        sampleIds: delta.sampleIds,
+      });
       await this.scheduleNextRun(syncJobId, accountIdBig, product, now, true);
 
       this.metrics.incr('sync_worker_success', { product, platform: account.platform });
@@ -519,17 +530,36 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
     }
   }
 
+  /**
+   * Persist the fetch result and return a {itemsAdded, sampleIds} delta so
+   * the caller can fire `data.<product>.updated` for clients.
+   *
+   * Snapshot products (identity, audience, engagement_deep, ads): every
+   * successful sync rewrites the single document. We report itemsAdded=1
+   * unconditionally — the dispatcher treats snapshots as "always fire
+   * immediately" anyway.
+   *
+   * List products (comments, content): each upsert returns
+   * `upsertedCount === 1` when a row is new, `0` when it already existed
+   * (regardless of whether the inner `data` changed). We sum the news
+   * and capture the first 20 platform_*_ids as `sampleIds` for the
+   * webhook payload.
+   *
+   * Noop results (side-channel writes, e.g. FacebookExtrasService for
+   * ratings) return zero so no webhook fires from this code path — the
+   * side-channel is responsible for its own emission.
+   */
   private async persistToMongo(
     accountId: bigint,
     platform: string,
     result: FetchResult,
-  ): Promise<void> {
+  ): Promise<{ itemsAdded: number; sampleIds: string[] }> {
     const accountIdStr = accountId.toString();
     const now = new Date();
 
     if (result.kind === 'noop') {
       // Already persisted via a side-channel (e.g. FacebookExtrasService).
-      return;
+      return { itemsAdded: 0, sampleIds: [] };
     }
 
     if (result.kind === 'identity') {
@@ -547,7 +577,7 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         },
         { upsert: true },
       );
-      return;
+      return { itemsAdded: 1, sampleIds: [] };
     }
 
     if (result.kind === 'audience') {
@@ -565,7 +595,7 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         },
         { upsert: true },
       );
-      return;
+      return { itemsAdded: 1, sampleIds: [] };
     }
 
     if (result.kind === 'engagement_deep') {
@@ -583,7 +613,7 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         },
         { upsert: true },
       );
-      return;
+      return { itemsAdded: 1, sampleIds: [] };
     }
 
     if (result.kind === 'ads') {
@@ -601,17 +631,21 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         },
         { upsert: true },
       );
-      return;
+      return { itemsAdded: 1, sampleIds: [] };
     }
 
     if (result.kind === 'comments') {
       const comments = result.data as CommentData[];
-      if (!Array.isArray(comments) || comments.length === 0) return;
+      if (!Array.isArray(comments) || comments.length === 0) {
+        return { itemsAdded: 0, sampleIds: [] };
+      }
       const col = this.mongo.getCollection('comments');
+      let inserted = 0;
+      const sampleIds: string[] = [];
       for (const comment of comments) {
         const cid = (comment as { platformCommentId?: string }).platformCommentId;
         if (!cid) continue;
-        await col.updateOne(
+        const r = await col.updateOne(
           { account_id: accountIdStr, platform_comment_id: cid },
           {
             $set: {
@@ -626,18 +660,26 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
           },
           { upsert: true },
         );
+        if (r.upsertedCount === 1) {
+          inserted += 1;
+          if (sampleIds.length < 20) sampleIds.push(cid);
+        }
       }
-      return;
+      return { itemsAdded: inserted, sampleIds };
     }
 
     // content (engagement_new, stories, mentions)
     const posts = result.data as ContentData[];
-    if (!Array.isArray(posts) || posts.length === 0) return;
+    if (!Array.isArray(posts) || posts.length === 0) {
+      return { itemsAdded: 0, sampleIds: [] };
+    }
     const col = this.mongo.getCollection('posts');
+    let inserted = 0;
+    const sampleIds: string[] = [];
     for (const post of posts) {
       const platformContentId = this.extractContentId(post);
       if (!platformContentId) continue;
-      await col.updateOne(
+      const r = await col.updateOne(
         { account_id: accountIdStr, platform_content_id: platformContentId },
         {
           $set: {
@@ -651,7 +693,12 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         },
         { upsert: true },
       );
+      if (r.upsertedCount === 1) {
+        inserted += 1;
+        if (sampleIds.length < 20) sampleIds.push(platformContentId);
+      }
     }
+    return { itemsAdded: inserted, sampleIds };
   }
 
   private extractContentId(post: ContentData): string | null {

@@ -7,11 +7,17 @@ import { OutboundWebhooksService } from './outbound-webhooks.service';
 import { OutboundWebhooksController } from './outbound-webhooks.controller';
 import { WebhookDeliveriesController } from './webhook-deliveries.controller';
 import { TokenLifecycleEmitter } from './token-lifecycle-emitter.service';
+import { DataEventDispatcher } from './data-event-dispatcher.service';
 
 @Module({
   imports: [SharedDatabaseModule, SharedRedisModule, ApiKeysModule],
   controllers: [OutboundWebhooksController, WebhookDeliveriesController],
-  providers: [OutboundWebhooksService, TokenLifecycleEmitter, RateLimitInterceptor],
-  exports: [OutboundWebhooksService, TokenLifecycleEmitter],
+  providers: [
+    OutboundWebhooksService,
+    TokenLifecycleEmitter,
+    DataEventDispatcher,
+    RateLimitInterceptor,
+  ],
+  exports: [OutboundWebhooksService, TokenLifecycleEmitter, DataEventDispatcher],
 })
 export class OutboundWebhooksModule {}

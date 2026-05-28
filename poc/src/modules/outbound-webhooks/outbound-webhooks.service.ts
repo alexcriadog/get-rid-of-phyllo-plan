@@ -23,17 +23,29 @@ const PAYLOAD_MAX_BYTES = 256_000;
 
 const QUEUE: QueueName = 'delivery';
 export const ALLOWED_EVENTS: ReadonlyArray<string> = [
+  // ─── Lifecycle (Phase B of webhooks plan v1) ────────────────────────────
   'account.connected',
   'account.disconnected',
   'account.refreshed',
   'token.refresh_failed',
   'token.expired',
   // Test ping: never emitted by an automated flow; only by the explicit
-  // POST /v1/webhook-endpoints/:id/test (Phase C) and the admin "send
-  // test webhook" button (Phase D). Clients don't need to subscribe to
-  // this event in their `events` array — sendTest() bypasses the
-  // subscription filter so they always receive it.
+  // POST /v1/webhook-endpoints/:id/test and the admin "send test
+  // webhook" button. Bypasses the subscription filter.
   'webhook.test',
+  // ─── Data-update events (data-webhooks plan, Phase C/D) ─────────────────
+  // Fire when a sync_job persists new items for the product, or on every
+  // successful snapshot sync for non-list products. Cadence (immediate /
+  // hourly / daily) is operator-configured per workspace × product.
+  'data.identity.updated',
+  'data.audience.updated',
+  'data.engagement_new.updated',
+  'data.engagement_deep.updated',
+  'data.stories.updated',
+  'data.mentions.updated',
+  'data.comments.updated',
+  'data.ratings.updated',
+  'data.ads.updated',
 ];
 
 // Retry schedule (1m, 5m, 30m, 2h, 12h, 24h). Indexed by attempt count
