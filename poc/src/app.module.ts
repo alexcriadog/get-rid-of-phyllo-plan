@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppConfigModule } from '@shared/config/config.module';
 import { PlatformErrorFilter } from '@/common/filters/platform-error.filter';
 import { SharedDatabaseModule } from '@shared/database/database.module';
@@ -22,6 +23,9 @@ import { AdminSaasModule } from '@modules/admin-saas/admin-saas.module';
 @Module({
   imports: [
     AppConfigModule,
+    // Enable @Cron decorators throughout the app. Currently used by
+    // WebhooksModule for retention sweeps (webhooks-retention.service.ts).
+    ScheduleModule.forRoot(),
     SharedDatabaseModule,
     SharedMongoModule,
     SharedCryptoModule,
