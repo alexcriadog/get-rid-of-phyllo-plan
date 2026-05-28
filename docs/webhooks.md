@@ -57,6 +57,112 @@ interface BaseEvent {
 | `token.expired` | Refresh failed terminally — end-user must reconnect | `end_user_id`, `canonical_user_id`, `reason` |
 | `webhook.test` | Triggered via `POST /v1/webhook-endpoints/:id/test` or admin UI | `endpoint_id`, `message: "test"` |
 
+### Data events (one per product)
+
+These fire when a sync persists new data for an account. There's one
+event per product in the catalog:
+
+| Event | Fires when | Notes |
+|---|---|---|
+| `data.identity.updated` | Identity snapshot synced | Snapshot — always immediate |
+| `data.audience.updated` | Audience snapshot synced | Snapshot — always immediate |
+| `data.engagement_new.updated` | New posts/videos persisted | List — cadence configurable |
+| `data.engagement_deep.updated` | Per-video analytics snapshot synced | Snapshot — always immediate |
+| `data.stories.updated` | New stories persisted | List — cadence configurable |
+| `data.mentions.updated` | New tagged posts persisted | List — cadence configurable |
+| `data.comments.updated` | New comments persisted | List — cadence configurable |
+| `data.ratings.updated` | Page ratings snapshot synced | Snapshot — always immediate |
+| `data.ads.updated` | Ads campaigns snapshot synced | Snapshot — always immediate |
+
+**Payload shape (common across all 9 events):**
+
+```ts
+{
+  account_id: string,       // "42" — BigInt-safe string
+  platform: string,         // "facebook" | "instagram" | ...
+  workspace_id: string,     // your workspace cuid
+  product: string,          // "engagement_new"
+  items_added: number,      // for list products: count of NEW items in this window.
+                            // for snapshot products: always 1.
+  sample_ids: string[],     // up to 20 platform_content_id / platform_comment_id values
+                            // — use them to GET /v1/accounts/:id/content?... and
+                            // fetch the details.
+  window_start: string,     // ISO. immediate: this sync's timestamp.
+                            //      digest:    when the first item in the bucket landed.
+  window_end: string,       // ISO, when the event was emitted (or digest flushed).
+  cadence: 'immediate' | 'hourly' | 'daily',
+  occurred_at: string,      // ISO, same as window_end
+}
+```
+
+### Cadence: digested vs immediate
+
+For workspaces where one product runs a sync every hour (e.g. stories
+on a VIP-tier Facebook account), the immediate cadence would mean 24
+deliveries per day per account per endpoint. Often the client just
+wants a daily digest.
+
+We let your operator contact choose the cadence per (workspace,
+product):
+
+- **`immediate`** (default for every product if no override exists) —
+  one webhook per sync that produced new items.
+- **`hourly`** — buckets multiple syncs in the same hour into a single
+  delivery. The cron flushes at HH:05 UTC (last hour's window). Items
+  in the same hour are deduped by id when merging `sample_ids`; the
+  `items_added` count is the cumulative sum across all syncs in the
+  window.
+- **`daily`** — same idea but the bucket is 24 h. The cron flushes at
+  09:05 UTC.
+
+Snapshot products (identity, audience, engagement_deep, ratings, ads)
+always emit immediately regardless of cadence — there's no
+items_added delta to aggregate.
+
+If you need a different cadence than what's configured for your
+workspace, talk to your account contact. Cadence is operator-controlled
+intentionally so it lines up with your plan tier (a VIP customer on
+hourly engagement_new wants ~24×/day; a self-serve customer might
+prefer the daily digest by default).
+
+### Example payload — immediate
+
+```json
+{
+  "account_id": "42",
+  "platform": "facebook",
+  "workspace_id": "wkspc_demo",
+  "product": "engagement_new",
+  "items_added": 3,
+  "sample_ids": ["fb_post_18001", "fb_post_18002", "fb_post_18003"],
+  "window_start": "2026-05-28T15:30:00.000Z",
+  "window_end": "2026-05-28T15:30:00.000Z",
+  "cadence": "immediate",
+  "occurred_at": "2026-05-28T15:30:00.000Z"
+}
+```
+
+### Example payload — hourly digest
+
+```json
+{
+  "account_id": "42",
+  "platform": "facebook",
+  "workspace_id": "wkspc_demo",
+  "product": "engagement_new",
+  "items_added": 12,
+  "sample_ids": ["fb_post_18001", "fb_post_18002", "...up to 20..."],
+  "window_start": "2026-05-28T15:07:00.000Z",
+  "window_end": "2026-05-28T16:05:00.000Z",
+  "cadence": "hourly",
+  "occurred_at": "2026-05-28T16:05:00.000Z"
+}
+```
+
+`window_start` is when the FIRST item in this bucket arrived;
+`window_end` is when the cron flushed. The two are roughly 1 h apart
+for hourly, 24 h apart for daily.
+
 ### Example payloads
 
 `account.connected`:
