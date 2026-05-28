@@ -35,7 +35,10 @@ export interface WorkspaceView {
   slug: string;
   name: string;
   branding: WorkspaceBranding | null;
-  products: Record<string, string[]> | null;
+  // Phase C: products is NOT NULL in the DB. The empty object `{}` is the
+  // "no platforms enabled" sentinel; absence of a platform key in the
+  // object means "that platform is not offered".
+  products: Record<string, string[]>;
   planTier: string;
 }
 
@@ -81,8 +84,11 @@ export class WorkspacesService implements OnModuleInit {
     return this.toView(row);
   }
 
-  /** Resolve this workspace's allowed products for a platform (see helper). */
-  async resolveProducts(workspaceId: string, platform: string): Promise<string[] | null> {
+  /**
+   * Resolve this workspace's allowed products for a platform.
+   * Returns [] if the platform isn't offered; ['identity', ...] otherwise.
+   */
+  async resolveProducts(workspaceId: string, platform: string): Promise<string[]> {
     const ws = await this.findById(workspaceId);
     return resolveWorkspaceProducts(ws.products, platform, PRODUCTS_BY_PLATFORM);
   }
@@ -159,8 +165,11 @@ export class WorkspacesService implements OnModuleInit {
     return raw as WorkspaceBranding;
   }
 
-  private parseProducts(raw: unknown): Record<string, string[]> | null {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  private parseProducts(raw: unknown): Record<string, string[]> {
+    // Phase C migration guarantees the DB stores a JSON object. Defensive
+    // fallback to `{}` if a row somehow contains something else (e.g. a
+    // future manual edit gone wrong) — better than crashing the service.
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
     const out: Record<string, string[]> = {};
     for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
       if (Array.isArray(v)) out[k] = v.filter((x): x is string => typeof x === 'string');

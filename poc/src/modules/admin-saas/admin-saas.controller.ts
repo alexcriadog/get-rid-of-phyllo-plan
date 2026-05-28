@@ -26,6 +26,7 @@ import { AccountsService } from '@modules/accounts/accounts.service';
 import { ConnectToolGuard } from '@modules/admin/connect-tool.guard';
 import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
 import {
+  PLATFORM_CATALOG,
   PLATFORM_IDS,
   PRODUCT_IDS,
 } from '@modules/accounts/products.catalog';
@@ -164,11 +165,19 @@ export class AdminSaasController {
         `Workspace slug "${parsed.data.slug}" already taken`,
       );
     }
+    // New workspaces start with the full catalog enabled — same behaviour
+    // the legacy `null` value used to mean. Admin tightens via PATCH
+    // /admin/workspaces/:slug/products. Identity is required per platform
+    // (Zod refines this on PATCH too), so we include it for every platform.
+    const fullCatalog: Prisma.InputJsonValue = Object.fromEntries(
+      PLATFORM_IDS.map((p) => [p, PLATFORM_CATALOG[p].map((def) => def.id)]),
+    );
     const row = await this.prisma.workspace.create({
       data: {
         slug: parsed.data.slug,
         name: parsed.data.name,
         planTier: parsed.data.planTier ?? 'standard',
+        products: fullCatalog,
       },
     });
     return {

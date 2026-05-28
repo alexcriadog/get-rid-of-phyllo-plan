@@ -6,11 +6,11 @@ const CATALOG = {
 } as Record<string, readonly string[]>;
 
 describe('resolveWorkspaceProducts', () => {
-  it('returns null (no restriction) when the workspace has no products config', () => {
-    expect(resolveWorkspaceProducts(null, 'instagram', CATALOG)).toBeNull();
-  });
   it('returns [] when the platform is not offered by the workspace', () => {
     expect(resolveWorkspaceProducts({ facebook: ['ads'] }, 'instagram', CATALOG)).toEqual([]);
+  });
+  it('returns [] for an empty allow-list (no platforms offered)', () => {
+    expect(resolveWorkspaceProducts({}, 'instagram', CATALOG)).toEqual([]);
   });
   it('always includes identity and filters to the platform catalog', () => {
     expect(

@@ -101,21 +101,22 @@ export class SdkTokensService {
     // ALLOWED_PLATFORMS. Gives clients a clear early-fail at mint time
     // instead of a generic 400 at confirm.
     if (expandedPlatforms && expandedPlatforms.length > 0) {
+      // Phase C: workspace.products is always set, so the G1 gate is a flat
+      // comparison against the offered-platforms set — no "unrestricted"
+      // bypass anymore.
       const ws = await this.workspaces.findById(input.workspaceId);
-      if (ws.products !== null) {
-        const offered = new Set(Object.keys(ws.products));
-        const notOffered = expandedPlatforms.filter((p) => !offered.has(p));
-        if (notOffered.length > 0) {
-          // Log the specific platforms server-side; return a generic error
-          // to the caller so an attacker probing with arbitrary platform
-          // names can't enumerate what each workspace offers.
-          this.logger.warn(
-            `Workspace "${input.workspaceSlug}" does not offer: ${notOffered.join(', ')}`,
-          );
-          throw new BadRequestException(
-            'One or more requested platforms are not offered by this workspace',
-          );
-        }
+      const offered = new Set(Object.keys(ws.products));
+      const notOffered = expandedPlatforms.filter((p) => !offered.has(p));
+      if (notOffered.length > 0) {
+        // Log the specific platforms server-side; return a generic error
+        // to the caller so an attacker probing with arbitrary platform
+        // names can't enumerate what each workspace offers.
+        this.logger.warn(
+          `Workspace "${input.workspaceSlug}" does not offer: ${notOffered.join(', ')}`,
+        );
+        throw new BadRequestException(
+          'One or more requested platforms are not offered by this workspace',
+        );
       }
     }
     const secret = await this.workspaces.getSecret(input.workspaceId);
