@@ -408,7 +408,7 @@ function ProductsSection({
 
   return (
     <Card>
-      <CardContent className="space-y-4 p-4">
+      <CardContent className="space-y-2 p-4">
         <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Platforms &amp; Products
         </div>
@@ -416,19 +416,32 @@ function ProductsSection({
           const ps = state[platform];
           if (!ps) return null;
           const defs = catalog.catalog[platform];
+          const selectedCount = defs.filter(
+            (p) => p.required || ps.products[p.id],
+          ).length;
           return (
-            <div key={platform} className="rounded-md border border-border/40 bg-secondary/20 p-3">
-              <label className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={ps.enabled}
-                  onChange={(e) => togglePlatform(platform, e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-border accent-primary"
-                />
-                <span className="text-sm font-medium capitalize">{platform}</span>
+            <div
+              key={platform}
+              className="rounded-md border border-border/40 bg-secondary/20 px-3 py-2"
+            >
+              <label className="flex cursor-pointer items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={ps.enabled}
+                    onChange={(e) => togglePlatform(platform, e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-border accent-primary"
+                  />
+                  <span className="text-sm font-medium capitalize">{platform}</span>
+                </span>
+                {ps.enabled && (
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    {selectedCount}/{defs.length}
+                  </span>
+                )}
               </label>
               {ps.enabled && (
-                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 pl-5">
+                <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 pl-5 md:grid-cols-3">
                   {defs.map((product) => (
                     <label
                       key={product.id}
@@ -442,7 +455,7 @@ function ProductsSection({
                         onChange={(e) => toggleProduct(platform, product.id, e.target.checked)}
                         className="h-3 w-3 rounded border-border accent-primary"
                       />
-                      {product.label}
+                      <span className="truncate">{product.label}</span>
                     </label>
                   ))}
                 </div>
