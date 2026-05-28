@@ -18,6 +18,10 @@ import {
   verifySdkToken,
   getContextCookie,
 } from '../../../../lib/oauth-context';
+import {
+  fetchWorkspaceProducts,
+  platformReachableAtOAuthStart,
+} from '../../../../lib/workspace-config';
 
 const VALID_PLATFORMS = new Set<PlatformKey>([
   'facebook',
@@ -141,6 +145,17 @@ export async function GET(
         if (claims.platforms && !claims.platforms.includes(platform)) {
           throw new Error(
             `Platform ${platform} not allowed by SDK token (allowed=${claims.platforms.join(',')})`,
+          );
+        }
+        // Gate #3: workspace.products allow-list. If the workspace
+        // configured a restricted platform set and this OAuth start isn't
+        // reachable from it, fail BEFORE we redirect to the provider.
+        // platformReachableAtOAuthStart handles the IG↔FB merger (FB OAuth
+        // covers both). null products config means unrestricted (default).
+        const productsConfig = await fetchWorkspaceProducts(ws);
+        if (!platformReachableAtOAuthStart(productsConfig, platform)) {
+          throw new Error(
+            `This platform isn't available for workspace "${ws}". Contact your administrator if you need it enabled.`,
           );
         }
         const origin = sp.get('origin') ?? undefined;

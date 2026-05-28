@@ -21,6 +21,28 @@ export function displayProducts(config: ProductsConfig, platform: string): strin
   return ['identity', ...picked];
 }
 
+/**
+ * Is `oauthPlatform` (the platform key in `/api/oauth/start/:platform`)
+ * reachable for this workspace? Note that `facebook` is the OAuth surface
+ * for *both* facebook and instagram (IG uses FB OAuth — see
+ * lib/platforms.ts `startPlatform`), so when checking the OAuth-start URL
+ * we accept the workspace if it offers *either*. Subsequent gates
+ * (`seedAccount` chokepoint on POC) still reject mismatched seeds.
+ */
+export function platformReachableAtOAuthStart(
+  config: ProductsConfig,
+  oauthPlatform: string,
+): boolean {
+  if (config == null) return true;
+  if (oauthPlatform === 'facebook') {
+    return (
+      Object.prototype.hasOwnProperty.call(config, 'facebook') ||
+      Object.prototype.hasOwnProperty.call(config, 'instagram')
+    );
+  }
+  return Object.prototype.hasOwnProperty.call(config, oauthPlatform);
+}
+
 /** Server-only: fetch a workspace's products config from POC (null on any failure). */
 export async function fetchWorkspaceProducts(slug: string): Promise<ProductsConfig> {
   const baseUrl = process.env.POC_API_URL;
