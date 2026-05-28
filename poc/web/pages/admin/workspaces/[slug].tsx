@@ -335,10 +335,27 @@ function ProductsSection({
   }
 
   const togglePlatform = (platform: string, enabled: boolean) => {
-    setState((prev) => ({
-      ...prev,
-      [platform]: { ...prev[platform], enabled },
-    }));
+    setState((prev) => {
+      if (!enabled) {
+        // Disable: keep the products map intact so a re-enable restores
+        // the prior selection.
+        return { ...prev, [platform]: { ...prev[platform], enabled: false } };
+      }
+      // Enable: if nothing's currently checked (first time enabling, or
+      // user had previously cleared everything), pre-select required +
+      // default:true products from the catalog. If some products are
+      // already checked, preserve that selection.
+      const current = prev[platform]?.products ?? {};
+      const anyChecked = Object.values(current).some(Boolean);
+      if (anyChecked) {
+        return { ...prev, [platform]: { ...prev[platform], enabled: true } };
+      }
+      const defs = catalog.catalog[platform] ?? [];
+      const products = Object.fromEntries(
+        defs.map((p) => [p.id, !!(p.required || p.default)]),
+      );
+      return { ...prev, [platform]: { enabled: true, products } };
+    });
   };
 
   const toggleProduct = (platform: string, productId: string, checked: boolean) => {
