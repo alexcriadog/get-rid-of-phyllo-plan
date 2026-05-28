@@ -95,6 +95,23 @@ export class SdkTokensService {
     }
 
     const expandedPlatforms = expandPlatformAliases(input.allowedPlatforms);
+    // Gate #1: if the caller asked for a restricted platform set, ensure each
+    // requested platform is offered by this workspace (workspace.products
+    // keys). null products = unrestricted (default) → accept anything in
+    // ALLOWED_PLATFORMS. Gives clients a clear early-fail at mint time
+    // instead of a generic 400 at confirm.
+    if (expandedPlatforms && expandedPlatforms.length > 0) {
+      const ws = await this.workspaces.findById(input.workspaceId);
+      if (ws.products !== null) {
+        const offered = new Set(Object.keys(ws.products));
+        const notOffered = expandedPlatforms.filter((p) => !offered.has(p));
+        if (notOffered.length > 0) {
+          throw new BadRequestException(
+            `Workspace "${input.workspaceSlug}" does not offer: ${notOffered.join(', ')}`,
+          );
+        }
+      }
+    }
     const secret = await this.workspaces.getSecret(input.workspaceId);
     const now = Math.floor(Date.now() / 1000);
     const payload: SdkTokenClaims = {
