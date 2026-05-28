@@ -106,8 +106,14 @@ export class SdkTokensService {
         const offered = new Set(Object.keys(ws.products));
         const notOffered = expandedPlatforms.filter((p) => !offered.has(p));
         if (notOffered.length > 0) {
-          throw new BadRequestException(
+          // Log the specific platforms server-side; return a generic error
+          // to the caller so an attacker probing with arbitrary platform
+          // names can't enumerate what each workspace offers.
+          this.logger.warn(
             `Workspace "${input.workspaceSlug}" does not offer: ${notOffered.join(', ')}`,
+          );
+          throw new BadRequestException(
+            'One or more requested platforms are not offered by this workspace',
           );
         }
       }

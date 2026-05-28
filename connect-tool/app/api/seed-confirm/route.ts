@@ -10,7 +10,10 @@ import {
   getSimpleSession,
 } from '../../../lib/session';
 import { postToPocSeed } from '../../../lib/seed-client';
-import { requiredProducts } from '../../../lib/products';
+import {
+  fetchProductsCatalog,
+  requiredProducts,
+} from '../../../lib/workspace-config';
 import {
   getContextCookie,
   setContextCookie,
@@ -46,7 +49,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const required = requiredProducts(session.platform);
+  const catalog = await fetchProductsCatalog();
+  if (!catalog) {
+    return NextResponse.json(
+      { error: 'catalog temporarily unavailable' },
+      { status: 503 },
+    );
+  }
+  const required = requiredProducts(catalog, session.platform);
   const products = Array.from(
     new Set([...required, ...parsed.data.productIds]),
   );

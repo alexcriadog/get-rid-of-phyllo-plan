@@ -1,9 +1,12 @@
 // All 5 OAuth flows in one file. Each platform exposes:
-//   - buildAuthorizeUrl(redirectUri) → string (302 target)
+//   - buildAuthorizeUrl(redirectUri, scopes) → string (302 target)
 //   - handleCallback(code, redirectUri) → CallbackResult
 //
 // The dispatcher in pages/api/oauth/[...slug].ts maps a URL slug like
-// "start/youtube" or "callback/facebook" onto these functions.
+// "start/youtube" or "callback/facebook" onto these functions. Scopes are
+// computed per-workspace from PLATFORM_CATALOG[platform][product].scopes
+// (see lib/workspace-config.ts:scopesForProducts) so OAuth consent screens
+// ask for the minimum set of permissions the workspace actually needs.
 
 import axios from 'axios';
 import { type SeedBody } from './seed-client';
@@ -37,63 +40,25 @@ const THREADS_AUTHORIZE = 'https://www.threads.net/oauth/authorize';
 const THREADS_TOKEN = 'https://graph.threads.net/oauth/access_token';
 const THREADS_LL_TOKEN = 'https://graph.threads.net/access_token';
 
-const FB_SCOPES = [
-  'pages_show_list',
-  'pages_read_engagement',
-  'pages_read_user_content',
-  'ads_read',
-  'business_management',
-  'instagram_basic',
-  'instagram_manage_insights',
-  // read_insights is NOT deprecated despite the v22 rebrand — Meta
-  // still requires it for /post/insights on Pages where the OAuth
-  // user is not the page owner (BC-managed agency pages most
-  // commonly). Without it /post/insights returns 200 with `data:[]`.
-  'read_insights',
-];
-
-const YT_SCOPES = [
-  'https://www.googleapis.com/auth/youtube.readonly',
-  'https://www.googleapis.com/auth/yt-analytics.readonly',
-  'https://www.googleapis.com/auth/yt-analytics-monetary.readonly',
-];
-
-// User-flow scopes (Login Kit). Approved scopes only — extras like
-// `biz.brand.insights` or `discovery.search.words` need separate review
-// and would block the consent screen if the app isn't approved for them.
-const TIKTOK_SCOPES = [
-  'user.info.basic',
-  'user.info.profile',
-  'user.info.stats',
-  'user.account.type',
-  'user.insights',
-  'video.list',
-  'video.insights',
-  'comment.list',
-];
-
-// Threads scope catalog as of 2025-2026 (Meta removed `threads_read_likes`
-// and reorganised some scopes). `threads_basic` is the only one that
-// doesn't require app review; the others may show as not-granted on the
-// consent screen if your app isn't approved for them — we still request
-// them and let Meta drop the unapproved ones gracefully.
-const THREADS_SCOPES = [
-  'threads_basic',
-  'threads_manage_insights',
-  'threads_read_replies',
-];
-
-// Twitch user-token scopes for the creator data surface:
-//   - user:read:email          → /helix/users with email
-//   - moderator:read:followers → /helix/channels/followers total count
-//   - channel:read:subscriptions → /helix/subscriptions list + tier
-// Helix is space-separated, not comma-separated. The consent screen will
-// re-render every requested scope individually for the broadcaster.
-const TWITCH_SCOPES = [
-  'user:read:email',
-  'moderator:read:followers',
-  'channel:read:subscriptions',
-];
+// Per-platform scopes are no longer hardcoded here — they're computed
+// per-workspace from PLATFORM_CATALOG (see poc/src/modules/accounts/
+// products.catalog.ts) and passed in via buildAuthorizeUrl(_, scopes).
+// Provider-specific notes worth keeping near the OAuth flows:
+//
+//   - Facebook: `read_insights` is NOT deprecated despite the v22 rebrand
+//     — Meta still requires it for /post/insights on Pages where the OAuth
+//     user is not the page owner (BC-managed agency pages most commonly).
+//     Without it /post/insights returns 200 with `data:[]`.
+//   - TikTok: user-flow scopes only (Login Kit). Extras like
+//     `biz.brand.insights` need separate review and would block the
+//     consent screen if the app isn't approved.
+//   - Threads: as of 2025-2026 Meta removed `threads_read_likes` and
+//     reorganised some scopes. `threads_basic` is the only one that
+//     doesn't require app review; the others may show as not-granted on
+//     the consent screen if the app isn't approved — Meta drops the
+//     unapproved ones gracefully.
+//   - Twitch: Helix wants space-separated scopes (URL-encoded as %20).
+//     The consent screen re-renders every requested scope individually.
 
 export type PlatformKey =
   | 'facebook'
@@ -129,7 +94,7 @@ export type CallbackResult =
 
 interface PlatformDef {
   key: PlatformKey;
-  buildAuthorizeUrl(redirectUri: string): string;
+  buildAuthorizeUrl(redirectUri: string, scopes: ReadonlyArray<string>): string;
   handleCallback(code: string, redirectUri: string): Promise<CallbackResult>;
 }
 
@@ -137,13 +102,13 @@ interface PlatformDef {
 
 const facebook: PlatformDef = {
   key: 'facebook',
-  buildAuthorizeUrl(redirectUri) {
+  buildAuthorizeUrl(redirectUri, scopes) {
     const appId = requireEnv('META_APP_ID');
     const params = new URLSearchParams({
       client_id: appId,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: FB_SCOPES.join(','),
+      scope: [...scopes].join(','),
       state: cryptoRandomState(),
     });
     return `${META_AUTHORIZE}?${params.toString()}`;
@@ -217,7 +182,7 @@ const facebook: PlatformDef = {
 
 const youtube: PlatformDef = {
   key: 'youtube',
-  buildAuthorizeUrl(redirectUri) {
+  buildAuthorizeUrl(redirectUri, scopes) {
     const clientId = requireEnv('GOOGLE_CLIENT_ID');
     const params = new URLSearchParams({
       response_type: 'code',
@@ -226,7 +191,8 @@ const youtube: PlatformDef = {
       access_type: 'offline',
       prompt: 'consent',
       include_granted_scopes: 'true',
-      scope: YT_SCOPES.join(' '),
+      // Google wants space-separated scopes.
+      scope: [...scopes].join(' '),
     });
     return `${GOOGLE_AUTHORIZE}?${params.toString()}`;
   },
@@ -314,12 +280,13 @@ const youtube: PlatformDef = {
 
 const tiktok: PlatformDef = {
   key: 'tiktok',
-  buildAuthorizeUrl(redirectUri) {
+  buildAuthorizeUrl(redirectUri, scopes) {
     const clientKey = requireEnv('TIKTOK_CLIENT_KEY');
     const params = new URLSearchParams({
       client_key: clientKey,
       response_type: 'code',
-      scope: TIKTOK_SCOPES.join(','),
+      // TikTok wants comma-separated scopes.
+      scope: [...scopes].join(','),
       redirect_uri: redirectUri,
       state: cryptoRandomState(),
     });
@@ -443,13 +410,14 @@ const tiktok: PlatformDef = {
 
 const threads: PlatformDef = {
   key: 'threads',
-  buildAuthorizeUrl(redirectUri) {
+  buildAuthorizeUrl(redirectUri, scopes) {
     const appId = requireEnv('THREADS_APP_ID');
     const params = new URLSearchParams({
       client_id: appId,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: THREADS_SCOPES.join(','),
+      // Threads (Meta) wants comma-separated scopes.
+      scope: [...scopes].join(','),
       state: cryptoRandomState(),
     });
     return `${THREADS_AUTHORIZE}?${params.toString()}`;
@@ -511,7 +479,11 @@ const threads: PlatformDef = {
       expires_at: expiresAt,
       canonical_user_id: userId,
       handle: username,
-      metadata: { user_id: userId, scopes: THREADS_SCOPES },
+      // metadata.scopes was a hardcoded mirror of what we requested. With
+      // per-workspace scopes there's no portable "what we asked for" value
+      // available here (Threads doesn't return granted scopes in the token
+      // response). POC doesn't read this field, so we drop it.
+      metadata: { user_id: userId },
     };
     const sessionId = putSession({
       kind: 'simple',
@@ -531,7 +503,7 @@ const threads: PlatformDef = {
 // Instagram has no direct OAuth — see /api/seed-pages for the FB→IG handoff.
 const instagram: PlatformDef = {
   key: 'instagram',
-  buildAuthorizeUrl() {
+  buildAuthorizeUrl(_redirectUri, _scopes) {
     throw new Error(
       'Instagram is connected via Facebook OAuth. Use /api/oauth/start/facebook.',
     );
@@ -547,14 +519,14 @@ const instagram: PlatformDef = {
 
 const twitch: PlatformDef = {
   key: 'twitch',
-  buildAuthorizeUrl(redirectUri) {
+  buildAuthorizeUrl(redirectUri, scopes) {
     const clientId = requireEnv('TWITCH_CLIENT_ID');
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: clientId,
       redirect_uri: redirectUri,
       // Twitch wants space-separated scopes (URL-encoded as %20).
-      scope: TWITCH_SCOPES.join(' '),
+      scope: [...scopes].join(' '),
       state: cryptoRandomState(),
       // `force_verify=true` would force the user to re-confirm scopes even
       // if previously authorised. We default to false so re-connecting an
@@ -614,7 +586,7 @@ const twitch: PlatformDef = {
       ? tokenRes.data.scope
       : typeof tokenRes.data.scope === 'string'
         ? tokenRes.data.scope.split(' ')
-        : TWITCH_SCOPES;
+        : [];
 
     // 2. Discover the broadcaster identity. Empty id/login means "the
     //    authenticated user" — Helix returns a single-element array.

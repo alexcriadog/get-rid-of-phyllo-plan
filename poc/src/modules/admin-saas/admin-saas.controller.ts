@@ -9,6 +9,8 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
@@ -21,6 +23,12 @@ import {
 } from '@modules/api-keys/api-keys.service';
 import { OutboundWebhooksService } from '@modules/outbound-webhooks/outbound-webhooks.service';
 import { AccountsService } from '@modules/accounts/accounts.service';
+import { ConnectToolGuard } from '@modules/admin/connect-tool.guard';
+import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
+import {
+  PLATFORM_IDS,
+  PRODUCT_IDS,
+} from '@modules/accounts/products.catalog';
 
 const WorkspaceCreateSchema = z
   .object({
@@ -48,7 +56,21 @@ const BrandingSchema = z
   })
   .strict();
 
-const ProductsSchema = z.record(z.array(z.string())).default({});
+// Tighten the wire format: only known platform/product IDs are accepted, and
+// every enabled platform MUST include `identity` (the implicit minimum for
+// every account). Empty body still means "clear" — handled in the handler.
+// Exported for unit tests; do not import from non-test code outside this module.
+export const ProductsSchema = z
+  .record(
+    z.enum(PLATFORM_IDS as unknown as [string, ...string[]]),
+    z.array(z.enum(PRODUCT_IDS as unknown as [string, ...string[]])).min(1),
+  )
+  .refine(
+    (config) =>
+      Object.values(config).every((products) => products.includes('identity')),
+    { message: 'identity is required for every enabled platform' },
+  )
+  .default({});
 
 const IssueKeySchema = z
   .object({
@@ -63,15 +85,18 @@ type TokenProduct = (typeof ALLOWED_TOKEN_PRODUCTS)[number];
 /**
  * Operator-facing admin surface for the Camaleonic Connect SaaS.
  *
- * Lives under /admin/* alongside the existing connector admin. The
- * existing admin endpoints (admin/accounts, admin/sync-jobs, etc.) are
- * unguarded externally — the operational model is "the /admin/* URL
- * space is operator-trust, with HTTP Basic auth added at the Caddy
- * layer when stricter access control is needed." This controller
- * matches that pattern for read endpoints. The sensitive mutations
- * (workspace + key creation / revocation) and the token-decrypt route
- * carry @UseGuards(ConnectToolGuard) so they require the shared bearer
- * even from inside the network.
+ * Lives under /admin/* alongside the existing connector admin. Read
+ * endpoints (list workspaces, get workspace, usage, webhook deliveries,
+ * list per-workspace API keys) follow the legacy operator-trust model
+ * — they're reachable from inside the cluster without auth, with
+ * Caddy Basic Auth at the ingress for external access. Sensitive
+ * mutations (workspace create, branding/products patch, key issue +
+ * revoke), the cross-workspace listAllApiKeys read, and the
+ * token-decrypt route carry @UseGuards(ConnectToolGuard) which
+ * requires the shared CONNECT_TOOL_SECRET bearer (with a loopback
+ * bypass for operator curl on the host). Workspace creation + key
+ * issuance additionally carry @UseInterceptors(RateLimitInterceptor)
+ * to limit abuse if the bearer is exposed.
  */
 @Controller('admin')
 export class AdminSaasController {
@@ -121,6 +146,8 @@ export class AdminSaasController {
 
   @Post('workspaces')
   @HttpCode(201)
+  @UseGuards(ConnectToolGuard)
+  @UseInterceptors(RateLimitInterceptor)
   async createWorkspace(@Body() body: unknown): Promise<unknown> {
     const parsed = WorkspaceCreateSchema.safeParse(body);
     if (!parsed.success) {
@@ -177,6 +204,7 @@ export class AdminSaasController {
   }
 
   @Patch('workspaces/:slug/branding')
+  @UseGuards(ConnectToolGuard)
   async updateBranding(
     @Param('slug') slug: string,
     @Body() body: unknown,
@@ -204,6 +232,7 @@ export class AdminSaasController {
   }
 
   @Patch('workspaces/:slug/products')
+  @UseGuards(ConnectToolGuard)
   async updateProducts(
     @Param('slug') slug: string,
     @Body() body: unknown,
@@ -260,6 +289,8 @@ export class AdminSaasController {
 
   @Post('workspaces/:slug/api-keys')
   @HttpCode(201)
+  @UseGuards(ConnectToolGuard)
+  @UseInterceptors(RateLimitInterceptor)
   async issueApiKey(
     @Param('slug') slug: string,
     @Body() body: unknown,
@@ -280,6 +311,7 @@ export class AdminSaasController {
   }
 
   @Get('api-keys')
+  @UseGuards(ConnectToolGuard)
   async listAllApiKeys(): Promise<{
     data: Array<{
       id: string;
@@ -314,6 +346,7 @@ export class AdminSaasController {
 
   @Post('api-keys/:id/revoke')
   @HttpCode(200)
+  @UseGuards(ConnectToolGuard)
   async revokeApiKey(@Param('id') id: string): Promise<{ revoked: boolean }> {
     const row = await this.prisma.apiKey.findUnique({ where: { id } });
     if (!row) {
@@ -444,6 +477,7 @@ export class AdminSaasController {
   // ─── Token debug (operator-only) ────────────────────────────────────────
 
   @Get('accounts/:id/access-token')
+  @UseGuards(ConnectToolGuard)
   async showAccessToken(
     @Param('id') rawId: string,
     @Query('product') product: string | undefined,

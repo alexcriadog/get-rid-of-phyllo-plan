@@ -1,16 +1,31 @@
 import { useState } from 'react';
+import type { GetServerSideProps } from 'next';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { ArrowLeft, Copy, KeyRound, Plus, Trash2, Webhook } from 'lucide-react';
 import AdminLayout from '../../../components/AdminLayout';
 import { useLive } from '../../../lib/useLive';
-import { adminPatch, adminPost } from '../../../lib/api';
+import { adminPatch, adminPost, CONNECTOR_API_URL } from '../../../lib/api';
 import { fmtRelative } from '../../../lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Empty } from '@/components/admin/empty';
+
+type ProductDef = {
+  id: string;
+  label: string;
+  hint?: string;
+  required?: boolean;
+  default?: boolean;
+  scopes: string[];
+};
+type CatalogResponse = {
+  platforms: string[];
+  products: string[];
+  catalog: Record<string, ProductDef[]>;
+};
 
 type WorkspaceDetail = {
   id: string;
@@ -54,7 +69,9 @@ type WebhookEndpoint = {
   createdAt: string;
 };
 
-export default function WorkspaceDetail() {
+type PageProps = { catalog: CatalogResponse };
+
+export default function WorkspaceDetail({ catalog }: PageProps) {
   const router = useRouter();
   const slug = typeof router.query.slug === 'string' ? router.query.slug : null;
 
@@ -80,7 +97,7 @@ export default function WorkspaceDetail() {
     >
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <BrandingSection slug={slug} ws={ws.data} onSaved={ws.refresh} />
-        <ProductsSection slug={slug} ws={ws.data} onSaved={ws.refresh} />
+        <ProductsSection slug={slug} ws={ws.data} catalog={catalog} onSaved={ws.refresh} />
         <SummarySection ws={ws.data} />
         <ApiKeysSection slug={slug} keys={keys.data ?? []} onChange={keys.refresh} />
         <WebhooksSection endpoints={endpoints.data ?? []} />
@@ -88,6 +105,25 @@ export default function WorkspaceDetail() {
     </AdminLayout>
   );
 }
+
+// SSR: pull the single-source-of-truth catalog from POC so the platforms ×
+// products grid never drifts from what the OAuth flow actually computes
+// scopes against.
+export const getServerSideProps: GetServerSideProps<PageProps> = async () => {
+  const url = `${CONNECTOR_API_URL}/internal/products-catalog`;
+  const headers: Record<string, string> = { accept: 'application/json' };
+  if (process.env.CONNECT_TOOL_SECRET) {
+    headers.authorization = `Bearer ${process.env.CONNECT_TOOL_SECRET}`;
+  }
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    throw new Error(
+      `Failed to load products catalog from ${url}: ${res.status} ${res.statusText}`,
+    );
+  }
+  const catalog = (await res.json()) as CatalogResponse;
+  return { props: { catalog } };
+};
 
 // ─── Summary ───────────────────────────────────────────────────────────────
 
@@ -235,28 +271,25 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ─── Products ─────────────────────────────────────────────────────────────
 
-const PRODUCT_CATALOG: Record<string, { id: string; label: string }[]> = {
-  facebook: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'stories', label: 'Stories' }, { id: 'mentions', label: 'Tagged posts' }, { id: 'comments', label: 'Comments' }, { id: 'ratings', label: 'Page reviews' }, { id: 'ads', label: 'Ad insights' }],
-  instagram: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'stories', label: 'Stories' }],
-  youtube: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Videos + metrics' }, { id: 'engagement_deep', label: 'Per-video analytics' }, { id: 'comments', label: 'Comments' }, { id: 'ads', label: 'Ad insights' }],
-  tiktok: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'comments', label: 'Comments' }],
-  threads: [{ id: 'identity', label: 'Profile' }, { id: 'audience', label: 'Audience' }, { id: 'engagement_new', label: 'Posts + metrics' }, { id: 'comments', label: 'Comments' }, { id: 'mentions', label: 'Mentions' }],
-  twitch: [{ id: 'identity', label: 'Profile' }, { id: 'engagement_new', label: 'Streams + metrics' }],
-};
-
 type PlatformState = {
   enabled: boolean;
   products: Record<string, boolean>;
 };
 
-function buildInitialState(ws: WorkspaceDetail | null): Record<string, PlatformState> {
+function buildInitialState(
+  ws: WorkspaceDetail | null,
+  catalog: CatalogResponse,
+): Record<string, PlatformState> {
   const saved = ws?.products ?? null;
   return Object.fromEntries(
-    Object.keys(PRODUCT_CATALOG).map((platform) => {
-      const catalog = PRODUCT_CATALOG[platform];
+    catalog.platforms.map((platform) => {
+      const defs = catalog.catalog[platform];
       if (saved === null) {
         // No config saved yet — all platforms disabled by default in editor
-        return [platform, { enabled: false, products: Object.fromEntries(catalog.map((p) => [p.id, false])) }];
+        return [
+          platform,
+          { enabled: false, products: Object.fromEntries(defs.map((p) => [p.id, false])) },
+        ];
       }
       const enabled = platform in saved;
       const savedProducts = saved[platform] ?? [];
@@ -265,7 +298,7 @@ function buildInitialState(ws: WorkspaceDetail | null): Record<string, PlatformS
         {
           enabled,
           products: Object.fromEntries(
-            catalog.map((p) => [p.id, p.id === 'identity' ? true : savedProducts.includes(p.id)]),
+            defs.map((p) => [p.id, p.required ? true : savedProducts.includes(p.id)]),
           ),
         },
       ];
@@ -276,10 +309,12 @@ function buildInitialState(ws: WorkspaceDetail | null): Record<string, PlatformS
 function ProductsSection({
   slug,
   ws,
+  catalog,
   onSaved,
 }: {
   slug: string;
   ws: WorkspaceDetail | null;
+  catalog: CatalogResponse;
   onSaved: () => void;
 }) {
   const [state, setState] = useState<Record<string, PlatformState>>({});
@@ -289,7 +324,7 @@ function ProductsSection({
 
   // Hydrate once when ws loads, mirror BrandingSection's guard pattern
   if (!busy && ws && !hydrated) {
-    setState(buildInitialState(ws));
+    setState(buildInitialState(ws, catalog));
     setHydrated(true);
   }
 
@@ -314,11 +349,15 @@ function ProductsSection({
     setBusy(true);
     setErr(null);
     try {
+      // Include identity explicitly — server-side Zod schema requires every
+      // enabled platform to list identity (it's the implicit minimum for
+      // every account, but the wire format makes it explicit so the OAuth
+      // scope computation can iterate over `products[platform]` directly).
       const payload: Record<string, string[]> = {};
       for (const [platform, ps] of Object.entries(state)) {
         if (!ps.enabled) continue;
         payload[platform] = Object.entries(ps.products)
-          .filter(([id, on]) => on && id !== 'identity')
+          .filter(([, on]) => on)
           .map(([id]) => id);
       }
       await adminPatch(`/admin/workspaces/${slug}/products`, payload);
@@ -335,7 +374,7 @@ function ProductsSection({
     setErr(null);
     try {
       await adminPatch(`/admin/workspaces/${slug}/products`, {});
-      setState(buildInitialState(null));
+      setState(buildInitialState(null, catalog));
       onSaved();
     } catch (e) {
       setErr((e as Error).message);
@@ -350,10 +389,10 @@ function ProductsSection({
         <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Platforms &amp; Products
         </div>
-        {Object.keys(PRODUCT_CATALOG).map((platform) => {
+        {catalog.platforms.map((platform) => {
           const ps = state[platform];
           if (!ps) return null;
-          const catalog = PRODUCT_CATALOG[platform];
+          const defs = catalog.catalog[platform];
           return (
             <div key={platform} className="rounded-md border border-border/40 bg-secondary/20 p-3">
               <label className="flex cursor-pointer items-center gap-2">
@@ -367,15 +406,16 @@ function ProductsSection({
               </label>
               {ps.enabled && (
                 <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 pl-5">
-                  {catalog.map((product) => (
+                  {defs.map((product) => (
                     <label
                       key={product.id}
-                      className={`flex items-center gap-1.5 text-xs ${product.id === 'identity' ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                      className={`flex items-center gap-1.5 text-xs ${product.required ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                      title={product.hint}
                     >
                       <input
                         type="checkbox"
-                        checked={product.id === 'identity' ? true : (ps.products[product.id] ?? false)}
-                        disabled={product.id === 'identity'}
+                        checked={product.required ? true : (ps.products[product.id] ?? false)}
+                        disabled={product.required}
                         onChange={(e) => toggleProduct(platform, product.id, e.target.checked)}
                         className="h-3 w-3 rounded border-border accent-primary"
                       />

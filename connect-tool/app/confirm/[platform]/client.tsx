@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { ProductDef } from '../../../lib/products';
+import type { ProductDef } from '../../../lib/workspace-config';
 import type { PlatformKey } from '../../../lib/platforms';
 import { useEmbedAutosize } from '../../../lib/useEmbedAutosize';
 

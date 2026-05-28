@@ -19,8 +19,11 @@ import {
   getContextCookie,
 } from '../../../../lib/oauth-context';
 import {
+  computeOAuthScopes,
+  fetchProductsCatalog,
   fetchWorkspaceProducts,
   platformReachableAtOAuthStart,
+  type ProductsConfig,
 } from '../../../../lib/workspace-config';
 
 const VALID_PLATFORMS = new Set<PlatformKey>([
@@ -134,6 +137,7 @@ export async function GET(
     const ws = sp.get('ws');
     const token = sp.get('token');
     let contextSessionId: string | null = null;
+    let productsConfig: ProductsConfig = null;
     if (ws && token) {
       try {
         const claims = await verifySdkToken(token);
@@ -152,7 +156,7 @@ export async function GET(
         // reachable from it, fail BEFORE we redirect to the provider.
         // platformReachableAtOAuthStart handles the IG↔FB merger (FB OAuth
         // covers both). null products config means unrestricted (default).
-        const productsConfig = await fetchWorkspaceProducts(ws);
+        productsConfig = await fetchWorkspaceProducts(ws);
         if (!platformReachableAtOAuthStart(productsConfig, platform)) {
           throw new Error(
             `This platform isn't available for workspace "${ws}". Contact your administrator if you need it enabled.`,
@@ -178,9 +182,17 @@ export async function GET(
       }
     }
 
+    // Per-workspace scope reduction. We pass the minimum set of scopes the
+    // workspace's enabled products need; the consent screen only shows those.
+    const catalog = await fetchProductsCatalog();
+    if (!catalog) {
+      return errorRedirect(baseUrl, 'Products catalog temporarily unavailable');
+    }
+    const scopes = computeOAuthScopes(catalog, productsConfig, platform);
+
     let authorizeUrl: string;
     try {
-      authorizeUrl = PLATFORMS[platform].buildAuthorizeUrl(redirectUri);
+      authorizeUrl = PLATFORMS[platform].buildAuthorizeUrl(redirectUri, scopes);
     } catch (err) {
       return errorRedirect(
         baseUrl,

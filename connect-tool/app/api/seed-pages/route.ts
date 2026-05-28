@@ -16,7 +16,10 @@ import {
   type PlatformKey,
 } from '../../../lib/platforms';
 import { postToPocSeed } from '../../../lib/seed-client';
-import { defaultSelectedProducts } from '../../../lib/products';
+import {
+  fetchProductsCatalog,
+  defaultSelectedProducts,
+} from '../../../lib/workspace-config';
 import {
   getContextCookie,
   setContextCookie,
@@ -63,12 +66,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const catalog = await fetchProductsCatalog();
+  if (!catalog) {
+    return NextResponse.json(
+      { error: 'catalog temporarily unavailable' },
+      { status: 503 },
+    );
+  }
   const productsFb = parsed.data.productsFb?.length
     ? parsed.data.productsFb
-    : defaultSelectedProducts('facebook');
+    : defaultSelectedProducts(catalog, 'facebook');
   const productsIg = parsed.data.productsIg?.length
     ? parsed.data.productsIg
-    : defaultSelectedProducts('instagram');
+    : defaultSelectedProducts(catalog, 'instagram');
 
   // Prefer the context captured on the session at the OAuth callback (works
   // inside a third-party iframe); fall back to the cookie for the legacy

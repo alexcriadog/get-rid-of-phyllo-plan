@@ -5,10 +5,11 @@
 import { redirect } from 'next/navigation';
 import { getFbSession } from '../../../lib/session';
 import {
-  PRODUCT_CATALOG,
+  fetchProductsCatalog,
+  fetchWorkspaceProducts,
+  displayProducts,
   defaultSelectedProducts,
-} from '../../../lib/products';
-import { fetchWorkspaceProducts, displayProducts } from '../../../lib/workspace-config';
+} from '../../../lib/workspace-config';
 import { FacebookPagesClient } from './client';
 
 type Search = {
@@ -49,7 +50,13 @@ export default async function FacebookPagesPage({
   }
 
   const wsSlug = session?.ctx?.workspaceSlug ?? null;
-  const cfg = wsSlug ? await fetchWorkspaceProducts(wsSlug) : null;
+  const [cfg, catalog] = await Promise.all([
+    wsSlug ? fetchWorkspaceProducts(wsSlug) : Promise.resolve(null),
+    fetchProductsCatalog(),
+  ]);
+  if (!catalog) {
+    redirect('/?error=' + encodeURIComponent('Catalog temporarily unavailable'));
+  }
   const lockedFb = displayProducts(cfg, 'facebook');   // string[] | null
   const lockedIg = displayProducts(cfg, 'instagram');  // string[] | null
 
@@ -61,10 +68,10 @@ export default async function FacebookPagesPage({
         name: p.name,
         ig_business_account_id: p.instagram_business_account?.id ?? null,
       }))}
-      fbProducts={PRODUCT_CATALOG.facebook}
-      fbDefaults={defaultSelectedProducts('facebook')}
-      igProducts={PRODUCT_CATALOG.instagram}
-      igDefaults={defaultSelectedProducts('instagram')}
+      fbProducts={catalog.catalog.facebook}
+      fbDefaults={defaultSelectedProducts(catalog, 'facebook')}
+      igProducts={catalog.catalog.instagram}
+      igDefaults={defaultSelectedProducts(catalog, 'instagram')}
       lockedFb={lockedFb}
       lockedIg={lockedIg}
       embed={embed === '1'}

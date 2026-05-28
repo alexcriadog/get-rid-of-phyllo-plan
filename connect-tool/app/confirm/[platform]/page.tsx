@@ -4,12 +4,13 @@
 
 import { redirect } from 'next/navigation';
 import { getSimpleSession } from '../../../lib/session';
-import {
-  PRODUCT_CATALOG,
-  defaultSelectedProducts,
-} from '../../../lib/products';
 import type { PlatformKey } from '../../../lib/platforms';
-import { fetchWorkspaceProducts, displayProducts } from '../../../lib/workspace-config';
+import {
+  fetchProductsCatalog,
+  fetchWorkspaceProducts,
+  displayProducts,
+  defaultSelectedProducts,
+} from '../../../lib/workspace-config';
 import { ConfirmClient } from './client';
 
 type Search = {
@@ -43,7 +44,8 @@ export default async function ConfirmPage({
   const theme = first(sp.theme) === 'dark' ? 'dark' : 'light';
   const accent = first(sp.accent);
 
-  if (!sessionId || !PRODUCT_CATALOG[platform]) {
+  const catalog = await fetchProductsCatalog();
+  if (!sessionId || !catalog || !catalog.catalog[platform]) {
     redirect('/?error=' + encodeURIComponent('Missing session or platform'));
   }
   const session = getSimpleSession(sessionId);
@@ -68,8 +70,8 @@ export default async function ConfirmPage({
       sessionId={sessionId}
       platform={platform}
       preview={session.preview}
-      products={PRODUCT_CATALOG[platform]}
-      defaultIds={defaultSelectedProducts(platform)}
+      products={catalog.catalog[platform]}
+      defaultIds={defaultSelectedProducts(catalog, platform)}
       lockedProducts={lockedProducts}
       embed={embed === '1'}
       origin={typeof origin === 'string' ? origin : ''}
