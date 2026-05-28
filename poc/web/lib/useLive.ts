@@ -61,16 +61,33 @@ const ENVELOPE_KEYS = new Set(['items', 'buckets', 'locks', 'data']);
 
 /**
  * Admin endpoints wrap lists in a single-key envelope (`{items:[…]}`,
- * `{buckets:[…]}`, `{locks:[…]}`). UI callers declare bare-array generics,
- * so unwrap one level when the shape matches exactly — multi-key payloads
- * like `/overview` are left untouched.
+ * `{buckets:[…]}`, `{locks:[…]}`) or the standard pagination envelope
+ * (`{data:[…], meta:{count, has_more, next_cursor}}`). UI callers declare
+ * bare-array generics, so unwrap one level when the shape matches —
+ * multi-key payloads like `/overview` are left untouched.
  */
 function unwrapEnvelope(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
-  const keys = Object.keys(raw as Record<string, unknown>);
+  const obj = raw as Record<string, unknown>;
+  const keys = Object.keys(obj);
+
+  // Standard pagination envelope: { data: [...], meta: {...} }. Drop meta
+  // — the admin UI polls live and doesn't paginate (yet); always seeing the
+  // latest page is the desired behaviour. If a page later needs the cursor
+  // it can opt out of useLive and fetch the envelope directly.
+  if (
+    keys.length === 2 &&
+    'data' in obj &&
+    'meta' in obj &&
+    Array.isArray(obj.data)
+  ) {
+    return obj.data;
+  }
+
+  // Legacy single-key envelopes.
   if (keys.length !== 1) return raw;
   const only = keys[0];
   if (!ENVELOPE_KEYS.has(only)) return raw;
-  const inner = (raw as Record<string, unknown>)[only];
+  const inner = obj[only];
   return Array.isArray(inner) ? inner : raw;
 }
