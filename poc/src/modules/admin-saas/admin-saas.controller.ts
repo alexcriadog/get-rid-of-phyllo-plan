@@ -32,6 +32,18 @@ import {
   PLATFORM_IDS,
   PRODUCT_IDS,
 } from '@modules/accounts/products.catalog';
+
+const CADENCE_VALUES = ['immediate', 'hourly', 'daily'] as const;
+
+// Snapshot products always emit immediately (no items_added delta to digest).
+// The schema accepts hourly/daily on these too but the dispatcher coerces them
+// to immediate; the admin UI greys those out for clarity.
+const WebhookCadenceSchema = z
+  .record(
+    z.enum(PRODUCT_IDS as unknown as [string, ...string[]]),
+    z.enum(CADENCE_VALUES),
+  )
+  .default({});
 import {
   decodeBigIntCursor,
   decodeCompositeCursor,
@@ -250,6 +262,7 @@ export class AdminSaasController {
       plan_tier: ws.planTier,
       branding: ws.branding,
       products: ws.products,
+      webhook_cadence: ws.webhookCadence,
       account_count: accountCount,
       active_api_key_count: apiKeyCount,
       webhook_endpoint_count: endpointCount,
@@ -339,6 +352,49 @@ export class AdminSaasController {
       `updateProducts(${slug}): pruned ${prunedTotal} sync_job(s) for products outside the new allow-list`,
     );
     return { slug, products: newConfig, pruned_sync_jobs: prunedTotal };
+  }
+
+  /**
+   * Operator-set per-product webhook delivery cadence.
+   *
+   * Shape: Record<product, "immediate" | "hourly" | "daily">. Missing
+   * keys default to "immediate". Empty object clears the override.
+   * Snapshot products (identity, audience, engagement_deep, ratings,
+   * ads) ignore hourly/daily — the dispatcher coerces them to
+   * immediate; the admin UI greys those rows out.
+   *
+   * The DataEventDispatcher memoises this per workspace for 60 s, so a
+   * fresh value takes up to a minute to fully propagate.
+   */
+  @Patch('workspaces/:slug/webhook-cadence')
+  async updateWebhookCadence(
+    @Param('slug') slug: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    const parsed = WebhookCadenceSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: 'Invalid webhook-cadence payload',
+        issues: parsed.error.issues,
+      });
+    }
+    const ws = await this.workspaces.findBySlug(slug);
+    const newConfig = parsed.data as Record<string, string>;
+    const isClear = Object.keys(newConfig).length === 0;
+    await this.prisma.workspace.update({
+      where: { id: ws.id },
+      data: {
+        webhookCadence: isClear
+          ? Prisma.JsonNull
+          : (newConfig as Prisma.InputJsonValue),
+      },
+    });
+    this.logger.log(
+      `updateWebhookCadence(${slug}): ${
+        isClear ? 'cleared (defaults to immediate)' : JSON.stringify(newConfig)
+      }`,
+    );
+    return { slug, webhook_cadence: isClear ? null : newConfig };
   }
 
   // ─── API keys ───────────────────────────────────────────────────────────

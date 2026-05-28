@@ -27,6 +27,8 @@ type CatalogResponse = {
   catalog: Record<string, ProductDef[]>;
 };
 
+type Cadence = 'immediate' | 'hourly' | 'daily';
+
 type WorkspaceDetail = {
   id: string;
   slug: string;
@@ -34,6 +36,7 @@ type WorkspaceDetail = {
   plan_tier: string;
   branding: Branding | null;
   products?: Record<string, string[]> | null;
+  webhook_cadence?: Record<string, Cadence> | null;
   account_count: number;
   active_api_key_count: number;
   webhook_endpoint_count: number;
@@ -101,6 +104,7 @@ export default function WorkspaceDetail({ catalog }: PageProps) {
         <SummarySection ws={ws.data} />
         <ApiKeysSection slug={slug} keys={keys.data ?? []} onChange={keys.refresh} />
         <WebhooksSection slug={slug} endpoints={endpoints.data ?? []} />
+        <CadenceSection slug={slug} ws={ws.data} catalog={catalog} onSaved={ws.refresh} />
       </div>
     </AdminLayout>
   );
@@ -848,5 +852,170 @@ function EndpointRow({
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Webhook delivery cadence (operator-set per-product) ──────────────────
+
+// Products whose `data.<product>.updated` event is a snapshot rather than
+// a list of new items. They always emit immediately regardless of cadence
+// config (no items_added delta to digest), so the UI greys those rows out.
+const SNAPSHOT_PRODUCTS: ReadonlySet<string> = new Set([
+  'identity',
+  'audience',
+  'engagement_deep',
+  'ratings',
+  'ads',
+]);
+const CADENCES: Cadence[] = ['immediate', 'hourly', 'daily'];
+
+function CadenceSection({
+  slug,
+  ws,
+  catalog,
+  onSaved,
+}: {
+  slug: string;
+  ws: WorkspaceDetail | null;
+  catalog: CatalogResponse;
+  onSaved: () => void;
+}) {
+  const [state, setState] = useState<Record<string, Cadence>>({});
+  const [hydrated, setHydrated] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  if (!busy && ws && !hydrated) {
+    const initial: Record<string, Cadence> = {};
+    for (const product of catalog.products) {
+      const v = ws.webhook_cadence?.[product];
+      initial[product] =
+        v === 'hourly' || v === 'daily' ? v : 'immediate';
+    }
+    setState(initial);
+    setHydrated(true);
+  }
+
+  const onChange = (product: string, cadence: Cadence) => {
+    setState((prev) => ({ ...prev, [product]: cadence }));
+  };
+
+  const onSave = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      // Send only non-default entries so the stored JSON stays compact.
+      // Snapshot products are coerced to immediate server-side; sending
+      // anything else for them is just noise.
+      const payload: Record<string, Cadence> = {};
+      for (const [product, cadence] of Object.entries(state)) {
+        if (SNAPSHOT_PRODUCTS.has(product)) continue;
+        if (cadence === 'immediate') continue;
+        payload[product] = cadence;
+      }
+      await adminPatch(`/admin/workspaces/${slug}/webhook-cadence`, payload);
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onReset = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await adminPatch(`/admin/workspaces/${slug}/webhook-cadence`, {});
+      const cleared: Record<string, Cadence> = {};
+      for (const product of catalog.products) cleared[product] = 'immediate';
+      setState(cleared);
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="lg:col-span-2">
+      <CardContent className="space-y-3 p-4">
+        <div>
+          <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Webhook delivery cadence
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            How often <span className="font-mono">data.&lt;product&gt;.updated</span> events
+            reach this workspace's webhook endpoints. Snapshot products
+            (identity, audience, engagement_deep, ratings, ads) always
+            fire immediately — only list products can be digested.
+          </p>
+        </div>
+
+        <div className="overflow-auto">
+          <table className="w-full text-xs">
+            <thead className="text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="py-1 pr-3">Product</th>
+                {CADENCES.map((c) => (
+                  <th key={c} className="py-1 px-2 text-center">
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {catalog.products.map((product) => {
+                const isSnapshot = SNAPSHOT_PRODUCTS.has(product);
+                const current = isSnapshot ? 'immediate' : (state[product] ?? 'immediate');
+                return (
+                  <tr key={product} className="border-t border-border/30">
+                    <td className="py-1.5 pr-3 font-mono">
+                      {product}
+                      {isSnapshot && (
+                        <span className="ml-1 text-[9px] uppercase tracking-wider text-muted-foreground">
+                          snapshot
+                        </span>
+                      )}
+                    </td>
+                    {CADENCES.map((c) => {
+                      const disabled = isSnapshot && c !== 'immediate';
+                      return (
+                        <td key={c} className="py-1.5 px-2 text-center">
+                          <input
+                            type="radio"
+                            name={`cad-${product}`}
+                            checked={current === c}
+                            disabled={disabled}
+                            onChange={() => onChange(product, c)}
+                            className="h-3 w-3 accent-primary disabled:opacity-30"
+                            title={
+                              disabled
+                                ? 'snapshot products always fire immediately'
+                                : undefined
+                            }
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {err && <div className="text-sm text-danger">↯ {err}</div>}
+        <div className="flex gap-2 pt-1">
+          <Button size="sm" disabled={busy} onClick={onSave}>
+            {busy ? 'Saving…' : 'Save'}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={onReset}>
+            Reset all to immediate
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

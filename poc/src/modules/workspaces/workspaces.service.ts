@@ -39,6 +39,10 @@ export interface WorkspaceView {
   // "no platforms enabled" sentinel; absence of a platform key in the
   // object means "that platform is not offered".
   products: Record<string, string[]>;
+  // Operator-set per-product webhook delivery cadence. null → all products
+  // default to "immediate". See data-event-dispatcher.service.ts for the
+  // dispatch logic. Schema: Record<product, "immediate"|"hourly"|"daily">.
+  webhookCadence: Record<string, string> | null;
   planTier: string;
 }
 
@@ -148,6 +152,7 @@ export class WorkspacesService implements OnModuleInit {
     name: string;
     branding: unknown;
     products: unknown;
+    webhookCadence: unknown;
     planTier: string;
   }): WorkspaceView {
     return {
@@ -156,8 +161,20 @@ export class WorkspacesService implements OnModuleInit {
       name: row.name,
       branding: this.parseBranding(row.branding),
       products: this.parseProducts(row.products),
+      webhookCadence: this.parseCadence(row.webhookCadence),
       planTier: row.planTier,
     };
+  }
+
+  private parseCadence(raw: unknown): Record<string, string> | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof v === 'string' && (v === 'immediate' || v === 'hourly' || v === 'daily')) {
+        out[k] = v;
+      }
+    }
+    return Object.keys(out).length > 0 ? out : null;
   }
 
   private parseBranding(raw: unknown): WorkspaceBranding | null {
