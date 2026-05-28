@@ -8,6 +8,7 @@ import {
 import { createHmac, randomBytes } from 'node:crypto';
 import axios from 'axios';
 import { Worker, Job } from 'bullmq';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { BullmqService, QueueName } from '@shared/redis/bullmq.service';
 import {
@@ -467,11 +468,17 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
       .digest('hex');
 
     const attempts = delivery.attempts + 1;
+    const startedAt = Date.now();
     try {
       const res = await axios.post(delivery.endpoint.url, body, {
         timeout: 10_000,
         validateStatus: () => true,
         proxy: false,
+        responseType: 'text',
+        // Caps the bytes axios will accept BEFORE we truncate ourselves —
+        // saves memory on a misbehaving client that floods the response.
+        maxContentLength: 64_000,
+        transitional: { clarifyTimeoutError: true },
         headers: {
           'Content-Type': 'application/json',
           'X-Camaleonic-Event': delivery.event,
@@ -479,6 +486,9 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
           'X-Camaleonic-Signature': `t=${ts},v1=${sig}`,
         },
       });
+      const durationMs = Date.now() - startedAt;
+      const responseBody = truncateBody(res.data);
+      const responseHeaders = pickHeaders(res.headers);
       if (res.status >= 200 && res.status < 300) {
         await this.prisma.webhookDelivery.update({
           where: { id: delivery.id },
@@ -487,15 +497,28 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
             status: 'delivered',
             lastResponseCode: res.status,
             lastError: null,
+            responseBody,
+            responseHeaders: (responseHeaders ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+            durationMs,
             nextRetryAt: null,
             deliveredAt: new Date(),
           },
         });
         return;
       }
-      await this.scheduleRetry(delivery.id, attempts, res.status, null);
+      await this.scheduleRetry(delivery.id, attempts, res.status, null, {
+        responseBody,
+        responseHeaders,
+        durationMs,
+      });
     } catch (err: unknown) {
-      await this.scheduleRetry(delivery.id, attempts, null, describe(err));
+      await this.scheduleRetry(
+        delivery.id,
+        attempts,
+        null,
+        describe(err),
+        { responseBody: null, responseHeaders: null, durationMs: Date.now() - startedAt },
+      );
     }
   }
 
@@ -504,6 +527,11 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
     attempts: number,
     code: number | null,
     error: string | null,
+    capture: {
+      responseBody: string | null;
+      responseHeaders: object | null;
+      durationMs: number | null;
+    } = { responseBody: null, responseHeaders: null, durationMs: null },
   ): Promise<void> {
     // attempts is 1-indexed (first failure = 1). RETRY_DELAYS_MS[attempts-1]
     // is the delay until the NEXT attempt.
@@ -515,6 +543,9 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
           status: 'abandoned',
           lastResponseCode: code,
           lastError: error,
+          responseBody: capture.responseBody,
+          responseHeaders: (capture.responseHeaders ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          durationMs: capture.durationMs,
           nextRetryAt: null,
         },
       });
@@ -529,6 +560,9 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
         status: 'failed',
         lastResponseCode: code,
         lastError: error,
+        responseBody: capture.responseBody,
+        responseHeaders: (capture.responseHeaders ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        durationMs: capture.durationMs,
         nextRetryAt,
       },
     });
@@ -567,4 +601,34 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
 
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Stringify axios's response body and truncate to 4 KB so we don't load
+ *  unbounded blobs into the DB or admin UI. Returns null on empty input. */
+function truncateBody(data: unknown): string | null {
+  if (data === null || data === undefined) return null;
+  const s = typeof data === 'string' ? data : JSON.stringify(data);
+  if (!s) return null;
+  const MAX = 4_096;
+  return s.length > MAX ? `${s.slice(0, MAX)}...[truncated]` : s;
+}
+
+/** Capture only the response headers that help debugging — never the
+ *  whole header set (some clients echo Authorization in their reply). */
+function pickHeaders(headers: unknown): object | null {
+  if (!headers || typeof headers !== 'object') return null;
+  const ALLOWED = new Set([
+    'content-type',
+    'content-length',
+    'x-request-id',
+    'x-correlation-id',
+    'date',
+    'server',
+  ]);
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers as Record<string, unknown>)) {
+    if (!ALLOWED.has(k.toLowerCase())) continue;
+    out[k] = Array.isArray(v) ? v.join(', ') : String(v);
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }

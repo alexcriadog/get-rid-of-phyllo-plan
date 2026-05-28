@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { GetServerSideProps } from 'next';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { ArrowLeft, Copy, KeyRound, Plus, Trash2, Webhook } from 'lucide-react';
 import AdminLayout from '../../../components/AdminLayout';
 import { useLive } from '../../../lib/useLive';
-import { adminPatch, adminPost } from '../../../lib/api';
+import { adminPatch, adminPost, CONNECTOR_API_URL } from '../../../lib/api';
 import { fmtRelative } from '../../../lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -100,7 +100,7 @@ export default function WorkspaceDetail({ catalog }: PageProps) {
         <ProductsSection slug={slug} ws={ws.data} catalog={catalog} onSaved={ws.refresh} />
         <SummarySection ws={ws.data} />
         <ApiKeysSection slug={slug} keys={keys.data ?? []} onChange={keys.refresh} />
-        <WebhooksSection endpoints={endpoints.data ?? []} />
+        <WebhooksSection slug={slug} endpoints={endpoints.data ?? []} />
       </div>
     </AdminLayout>
   );
@@ -687,7 +687,29 @@ function ApiKeysSection({
 
 // ─── Webhook endpoints (read-only here; CRUD is the client's job via /v1) ──
 
-function WebhooksSection({ endpoints }: { endpoints: WebhookEndpoint[] }) {
+type EndpointHealth = {
+  endpoint_id: string;
+  window_hours: number;
+  total: number;
+  delivered: number;
+  failed: number;
+  pending: number;
+  abandoned: number;
+  success_rate: number | null;
+  avg_duration_ms: number | null;
+  p95_duration_ms: number | null;
+  last_delivery_at: string | null;
+  last_success_at: string | null;
+  consecutive_failures: number;
+};
+
+function WebhooksSection({
+  slug,
+  endpoints,
+}: {
+  slug: string;
+  endpoints: WebhookEndpoint[];
+}) {
   return (
     <Card className="lg:col-span-2">
       <CardContent className="p-4">
@@ -702,33 +724,129 @@ function WebhooksSection({ endpoints }: { endpoints: WebhookEndpoint[] }) {
         ) : (
           <div className="space-y-2">
             {endpoints.map((e) => (
-              <div
-                key={e.id}
-                className="flex items-start justify-between gap-3 rounded-md border border-border/40 bg-secondary/30 p-3 text-sm"
-              >
-                <div className="min-w-0">
-                  <div className="break-all font-mono text-xs">{e.url}</div>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {e.events.map((ev) => (
-                      <Badge key={ev} variant="default" className="text-[10px]">
-                        {ev}
-                      </Badge>
-                    ))}
-                  </div>
-                  {e.description && (
-                    <div className="mt-1 text-xs text-muted-foreground">{e.description}</div>
-                  )}
-                </div>
-                <div className="shrink-0">
-                  <Badge variant={e.active ? 'ok' : 'default'}>
-                    {e.active ? 'active' : 'inactive'}
-                  </Badge>
-                </div>
-              </div>
+              <EndpointRow key={e.id} slug={slug} endpoint={e} />
             ))}
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function EndpointRow({
+  slug,
+  endpoint,
+}: {
+  slug: string;
+  endpoint: WebhookEndpoint;
+}) {
+  const [health, setHealth] = useState<EndpointHealth | null>(null);
+  const [sending, setSending] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(
+          `${CONNECTOR_API_URL}/admin/workspaces/${slug}/webhook-endpoints/${endpoint.id}/health`,
+        );
+        if (!res.ok) return;
+        const json = (await res.json()) as EndpointHealth;
+        if (!cancelled) setHealth(json);
+      } catch {
+        // best-effort — health is informational
+      }
+    };
+    load();
+    const t = setInterval(load, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [slug, endpoint.id]);
+
+  const sendTest = async () => {
+    setSending(true);
+    setFeedback(null);
+    try {
+      await adminPost(
+        `/admin/workspaces/${slug}/webhook-endpoints/${endpoint.id}/test`,
+      );
+      setFeedback('test queued');
+      setTimeout(() => setFeedback(null), 4000);
+    } catch (e) {
+      setFeedback(`failed: ${(e as Error).message}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const failingHard = (health?.consecutive_failures ?? 0) >= 3;
+
+  return (
+    <div className="rounded-md border border-border/40 bg-secondary/30 p-3 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="break-all font-mono text-xs">{endpoint.url}</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {endpoint.events.map((ev) => (
+              <Badge key={ev} variant="default" className="text-[10px]">
+                {ev}
+              </Badge>
+            ))}
+          </div>
+          {endpoint.description && (
+            <div className="mt-1 text-xs text-muted-foreground">
+              {endpoint.description}
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <Badge variant={endpoint.active ? 'ok' : 'default'}>
+            {endpoint.active ? 'active' : 'inactive'}
+          </Badge>
+          <Button size="sm" variant="ghost" disabled={sending} onClick={sendTest}>
+            {sending ? 'Sending…' : 'Send test'}
+          </Button>
+          {feedback && (
+            <div className="text-[10px] text-muted-foreground">{feedback}</div>
+          )}
+        </div>
+      </div>
+
+      {/* Health rollup — last 24 h */}
+      {health && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/40 pt-2 text-[11px] text-muted-foreground">
+          <span>
+            <span className="font-mono">24h:</span>{' '}
+            <span className={failingHard ? 'text-danger' : 'text-foreground'}>
+              {health.total > 0
+                ? `${Math.round((health.success_rate ?? 0) * 100)}% ok`
+                : 'no traffic'}
+            </span>{' '}
+            ({health.delivered}✓ {health.failed}↻ {health.abandoned}✕)
+          </span>
+          {health.last_delivery_at && (
+            <span>
+              last <span className="font-mono">{fmtRelative(health.last_delivery_at)}</span>
+            </span>
+          )}
+          {health.avg_duration_ms != null && (
+            <span>
+              avg <span className="font-mono">{health.avg_duration_ms}ms</span>
+              {health.p95_duration_ms != null && (
+                <> · p95 <span className="font-mono">{health.p95_duration_ms}ms</span></>
+              )}
+            </span>
+          )}
+          {failingHard && (
+            <Badge variant="danger">
+              {health.consecutive_failures} consecutive failures
+            </Badge>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

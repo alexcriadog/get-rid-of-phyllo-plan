@@ -237,6 +237,14 @@ model WebhookDelivery {
   status           String    @default("pending")
   lastResponseCode Int?      @map("last_response_code")
   lastError        String?   @db.Text @map("last_error")
+  // First 4 KB of the LAST attempt's response body (truncated). Used by
+  // admin "show payload + response" to debug client-side rejections.
+  responseBody     String?   @db.Text @map("response_body")
+  // Headers of the LAST attempt's response (small JSON object).
+  responseHeaders  Json?     @map("response_headers")
+  // Round-trip time of the LAST attempt in milliseconds. Surfaces in the
+  // endpoint health endpoint (Phase D) for p50/p95 latency.
+  durationMs       Int?      @map("duration_ms")
   nextRetryAt      DateTime? @map("next_retry_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   deliveredAt      DateTime? @map("delivered_at")

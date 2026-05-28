@@ -23,6 +23,7 @@ import {
   IssuedApiKey,
 } from '@modules/api-keys/api-keys.service';
 import { OutboundWebhooksService } from '@modules/outbound-webhooks/outbound-webhooks.service';
+import { BullmqService } from '@shared/redis/bullmq.service';
 import { AccountsService } from '@modules/accounts/accounts.service';
 import { ConnectToolGuard } from '@modules/admin/connect-tool.guard';
 import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
@@ -128,6 +129,7 @@ export class AdminSaasController {
     private readonly apiKeys: ApiKeysService,
     private readonly webhooks: OutboundWebhooksService,
     private readonly accounts: AccountsService,
+    private readonly bullmq: BullmqService,
   ) {}
 
   // ─── Workspaces ─────────────────────────────────────────────────────────
@@ -574,6 +576,189 @@ export class AdminSaasController {
       }),
       (r) => encodeCompositeCursor(r.createdAt, r.id),
     );
+  }
+
+  /**
+   * Full delivery detail for the admin: payload + lastResponseBody +
+   * lastResponseHeaders + durationMs + the resolved endpoint. Operator-trust
+   * model — no guard, network-layer auth only (matches the rest of
+   * /admin/*).
+   */
+  @Get('webhook-deliveries/:id')
+  async getDelivery(@Param('id') id: string): Promise<unknown> {
+    const row = await this.prisma.webhookDelivery.findUnique({
+      where: { id },
+      include: {
+        endpoint: {
+          include: { workspace: { select: { slug: true, name: true } } },
+        },
+      },
+    });
+    if (!row) {
+      throw new NotFoundException(`Delivery ${id} not found`);
+    }
+    return {
+      id: row.id,
+      endpoint_id: row.endpointId,
+      endpoint_url: row.endpoint.url,
+      workspace_slug: row.endpoint.workspace.slug,
+      workspace_name: row.endpoint.workspace.name,
+      event: row.event,
+      payload: row.payload,
+      status: row.status,
+      attempts: row.attempts,
+      last_response_code: row.lastResponseCode,
+      last_error: row.lastError,
+      response_body: row.responseBody,
+      response_headers: row.responseHeaders,
+      duration_ms: row.durationMs,
+      next_retry_at: row.nextRetryAt ? row.nextRetryAt.toISOString() : null,
+      created_at: row.createdAt.toISOString(),
+      delivered_at: row.deliveredAt ? row.deliveredAt.toISOString() : null,
+    };
+  }
+
+  /**
+   * Manual re-enqueue. Allowed states: failed/abandoned/pending. Delivered
+   * deliveries are rejected (idempotent — there's nothing to retry). The
+   * attempts counter is preserved so the operator can see "this is the
+   * 4th try, the 3 before failed".
+   */
+  @Post('webhook-deliveries/:id/retry')
+  @HttpCode(202)
+  async retryDelivery(@Param('id') id: string): Promise<unknown> {
+    const row = await this.prisma.webhookDelivery.findUnique({ where: { id } });
+    if (!row) {
+      throw new NotFoundException(`Delivery ${id} not found`);
+    }
+    if (row.status === 'delivered') {
+      throw new BadRequestException('Delivery already succeeded; nothing to retry');
+    }
+    const now = new Date();
+    await this.prisma.webhookDelivery.update({
+      where: { id },
+      data: {
+        status: 'pending',
+        nextRetryAt: now,
+        lastError: row.lastError ? `${row.lastError} | manual retry by admin` : null,
+      },
+    });
+    await this.adminEnqueueDelivery(id);
+    return { id, status: 'pending', enqueued_at: now.toISOString() };
+  }
+
+  /**
+   * Endpoint health rollup over the last 24 h. Useful for ops to spot
+   * an endpoint that's been silently dropping deliveries.
+   */
+  @Get('workspaces/:slug/webhook-endpoints/:id/health')
+  async endpointHealth(
+    @Param('slug') slug: string,
+    @Param('id') endpointId: string,
+  ): Promise<unknown> {
+    const ws = await this.workspaces.findBySlug(slug);
+    const endpoint = await this.prisma.webhookEndpoint.findUnique({
+      where: { id: endpointId },
+    });
+    if (!endpoint || endpoint.workspaceId !== ws.id) {
+      throw new NotFoundException(`Webhook endpoint ${endpointId} not found`);
+    }
+    const since = new Date(Date.now() - 24 * 60 * 60_000);
+
+    const grouped = await this.prisma.webhookDelivery.groupBy({
+      by: ['status'],
+      where: { endpointId, createdAt: { gte: since } },
+      _count: { _all: true },
+    });
+    const recent = await this.prisma.webhookDelivery.findMany({
+      where: { endpointId, createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        status: true,
+        durationMs: true,
+        deliveredAt: true,
+        createdAt: true,
+      },
+    });
+    const counts = {
+      delivered: 0,
+      failed: 0,
+      pending: 0,
+      abandoned: 0,
+    } as Record<string, number>;
+    for (const g of grouped) counts[g.status] = g._count._all ?? 0;
+    const total = grouped.reduce((acc, g) => acc + (g._count._all ?? 0), 0);
+
+    const durations = recent
+      .map((r) => r.durationMs)
+      .filter((d): d is number => d !== null);
+    const avgDuration = durations.length
+      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      : null;
+    const sortedDur = [...durations].sort((a, b) => a - b);
+    const p95Duration = sortedDur.length
+      ? sortedDur[Math.min(sortedDur.length - 1, Math.floor(sortedDur.length * 0.95))]
+      : null;
+
+    // Consecutive failures from the most-recent attempt backwards. Stops
+    // at the first delivered row.
+    let consecutiveFailures = 0;
+    for (const r of recent) {
+      if (r.status === 'delivered') break;
+      consecutiveFailures += 1;
+    }
+
+    const lastDelivery = recent[0];
+    const lastSuccess = recent.find((r) => r.status === 'delivered');
+
+    return {
+      endpoint_id: endpointId,
+      window_hours: 24,
+      total,
+      delivered: counts.delivered ?? 0,
+      failed: counts.failed ?? 0,
+      pending: counts.pending ?? 0,
+      abandoned: counts.abandoned ?? 0,
+      success_rate: total > 0 ? counts.delivered / total : null,
+      avg_duration_ms: avgDuration,
+      p95_duration_ms: p95Duration,
+      last_delivery_at: lastDelivery
+        ? lastDelivery.createdAt.toISOString()
+        : null,
+      last_success_at: lastSuccess
+        ? (lastSuccess.deliveredAt ?? lastSuccess.createdAt).toISOString()
+        : null,
+      consecutive_failures: consecutiveFailures,
+    };
+  }
+
+  /**
+   * Admin "Send test webhook" — fires a webhook.test delivery to the
+   * endpoint via the same sendTest path the public /v1/.../test endpoint
+   * uses. Useful for an operator helping a customer who's debugging
+   * their server's signature verification.
+   */
+  @Post('workspaces/:slug/webhook-endpoints/:id/test')
+  @HttpCode(202)
+  async sendTestFromAdmin(
+    @Param('slug') slug: string,
+    @Param('id') endpointId: string,
+  ): Promise<unknown> {
+    const ws = await this.workspaces.findBySlug(slug);
+    return this.webhooks.sendTest(ws.id, endpointId);
+  }
+
+  /**
+   * Re-enqueue helper. Uses the SAME BullMQ queue name + payload shape as
+   * OutboundWebhooksService — kept here to avoid widening the service's
+   * public surface area (admin path uses a different jobId prefix so it
+   * never collides with the worker's natural retry pattern).
+   */
+  private async adminEnqueueDelivery(deliveryId: string): Promise<void> {
+    await this.bullmq
+      .getQueue<{ deliveryId: string }>('delivery')
+      .add('webhook', { deliveryId }, { jobId: `${deliveryId}-admin-${Date.now()}` });
   }
 
   // ─── Usage telemetry ────────────────────────────────────────────────────
