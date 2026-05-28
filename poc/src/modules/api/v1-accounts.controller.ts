@@ -29,6 +29,14 @@ import {
 } from '@/common/guards/bearer-api-key.guard';
 import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
 import { V1CacheInterceptor } from '@/common/interceptors/cache.interceptor';
+import {
+  decodeBigIntCursor,
+  encodeCursor,
+  envelopeStatic,
+  paginate,
+  parseLimit,
+  type Paginated,
+} from '@shared/pagination/cursor';
 
 /**
  * Public /v1 surface for external client backends. Auth: Bearer
@@ -61,24 +69,31 @@ export class V1AccountsController {
     @Query('platform') platform: string | undefined,
     @Query('end_user_id') endUserId: string | undefined,
     @Query('limit') limitRaw: string | undefined,
-  ): Promise<{ data: AccountSummary[]; meta: { count: number } }> {
+    @Query('cursor') cursorRaw: string | undefined,
+  ): Promise<Paginated<AccountSummary>> {
     const workspaceId = this.requireWorkspace(req);
-    const limit = parseIntParam(limitRaw, 100, 1, 500);
+    const limit = parseLimit(limitRaw, 100, 1, 500);
+    const cursorId = decodeBigIntCursor(cursorRaw);
 
-    const rows = await this.prisma.account.findMany({
-      where: {
-        workspaceId,
-        ...(platform ? { platform } : {}),
-        ...(endUserId ? { endUserId } : {}),
-      },
-      orderBy: { connectedAt: 'desc' },
-      take: limit,
-    });
-
-    return {
-      data: rows.map((r) => toSummary(r)),
-      meta: { count: rows.length },
-    };
+    return paginate(
+      limit,
+      (take) =>
+        this.prisma.account.findMany({
+          where: {
+            workspaceId,
+            ...(platform ? { platform } : {}),
+            ...(endUserId ? { endUserId } : {}),
+            ...(cursorId !== null ? { id: { lt: cursorId } } : {}),
+          },
+          // Cursor on PK (BigInt autoincrement). For accounts that's a
+          // tight proxy for connectedAt desc — newer rows always have
+          // larger ids — and gives index-friendly cursor semantics.
+          orderBy: { id: 'desc' },
+          take,
+        }),
+      (r) => toSummary(r),
+      (r) => encodeCursor(r.id),
+    );
   }
 
   @Get('accounts/:id')
@@ -121,20 +136,25 @@ export class V1AccountsController {
     @Param('id') rawId: string,
     @Query('limit') limitRaw: string | undefined,
     @Query('since') since: string | undefined,
-  ): Promise<{ platform: string; data: unknown[] }> {
+  ): Promise<{ platform: string } & Paginated<unknown>> {
     const { adapter, account, token, metadata } = await this.resolve(req, rawId);
-    const limit = parseIntParam(limitRaw, 50, 1, 200);
+    const limit = parseLimit(limitRaw, 50, 1, 200);
     const sinceDate = since ? new Date(since) : undefined;
     if (sinceDate && Number.isNaN(sinceDate.getTime())) {
       throw new BadRequestException(`Invalid since timestamp: ${since}`);
     }
+    // Adapters don't yet plumb a cursor token to the upstream platform —
+    // they return a single page bounded by `limit` + `since`. We still
+    // wrap in the standard envelope so clients see a uniform shape;
+    // `next_cursor` will become non-null once adapters expose a paging
+    // hook (FB after-cursor, IG max_id, etc.).
     const items = await adapter.fetchContents(
       token,
       account.canonicalUserId,
       { limit, since: sinceDate },
       metadata,
     );
-    return { platform: account.platform, data: items };
+    return { platform: account.platform, ...envelopeStatic<unknown>(items) };
   }
 
   @Get('accounts/:id/engagement')
@@ -143,9 +163,9 @@ export class V1AccountsController {
     @Param('id') rawId: string,
     @Query('limit') limitRaw: string | undefined,
     @Query('since') since: string | undefined,
-  ): Promise<NormalizedEngagement> {
+  ): Promise<NormalizedEngagement & Paginated<unknown>> {
     const { adapter, account, token, metadata } = await this.resolve(req, rawId);
-    const limit = parseIntParam(limitRaw, 25, 1, 100);
+    const limit = parseLimit(limitRaw, 25, 1, 100);
     const sinceDate = since ? new Date(since) : undefined;
     if (sinceDate && Number.isNaN(sinceDate.getTime())) {
       throw new BadRequestException(`Invalid since timestamp: ${since}`);
@@ -156,7 +176,12 @@ export class V1AccountsController {
       { limit, since: sinceDate },
       metadata,
     );
-    return toEngagementView(account.platform, items, sinceDate);
+    const view = toEngagementView(account.platform, items, sinceDate);
+    // toEngagementView already returns `{platform, items, ...}` — merge in
+    // the standard pagination envelope so the response shape matches the
+    // rest of /v1/*. `data` mirrors `items` for the canonical envelope.
+    const list = (view as { items?: unknown[] }).items ?? [];
+    return { ...view, ...envelopeStatic<unknown>(list) };
   }
 
   @Get('accounts/:id/ratings')
@@ -169,17 +194,21 @@ export class V1AccountsController {
     sample_size: number;
     average_rating: number | null;
     captured_at: string | null;
-    data: unknown[];
-  }> {
+  } & Paginated<unknown>> {
     const { account } = await this.resolve(req, rawId);
     if (account.platform !== 'facebook') {
       throw new BadRequestException(
         `ratings not supported for ${account.platform}`,
       );
     }
-    const limit = parseIntParam(limitRaw, 25, 1, 100);
+    const limit = parseLimit(limitRaw, 25, 1, 100);
     const snap = await this.facebookExtras.listRatings(account.id, limit);
-    return { platform: account.platform, ...snap };
+    const { data, ...rest } = snap;
+    return {
+      platform: account.platform,
+      ...rest,
+      ...envelopeStatic<unknown>(data),
+    };
   }
 
   @Delete('accounts/:id')
@@ -215,7 +244,7 @@ export class V1AccountsController {
   async getStories(
     @Req() req: RequestWithWorkspace,
     @Param('id') rawId: string,
-  ): Promise<{ platform: string; data: unknown[] }> {
+  ): Promise<{ platform: string } & Paginated<unknown>> {
     const { adapter, account, token, metadata } = await this.resolve(req, rawId);
     if (!adapter.fetchStories) {
       throw new BadRequestException(
@@ -223,7 +252,7 @@ export class V1AccountsController {
       );
     }
     const stories = await adapter.fetchStories(token, account.canonicalUserId, metadata);
-    return { platform: account.platform, data: stories };
+    return { platform: account.platform, ...envelopeStatic<unknown>(stories) };
   }
 
   @Get('accounts/:id/mentions')
@@ -231,21 +260,21 @@ export class V1AccountsController {
     @Req() req: RequestWithWorkspace,
     @Param('id') rawId: string,
     @Query('limit') limitRaw: string | undefined,
-  ): Promise<{ platform: string; data: unknown[] }> {
+  ): Promise<{ platform: string } & Paginated<unknown>> {
     const { adapter, account, token, metadata } = await this.resolve(req, rawId);
     if (!adapter.fetchMentions) {
       throw new BadRequestException(
         `mentions not supported for ${account.platform}`,
       );
     }
-    const limit = parseIntParam(limitRaw, 50, 1, 200);
+    const limit = parseLimit(limitRaw, 50, 1, 200);
     const items = await adapter.fetchMentions(
       token,
       account.canonicalUserId,
       { limit },
       metadata,
     );
-    return { platform: account.platform, data: items };
+    return { platform: account.platform, ...envelopeStatic<unknown>(items) };
   }
 
   @Get('accounts/:id/comments')
@@ -253,21 +282,21 @@ export class V1AccountsController {
     @Req() req: RequestWithWorkspace,
     @Param('id') rawId: string,
     @Query('limit') limitRaw: string | undefined,
-  ): Promise<{ platform: string; data: unknown[] }> {
+  ): Promise<{ platform: string } & Paginated<unknown>> {
     const { adapter, account, token, metadata } = await this.resolve(req, rawId);
     if (!adapter.fetchComments) {
       throw new BadRequestException(
         `comments not supported for ${account.platform}`,
       );
     }
-    const limit = parseIntParam(limitRaw, 50, 1, 200);
+    const limit = parseLimit(limitRaw, 50, 1, 200);
     const items = await adapter.fetchComments(
       token,
       account.canonicalUserId,
       { limit },
       metadata,
     );
-    return { platform: account.platform, data: items };
+    return { platform: account.platform, ...envelopeStatic<unknown>(items) };
   }
 
   @Get('accounts/:id/ads')
@@ -523,17 +552,7 @@ function parseBigInt(raw: string): bigint {
   }
 }
 
-function parseIntParam(
-  raw: string | undefined,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  if (raw === undefined || raw === null || raw === '') return fallback;
-  const n = Number(raw);
-  const parsed = z.number().int().min(min).max(max).safeParse(n);
-  if (!parsed.success) {
-    throw new BadRequestException(`Invalid integer (allowed ${min}-${max}): ${raw}`);
-  }
-  return parsed.data;
-}
+// parseIntParam (formerly defined here) is replaced by parseLimit imported
+// from @shared/pagination/cursor. The shared helper has the same clamp
+// behaviour but returns the fallback on invalid input instead of throwing
+// — better UX for clients passing exploratory cursors.

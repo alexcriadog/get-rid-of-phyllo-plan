@@ -1,6 +1,21 @@
 import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { PrismaService } from '@shared/database/prisma.service';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
+import {
+  decodeBigIntCursor,
+  encodeCursor,
+  paginate,
+  parseLimit,
+  type Paginated,
+} from '@shared/pagination/cursor';
+
+interface InternalAccountView {
+  id: string;
+  platform: string;
+  handle: string | null;
+  display_name: string | null;
+  status: string;
+}
 
 /**
  * Internal endpoint used by connect-ui's embedded "Connections" screen to
@@ -20,37 +35,37 @@ export class InternalAccountsController {
     @Query('ws_slug') wsSlug: string,
     @Query('end_user_id') endUserId: string,
     @Query('platform') platform: string | undefined,
-  ): Promise<{
-    data: Array<{
-      id: string;
-      platform: string;
-      handle: string | null;
-      display_name: string | null;
-      status: string;
-    }>;
-  }> {
+    @Query('limit') limitRaw: string | undefined,
+    @Query('cursor') cursorRaw: string | undefined,
+  ): Promise<Paginated<InternalAccountView>> {
     if (!wsSlug || !endUserId) {
       throw new BadRequestException('ws_slug and end_user_id are required');
     }
     const ws = await this.workspaces.findBySlug(wsSlug);
-    const rows = await this.prisma.account.findMany({
-      where: {
-        workspaceId: ws.id,
-        endUserId,
-        status: { not: 'disconnected' },
-        ...(platform ? { platform } : {}),
-      },
-      orderBy: { connectedAt: 'desc' },
-      take: 100,
-    });
-    return {
-      data: rows.map((r) => ({
+    const limit = parseLimit(limitRaw, 100, 1, 200);
+    const cursorId = decodeBigIntCursor(cursorRaw);
+    return paginate(
+      limit,
+      (take) =>
+        this.prisma.account.findMany({
+          where: {
+            workspaceId: ws.id,
+            endUserId,
+            status: { not: 'disconnected' },
+            ...(platform ? { platform } : {}),
+            ...(cursorId !== null ? { id: { lt: cursorId } } : {}),
+          },
+          orderBy: { id: 'desc' },
+          take,
+        }),
+      (r) => ({
         id: String(r.id),
         platform: r.platform,
         handle: r.handle ?? null,
         display_name: r.displayName ?? null,
         status: r.status,
-      })),
-    };
+      }),
+      (r) => encodeCursor(r.id),
+    );
   }
 }

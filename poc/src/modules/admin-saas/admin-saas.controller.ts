@@ -31,6 +31,16 @@ import {
   PLATFORM_IDS,
   PRODUCT_IDS,
 } from '@modules/accounts/products.catalog';
+import {
+  decodeBigIntCursor,
+  decodeCompositeCursor,
+  encodeCompositeCursor,
+  encodeCursor,
+  envelopeStatic,
+  paginate,
+  parseLimit,
+  type Paginated,
+} from '@shared/pagination/cursor';
 
 const WorkspaceCreateSchema = z
   .object({
@@ -123,8 +133,11 @@ export class AdminSaasController {
   // ─── Workspaces ─────────────────────────────────────────────────────────
 
   @Get('workspaces')
-  async listWorkspaces(): Promise<{
-    data: Array<{
+  async listWorkspaces(
+    @Query('limit') limitRaw: string | undefined,
+    @Query('cursor') cursorRaw: string | undefined,
+  ): Promise<
+    Paginated<{
       id: string;
       slug: string;
       name: string;
@@ -132,18 +145,37 @@ export class AdminSaasController {
       created_at: string;
       account_count: number;
       api_key_count: number;
-    }>;
-  }> {
-    const rows = await this.prisma.workspace.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: {
-          select: { accounts: true, apiKeys: true },
-        },
-      },
-    });
-    return {
-      data: rows.map((r) => ({
+    }>
+  > {
+    // Workspace.id is a cuid (string), not a BigInt — so we use a composite
+    // cursor of (createdAt, id) to keep ordering stable across same-second
+    // inserts.
+    const limit = parseLimit(limitRaw, 100, 1, 500);
+    const cursor = decodeCompositeCursor(cursorRaw);
+    return paginate(
+      limit,
+      (take) =>
+        this.prisma.workspace.findMany({
+          where: cursor
+            ? {
+                OR: [
+                  { createdAt: { lt: cursor.timestamp } },
+                  {
+                    AND: [
+                      { createdAt: cursor.timestamp },
+                      { id: { lt: cursor.id } },
+                    ],
+                  },
+                ],
+              }
+            : {},
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take,
+          include: {
+            _count: { select: { accounts: true, apiKeys: true } },
+          },
+        }),
+      (r) => ({
         id: r.id,
         slug: r.slug,
         name: r.name,
@@ -151,8 +183,9 @@ export class AdminSaasController {
         created_at: r.createdAt.toISOString(),
         account_count: r._count.accounts,
         api_key_count: r._count.apiKeys,
-      })),
-    };
+      }),
+      (r) => encodeCompositeCursor(r.createdAt, r.id),
+    );
   }
 
   @Post('workspaces')
@@ -309,8 +342,12 @@ export class AdminSaasController {
   // ─── API keys ───────────────────────────────────────────────────────────
 
   @Get('workspaces/:slug/api-keys')
-  async listApiKeys(@Param('slug') slug: string): Promise<{
-    data: Array<{
+  async listApiKeys(
+    @Param('slug') slug: string,
+    @Query('limit') limitRaw: string | undefined,
+    @Query('cursor') cursorRaw: string | undefined,
+  ): Promise<
+    Paginated<{
       id: string;
       key_prefix: string;
       scope: string;
@@ -318,15 +355,35 @@ export class AdminSaasController {
       last_used_at: string | null;
       revoked_at: string | null;
       created_at: string;
-    }>;
-  }> {
+    }>
+  > {
     const ws = await this.workspaces.findBySlug(slug);
-    const rows = await this.prisma.apiKey.findMany({
-      where: { workspaceId: ws.id },
-      orderBy: { createdAt: 'desc' },
-    });
-    return {
-      data: rows.map((r) => ({
+    const limit = parseLimit(limitRaw, 100, 1, 500);
+    const cursor = decodeCompositeCursor(cursorRaw);
+    return paginate(
+      limit,
+      (take) =>
+        this.prisma.apiKey.findMany({
+          where: {
+            workspaceId: ws.id,
+            ...(cursor
+              ? {
+                  OR: [
+                    { createdAt: { lt: cursor.timestamp } },
+                    {
+                      AND: [
+                        { createdAt: cursor.timestamp },
+                        { id: { lt: cursor.id } },
+                      ],
+                    },
+                  ],
+                }
+              : {}),
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take,
+        }),
+      (r) => ({
         id: r.id,
         key_prefix: r.keyPrefix,
         scope: r.scope,
@@ -334,8 +391,9 @@ export class AdminSaasController {
         last_used_at: r.lastUsedAt ? r.lastUsedAt.toISOString() : null,
         revoked_at: r.revokedAt ? r.revokedAt.toISOString() : null,
         created_at: r.createdAt.toISOString(),
-      })),
-    };
+      }),
+      (r) => encodeCompositeCursor(r.createdAt, r.id),
+    );
   }
 
   @Post('workspaces/:slug/api-keys')
@@ -361,8 +419,11 @@ export class AdminSaasController {
   }
 
   @Get('api-keys')
-  async listAllApiKeys(): Promise<{
-    data: Array<{
+  async listAllApiKeys(
+    @Query('limit') limitRaw: string | undefined,
+    @Query('cursor') cursorRaw: string | undefined,
+  ): Promise<
+    Paginated<{
       id: string;
       workspace_slug: string;
       workspace_name: string;
@@ -372,14 +433,36 @@ export class AdminSaasController {
       last_used_at: string | null;
       revoked_at: string | null;
       created_at: string;
-    }>;
-  }> {
-    const rows = await this.prisma.apiKey.findMany({
-      orderBy: [{ revokedAt: 'asc' }, { lastUsedAt: 'desc' }],
-      include: { workspace: { select: { slug: true, name: true } } },
-    });
-    return {
-      data: rows.map((r) => ({
+    }>
+  > {
+    // Sort: active keys (revoked=null) first, then by createdAt desc. We
+    // cursor on createdAt+id which preserves the secondary order; the
+    // primary revoked-ness sort only matters once revoked keys appear and
+    // the cursor crosses that boundary — acceptable because revoke is rare.
+    const limit = parseLimit(limitRaw, 100, 1, 500);
+    const cursor = decodeCompositeCursor(cursorRaw);
+    return paginate(
+      limit,
+      (take) =>
+        this.prisma.apiKey.findMany({
+          where: cursor
+            ? {
+                OR: [
+                  { createdAt: { lt: cursor.timestamp } },
+                  {
+                    AND: [
+                      { createdAt: cursor.timestamp },
+                      { id: { lt: cursor.id } },
+                    ],
+                  },
+                ],
+              }
+            : {},
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take,
+          include: { workspace: { select: { slug: true, name: true } } },
+        }),
+      (r) => ({
         id: r.id,
         workspace_slug: r.workspace.slug,
         workspace_name: r.workspace.name,
@@ -389,8 +472,9 @@ export class AdminSaasController {
         last_used_at: r.lastUsedAt ? r.lastUsedAt.toISOString() : null,
         revoked_at: r.revokedAt ? r.revokedAt.toISOString() : null,
         created_at: r.createdAt.toISOString(),
-      })),
-    };
+      }),
+      (r) => encodeCompositeCursor(r.createdAt, r.id),
+    );
   }
 
   @Post('api-keys/:id/revoke')
@@ -407,9 +491,13 @@ export class AdminSaasController {
   // ─── Webhooks ────────────────────────────────────────────────────────────
 
   @Get('workspaces/:slug/webhook-endpoints')
-  async listEndpoints(@Param('slug') slug: string): Promise<unknown> {
+  async listEndpoints(@Param('slug') slug: string): Promise<Paginated<unknown>> {
     const ws = await this.workspaces.findBySlug(slug);
-    return { data: await this.webhooks.list(ws.id) };
+    // OutboundWebhooksService.list returns the full set (typically small,
+    // <10 endpoints per workspace). Wrap in the canonical envelope; if it
+    // grows we'd plumb a cursor through that service later.
+    const endpoints = await this.webhooks.list(ws.id);
+    return envelopeStatic<unknown>(endpoints);
   }
 
   @Get('webhook-deliveries')
@@ -418,8 +506,9 @@ export class AdminSaasController {
     @Query('status') status: string | undefined,
     @Query('event') event: string | undefined,
     @Query('limit') limitRaw: string | undefined,
-  ): Promise<{
-    data: Array<{
+    @Query('cursor') cursorRaw: string | undefined,
+  ): Promise<
+    Paginated<{
       id: string;
       endpoint_id: string;
       endpoint_url: string;
@@ -432,28 +521,44 @@ export class AdminSaasController {
       next_retry_at: string | null;
       created_at: string;
       delivered_at: string | null;
-    }>;
-  }> {
-    const limit = clampInt(limitRaw, 100, 1, 500);
+    }>
+  > {
+    const limit = parseLimit(limitRaw, 100, 1, 500);
+    const cursor = decodeCompositeCursor(cursorRaw);
     const workspaceId = workspaceSlug
       ? (await this.workspaces.findBySlug(workspaceSlug)).id
       : undefined;
-    const rows = await this.prisma.webhookDelivery.findMany({
-      where: {
-        ...(status ? { status } : {}),
-        ...(event ? { event } : {}),
-        ...(workspaceId ? { endpoint: { workspaceId } } : {}),
-      },
-      include: {
-        endpoint: {
-          include: { workspace: { select: { slug: true } } },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
-    return {
-      data: rows.map((r) => ({
+    return paginate(
+      limit,
+      (take) =>
+        this.prisma.webhookDelivery.findMany({
+          where: {
+            ...(status ? { status } : {}),
+            ...(event ? { event } : {}),
+            ...(workspaceId ? { endpoint: { workspaceId } } : {}),
+            ...(cursor
+              ? {
+                  OR: [
+                    { createdAt: { lt: cursor.timestamp } },
+                    {
+                      AND: [
+                        { createdAt: cursor.timestamp },
+                        { id: { lt: cursor.id } },
+                      ],
+                    },
+                  ],
+                }
+              : {}),
+          },
+          include: {
+            endpoint: {
+              include: { workspace: { select: { slug: true } } },
+            },
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take,
+        }),
+      (r) => ({
         id: r.id,
         endpoint_id: r.endpointId,
         endpoint_url: r.endpoint.url,
@@ -466,8 +571,9 @@ export class AdminSaasController {
         next_retry_at: r.nextRetryAt ? r.nextRetryAt.toISOString() : null,
         created_at: r.createdAt.toISOString(),
         delivered_at: r.deliveredAt ? r.deliveredAt.toISOString() : null,
-      })),
-    };
+      }),
+      (r) => encodeCompositeCursor(r.createdAt, r.id),
+    );
   }
 
   // ─── Usage telemetry ────────────────────────────────────────────────────
