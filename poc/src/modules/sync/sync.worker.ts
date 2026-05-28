@@ -33,6 +33,7 @@ import {
   TokenRevokedError,
 } from '@modules/platforms/shared/platform-errors';
 import { FacebookExtrasService } from '@modules/platforms/facebook/fetcher/facebook-extras.service';
+import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 
 const SYNC_QUEUE_NAME = 'sync';
 const DEFAULT_CONCURRENCY = 4;
@@ -151,6 +152,7 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
     private readonly cadence: CadenceService,
     private readonly throttle: ThrottleLockService,
     private readonly facebookExtras: FacebookExtrasService,
+    private readonly lifecycle: TokenLifecycleEmitter,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
 
@@ -391,6 +393,11 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         await this.emitRawEvent(accountIdBig, product, 'account.needs_reauth', {
           reason: err.message,
         });
+        // Public-facing webhook: client gets `token.expired` so they can
+        // route the end-user back through OAuth. Distinct from the
+        // internal Mongo `account.needs_reauth` event above (which carries
+        // worker stack details).
+        await this.lifecycle.tokenExpired(accountIdBig, { reason: err.message });
         await this.updateJobStatusIdle(syncJobId);
         return;
       }

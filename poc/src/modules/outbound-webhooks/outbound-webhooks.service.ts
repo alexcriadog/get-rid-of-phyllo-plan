@@ -21,12 +21,18 @@ import {
 const PAYLOAD_MAX_BYTES = 256_000;
 
 const QUEUE: QueueName = 'delivery';
-const ALLOWED_EVENTS: ReadonlyArray<string> = [
+export const ALLOWED_EVENTS: ReadonlyArray<string> = [
   'account.connected',
   'account.disconnected',
   'account.refreshed',
   'token.refresh_failed',
   'token.expired',
+  // Test ping: never emitted by an automated flow; only by the explicit
+  // POST /v1/webhook-endpoints/:id/test (Phase C) and the admin "send
+  // test webhook" button (Phase D). Clients don't need to subscribe to
+  // this event in their `events` array — sendTest() bypasses the
+  // subscription filter so they always receive it.
+  'webhook.test',
 ];
 
 // Retry schedule (1m, 5m, 30m, 2h, 12h, 24h). Indexed by attempt count

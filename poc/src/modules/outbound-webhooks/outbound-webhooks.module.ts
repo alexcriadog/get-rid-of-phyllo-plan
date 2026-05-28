@@ -6,11 +6,12 @@ import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.intercept
 import { OutboundWebhooksService } from './outbound-webhooks.service';
 import { OutboundWebhooksController } from './outbound-webhooks.controller';
 import { WebhookDeliveriesController } from './webhook-deliveries.controller';
+import { TokenLifecycleEmitter } from './token-lifecycle-emitter.service';
 
 @Module({
   imports: [SharedDatabaseModule, SharedRedisModule, ApiKeysModule],
   controllers: [OutboundWebhooksController, WebhookDeliveriesController],
-  providers: [OutboundWebhooksService, RateLimitInterceptor],
-  exports: [OutboundWebhooksService],
+  providers: [OutboundWebhooksService, TokenLifecycleEmitter, RateLimitInterceptor],
+  exports: [OutboundWebhooksService, TokenLifecycleEmitter],
 })
 export class OutboundWebhooksModule {}

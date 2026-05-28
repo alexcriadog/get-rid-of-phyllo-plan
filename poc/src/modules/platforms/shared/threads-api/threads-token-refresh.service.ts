@@ -20,6 +20,7 @@ import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
+import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 
 const THREADS_REFRESH_URL = 'https://graph.threads.net/refresh_access_token';
 const THREADS_EXCHANGE_URL = 'https://graph.threads.net/access_token';
@@ -43,6 +44,7 @@ export class ThreadsTokenRefreshService {
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
     private readonly config: ConfigService,
+    private readonly lifecycle: TokenLifecycleEmitter,
   ) {}
 
   /**
@@ -101,6 +103,11 @@ export class ThreadsTokenRefreshService {
       this.logger.error(
         `Threads refresh failed for account ${accountId.toString()}: ${errMsg}`,
       );
+      // Emit webhook for the transient failure (ensureFresh will fall back
+      // to the current token and the next sync tick will retry). If the
+      // failure turns out to be terminal the sync.worker emits
+      // token.expired separately when it marks the account needs_reauth.
+      await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
       throw new Error(`Threads token refresh failed: ${errMsg}`);
     }
     const expiresInS = typeof body.expires_in === 'number' ? body.expires_in : 0;
@@ -118,6 +125,7 @@ export class ThreadsTokenRefreshService {
     this.logger.log(
       `Threads token refreshed for account ${accountId.toString()}; expires_in=${expiresInS}s`,
     );
+    await this.lifecycle.tokenRefreshed(accountId, { expiresAt });
     return body.access_token;
   }
 

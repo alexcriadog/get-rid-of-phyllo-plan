@@ -6,8 +6,10 @@
 import { Module } from '@nestjs/common';
 import { YoutubeClient } from './youtube-client';
 import { YoutubeTokenRefreshService } from './youtube-token-refresh.service';
+import { OutboundWebhooksModule } from '@modules/outbound-webhooks/outbound-webhooks.module';
 
 @Module({
+  imports: [OutboundWebhooksModule],
   providers: [YoutubeClient, YoutubeTokenRefreshService],
   exports: [YoutubeClient, YoutubeTokenRefreshService],
 })

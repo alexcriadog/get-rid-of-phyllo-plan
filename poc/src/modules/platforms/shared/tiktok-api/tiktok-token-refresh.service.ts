@@ -14,6 +14,7 @@ import axios from 'axios';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { ConfigService } from '@nestjs/config';
+import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 
 const TIKTOK_TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
 const REFRESH_LEAD_TIME_MS = 5 * 60_000;     // refresh if expires within 5 min
@@ -40,6 +41,7 @@ export class TikTokTokenRefreshService {
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
     private readonly config: ConfigService,
+    private readonly lifecycle: TokenLifecycleEmitter,
   ) {}
 
   /**
@@ -133,9 +135,12 @@ export class TikTokTokenRefreshService {
       this.logger.error(
         `TikTok refresh failed for account ${accountId.toString()}: ${errMsg}`,
       );
+      await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
       throw new Error(`TikTok token refresh failed: ${errMsg}`);
     }
     if (!body.access_token || !body.refresh_token) {
+      const detail = 'response missing access_token/refresh_token';
+      await this.lifecycle.tokenRefreshFailed(accountId, { reason: detail });
       throw new Error(
         `TikTok refresh response missing tokens: ${JSON.stringify(body).slice(0, 200)}`,
       );
@@ -157,6 +162,7 @@ export class TikTokTokenRefreshService {
     this.logger.log(
       `TikTok token refreshed for account ${accountId.toString()}; expires_in=${expiresInS}s`,
     );
+    await this.lifecycle.tokenRefreshed(accountId, { expiresAt });
     return body.access_token;
   }
 

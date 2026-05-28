@@ -17,6 +17,7 @@ import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
+import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const REFRESH_LEAD_TIME_MS = 5 * 60_000;
@@ -41,6 +42,7 @@ export class YoutubeTokenRefreshService {
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
     private readonly config: ConfigService,
+    private readonly lifecycle: TokenLifecycleEmitter,
   ) {}
 
   async ensureFresh(
@@ -97,6 +99,7 @@ export class YoutubeTokenRefreshService {
       this.logger.error(
         `YouTube refresh failed for account ${accountId.toString()}: ${errMsg}`,
       );
+      await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
       throw new Error(`YouTube token refresh failed: ${errMsg}`);
     }
     const expiresInS = typeof body.expires_in === 'number' ? body.expires_in : 0;
@@ -118,6 +121,7 @@ export class YoutubeTokenRefreshService {
     this.logger.log(
       `YouTube token refreshed for account ${accountId.toString()}; expires_in=${expiresInS}s`,
     );
+    await this.lifecycle.tokenRefreshed(accountId, { expiresAt });
     return body.access_token;
   }
 }

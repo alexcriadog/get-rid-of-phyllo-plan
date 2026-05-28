@@ -3,6 +3,7 @@ import { SharedDatabaseModule } from '@shared/database/database.module';
 import { SharedCryptoModule } from '@shared/crypto/crypto.module';
 import { PlatformsModule } from '@modules/platforms/platforms.module';
 import { MetaGraphModule } from '@modules/platforms/shared/meta-graph/meta-graph.module';
+import { OutboundWebhooksModule } from '@modules/outbound-webhooks/outbound-webhooks.module';
 import { CadenceService } from './cadence.service';
 import { ThrottleLockService } from './throttle-lock.service';
 import { SchedulerService } from './scheduler.service';
@@ -19,7 +20,13 @@ import { SyncWorker } from './sync.worker';
  * preflight (see scheduler.service.ts:preflightCheck).
  */
 @Module({
-  imports: [SharedDatabaseModule, SharedCryptoModule, PlatformsModule, MetaGraphModule],
+  imports: [
+    SharedDatabaseModule,
+    SharedCryptoModule,
+    PlatformsModule,
+    MetaGraphModule,
+    OutboundWebhooksModule,
+  ],
   providers: [CadenceService, ThrottleLockService, SchedulerService, SyncWorker],
   exports: [CadenceService, ThrottleLockService],
 })

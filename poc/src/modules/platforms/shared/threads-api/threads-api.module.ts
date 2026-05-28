@@ -6,9 +6,10 @@ import { Module } from '@nestjs/common';
 import { ThreadsClient } from './threads-client';
 import { ThreadsTokenRefreshService } from './threads-token-refresh.service';
 import { MetaGraphModule } from '../meta-graph/meta-graph.module';
+import { OutboundWebhooksModule } from '@modules/outbound-webhooks/outbound-webhooks.module';
 
 @Module({
-  imports: [MetaGraphModule],
+  imports: [MetaGraphModule, OutboundWebhooksModule],
   providers: [ThreadsClient, ThreadsTokenRefreshService],
   exports: [ThreadsClient, ThreadsTokenRefreshService],
 })

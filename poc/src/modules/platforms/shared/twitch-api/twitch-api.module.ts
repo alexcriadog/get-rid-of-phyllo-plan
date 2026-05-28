@@ -6,8 +6,10 @@
 import { Module } from '@nestjs/common';
 import { TwitchClient } from './twitch-client';
 import { TwitchTokenRefreshService } from './twitch-token-refresh.service';
+import { OutboundWebhooksModule } from '@modules/outbound-webhooks/outbound-webhooks.module';
 
 @Module({
+  imports: [OutboundWebhooksModule],
   providers: [TwitchClient, TwitchTokenRefreshService],
   exports: [TwitchClient, TwitchTokenRefreshService],
 })

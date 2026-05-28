@@ -16,6 +16,7 @@ import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
+import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 
 const TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
 const REFRESH_LEAD_TIME_MS = 5 * 60_000;
@@ -39,6 +40,7 @@ export class TwitchTokenRefreshService {
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
     private readonly config: ConfigService,
+    private readonly lifecycle: TokenLifecycleEmitter,
   ) {}
 
   async ensureFresh(
@@ -102,6 +104,7 @@ export class TwitchTokenRefreshService {
       this.logger.error(
         `Twitch refresh failed for account ${accountId.toString()}: ${errMsg}`,
       );
+      await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
       throw new Error(`Twitch token refresh failed: ${errMsg}`);
     }
 
@@ -133,6 +136,7 @@ export class TwitchTokenRefreshService {
     this.logger.log(
       `Twitch token refreshed for account ${accountId.toString()}; expires_in=${expiresInS}s`,
     );
+    await this.lifecycle.tokenRefreshed(accountId, { expiresAt });
     return body.access_token;
   }
 }
