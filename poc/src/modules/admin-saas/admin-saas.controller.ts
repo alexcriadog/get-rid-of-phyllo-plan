@@ -86,18 +86,25 @@ type TokenProduct = (typeof ALLOWED_TOKEN_PRODUCTS)[number];
 /**
  * Operator-facing admin surface for the Camaleonic Connect SaaS.
  *
- * Lives under /admin/* alongside the existing connector admin. Read
- * endpoints (list workspaces, get workspace, usage, webhook deliveries,
- * list per-workspace API keys) follow the legacy operator-trust model
- * — they're reachable from inside the cluster without auth, with
- * Caddy Basic Auth at the ingress for external access. Sensitive
- * mutations (workspace create, branding/products patch, key issue +
- * revoke), the cross-workspace listAllApiKeys read, and the
- * token-decrypt route carry @UseGuards(ConnectToolGuard) which
- * requires the shared CONNECT_TOOL_SECRET bearer (with a loopback
- * bypass for operator curl on the host). Workspace creation + key
- * issuance additionally carry @UseInterceptors(RateLimitInterceptor)
- * to limit abuse if the bearer is exposed.
+ * Lives under /admin/* alongside the existing connector admin. The
+ * operational model is "the /admin/* URL space is operator-trust" —
+ * the existing /admin dashboard at poc/web is a browser-side Next.js
+ * app that calls these endpoints directly from the user's browser, so
+ * shared-bearer guards aren't viable here (the secret would leak to
+ * the client). Network-layer auth is the boundary: in prod the Caddy
+ * config in tools/Caddyfile has a commented-out `basic_auth` directive
+ * for /admin/* that should be enabled before real customers ship.
+ *
+ * What this controller does enforce in-app:
+ *   - Strict Zod schemas with enum allowlists for platform/product IDs
+ *     (ProductsSchema requires identity per enabled platform; rejects
+ *     unknown keys/values).
+ *   - @UseInterceptors(RateLimitInterceptor) on workspace creation +
+ *     key issuance — limits abuse damage even without auth.
+ *   - The token-decrypt endpoint (showAccessToken) still carries
+ *     @UseGuards(ConnectToolGuard); it's curl-only, never invoked from
+ *     the admin UI, and returns plaintext OAuth tokens, so the bearer
+ *     requirement + loopback bypass is appropriate there.
  */
 @Controller('admin')
 export class AdminSaasController {
@@ -147,7 +154,6 @@ export class AdminSaasController {
 
   @Post('workspaces')
   @HttpCode(201)
-  @UseGuards(ConnectToolGuard)
   @UseInterceptors(RateLimitInterceptor)
   async createWorkspace(@Body() body: unknown): Promise<unknown> {
     const parsed = WorkspaceCreateSchema.safeParse(body);
@@ -213,7 +219,6 @@ export class AdminSaasController {
   }
 
   @Patch('workspaces/:slug/branding')
-  @UseGuards(ConnectToolGuard)
   async updateBranding(
     @Param('slug') slug: string,
     @Body() body: unknown,
@@ -241,7 +246,6 @@ export class AdminSaasController {
   }
 
   @Patch('workspaces/:slug/products')
-  @UseGuards(ConnectToolGuard)
   async updateProducts(
     @Param('slug') slug: string,
     @Body() body: unknown,
@@ -298,7 +302,6 @@ export class AdminSaasController {
 
   @Post('workspaces/:slug/api-keys')
   @HttpCode(201)
-  @UseGuards(ConnectToolGuard)
   @UseInterceptors(RateLimitInterceptor)
   async issueApiKey(
     @Param('slug') slug: string,
@@ -320,7 +323,6 @@ export class AdminSaasController {
   }
 
   @Get('api-keys')
-  @UseGuards(ConnectToolGuard)
   async listAllApiKeys(): Promise<{
     data: Array<{
       id: string;
@@ -355,7 +357,6 @@ export class AdminSaasController {
 
   @Post('api-keys/:id/revoke')
   @HttpCode(200)
-  @UseGuards(ConnectToolGuard)
   async revokeApiKey(@Param('id') id: string): Promise<{ revoked: boolean }> {
     const row = await this.prisma.apiKey.findUnique({ where: { id } });
     if (!row) {
