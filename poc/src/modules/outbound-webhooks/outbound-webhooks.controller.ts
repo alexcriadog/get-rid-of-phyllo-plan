@@ -21,6 +21,10 @@ import {
   OutboundWebhooksService,
   RegisteredEndpoint,
 } from './outbound-webhooks.service';
+import {
+  shouldRequireHttps,
+  validateWebhookTarget,
+} from './webhook-target-validator';
 
 const CreateBodySchema = z
   .object({
@@ -29,6 +33,24 @@ const CreateBodySchema = z
     description: z.string().max(256).optional(),
   })
   .strict();
+
+/**
+ * Run the SSRF/scheme/length validator and throw a clean 400 if the URL
+ * is rejected. Reason codes are stable so the client can pattern-match
+ * (e.g. show a different UX for `https_required` vs `ssrf_blocked_*`).
+ */
+async function assertWebhookTarget(url: string): Promise<void> {
+  const check = await validateWebhookTarget(url, {
+    requireHttps: shouldRequireHttps(process.env),
+  });
+  if (!check.ok) {
+    throw new BadRequestException({
+      message: 'Webhook target URL rejected',
+      reason: check.reason,
+      detail: check.detail,
+    });
+  }
+}
 
 @Controller('v1/webhook-endpoints')
 @UseGuards(BearerApiKeyGuard)
@@ -50,6 +72,7 @@ export class OutboundWebhooksController {
         issues: parsed.error.issues,
       });
     }
+    await assertWebhookTarget(parsed.data.url);
     return this.webhooks.register({
       workspaceId: ws,
       url: parsed.data.url,

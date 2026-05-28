@@ -10,6 +10,15 @@ import axios from 'axios';
 import { Worker, Job } from 'bullmq';
 import { PrismaService } from '@shared/database/prisma.service';
 import { BullmqService, QueueName } from '@shared/redis/bullmq.service';
+import {
+  shouldRequireHttps,
+  validateWebhookTarget,
+} from './webhook-target-validator';
+
+/** Maximum serialised payload size, bytes. Larger emits are rejected at
+ *  the caller to prevent webhook channels from being used as exfil paths
+ *  or from generating very large DB rows. */
+const PAYLOAD_MAX_BYTES = 256_000;
 
 const QUEUE: QueueName = 'delivery';
 const ALLOWED_EVENTS: ReadonlyArray<string> = [
@@ -86,6 +95,9 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
   // ─── CRUD ───────────────────────────────────────────────────────────────
 
   async register(input: RegisterEndpointInput): Promise<RegisteredEndpoint> {
+    // URL is already validated by the controller via validateWebhookTarget
+    // (scheme + length + SSRF). This service-level guard remains as a
+    // defence-in-depth tripwire if a future caller forgets the validator.
     if (!/^https?:\/\//.test(input.url)) {
       throw new BadRequestException('url must start with http:// or https://');
     }
@@ -143,6 +155,19 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`Refusing to emit unknown event: ${event}`);
       return;
     }
+    // Reject oversized payloads before persisting. 256 KB is well above any
+    // sensible business event but well below the DB row limit; emits that
+    // overshoot are programmer errors (e.g. accidentally serialising an
+    // adapter response) and should fail loudly, not silently truncate.
+    const payloadBytes = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+    if (payloadBytes > PAYLOAD_MAX_BYTES) {
+      this.logger.error(
+        `emit('${event}') rejected: payload ${payloadBytes}B exceeds ${PAYLOAD_MAX_BYTES}B cap`,
+      );
+      throw new BadRequestException(
+        `webhook payload too large (${payloadBytes} bytes, max ${PAYLOAD_MAX_BYTES})`,
+      );
+    }
     try {
       const endpoints = await this.prisma.webhookEndpoint.findMany({
         where: { workspaceId, active: true },
@@ -164,6 +189,7 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
           .add('webhook', { deliveryId: delivery.id }, { jobId: delivery.id });
       }
     } catch (err: unknown) {
+      if (err instanceof BadRequestException) throw err;
       this.logger.error(
         `emit('${event}', workspace=${workspaceId}) failed: ${describe(err)}`,
       );
@@ -182,6 +208,30 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     if (delivery.status === 'delivered' || delivery.status === 'abandoned') {
+      return;
+    }
+
+    // Anti DNS-rebinding: re-validate the target URL immediately before
+    // sending. If a malicious workspace has flipped its DNS to point at a
+    // private IP since registration, this catches it and marks the
+    // delivery as a terminal failure (no retry) so we don't keep probing.
+    const targetCheck = await validateWebhookTarget(delivery.endpoint.url, {
+      requireHttps: shouldRequireHttps(process.env),
+    });
+    if (!targetCheck.ok) {
+      this.logger.warn(
+        `Delivery ${delivery.id} aborted by SSRF re-check: ${targetCheck.reason} (${targetCheck.detail ?? ''})`,
+      );
+      await this.prisma.webhookDelivery.update({
+        where: { id: delivery.id },
+        data: {
+          attempts: delivery.attempts + 1,
+          status: 'abandoned',
+          lastResponseCode: null,
+          lastError: `ssrf_rejected:${targetCheck.reason}`,
+          nextRetryAt: null,
+        },
+      });
       return;
     }
 
