@@ -64,6 +64,12 @@ export default async function ConnectPage({
   const branding = await fetchBranding(ws);
   const productsConfig = await fetchWorkspaceProducts(ws);
   const offered = offeredPlatforms(productsConfig); // string[] | null
+  // Gate #2 (UX): an iframe arrived with ?platform=X but the workspace's
+  // configured platform set doesn't include X. Render an "unavailable" state
+  // instead of consent → connections so the user never even sees a button
+  // that would lead to provider OAuth.
+  const platformUnavailable =
+    !!platform && offered !== null && !offered.includes(platform);
   const connections = !error ? await fetchConnections(ws, endUserId) : [];
 
   const brandLogo =
@@ -88,6 +94,7 @@ export default async function ConnectPage({
       initialConnections={connections}
       tokenError={error}
       offeredPlatforms={offered}
+      platformUnavailable={platformUnavailable}
     />
   );
 }

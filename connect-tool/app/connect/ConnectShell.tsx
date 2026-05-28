@@ -40,6 +40,9 @@ interface Props {
   initialConnections: Connection[];
   tokenError: string | null;
   offeredPlatforms: string[] | null;
+  /** Gate #2: true if `fixedPlatform` was passed but the workspace doesn't
+   *  offer it. Render an "unavailable" state instead of consent → connect. */
+  platformUnavailable: boolean;
 }
 
 export function ConnectShell(props: Props) {
@@ -139,6 +142,16 @@ export function ConnectShell(props: Props) {
             <div className="cml-link-row" style={{ marginTop: 16 }}>
               <button className="cml-ghost" onClick={exit}>Close</button>
             </div>
+          </div>
+        ) : props.platformUnavailable && props.fixedPlatform ? (
+          <div className="cml-step cml-center">
+            <div className="cml-hero"><PlatformIcon platform={props.fixedPlatform} large /></div>
+            <h2 className="cml-title">{BRAND[props.fixedPlatform].label} isn’t available here</h2>
+            <p className="cml-sub">
+              This workspace hasn’t enabled {BRAND[props.fixedPlatform].label}.
+              Contact your administrator if you need it turned on.
+            </p>
+            <button className="cml-btn cml-btn--accent" onClick={exit}>Close</button>
           </div>
         ) : step === 'consent' ? (
           <div className="cml-step cml-center">
