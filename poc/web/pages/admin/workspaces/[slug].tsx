@@ -324,13 +324,19 @@ function ProductsSection({
   onSaved: () => void;
 }) {
   const [state, setState] = useState<Record<string, PlatformState>>({});
+  const [activeTab, setActiveTab] = useState<string>(catalog.platforms[0] ?? '');
   const [hydrated, setHydrated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Hydrate once when ws loads, mirror BrandingSection's guard pattern
+  // Hydrate once when ws loads, mirror BrandingSection's guard pattern.
+  // Default active tab to the first enabled platform so the operator lands
+  // on a meaningful panel; fall back to the first catalog platform.
   if (!busy && ws && !hydrated) {
-    setState(buildInitialState(ws, catalog));
+    const initial = buildInitialState(ws, catalog);
+    setState(initial);
+    const firstEnabled = catalog.platforms.find((p) => initial[p]?.enabled);
+    setActiveTab(firstEnabled ?? catalog.platforms[0] ?? '');
     setHydrated(true);
   }
 
@@ -406,63 +412,123 @@ function ProductsSection({
     }
   };
 
+  const activePs = activeTab ? state[activeTab] : undefined;
+  const activeDefs = activeTab ? (catalog.catalog[activeTab] ?? []) : [];
+  const activeSelected = activePs
+    ? activeDefs.filter((p) => p.required || activePs.products[p.id]).length
+    : 0;
+
   return (
     <Card>
-      <CardContent className="space-y-2 p-4">
+      <CardContent className="space-y-3 p-4">
         <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Platforms &amp; Products
         </div>
-        {catalog.platforms.map((platform) => {
-          const ps = state[platform];
-          if (!ps) return null;
-          const defs = catalog.catalog[platform];
-          const selectedCount = defs.filter(
-            (p) => p.required || ps.products[p.id],
-          ).length;
-          return (
-            <div
-              key={platform}
-              className="rounded-md border border-border/40 bg-secondary/20 px-3 py-2"
-            >
-              <label className="flex cursor-pointer items-center justify-between gap-2">
-                <span className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={ps.enabled}
-                    onChange={(e) => togglePlatform(platform, e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-border accent-primary"
-                  />
-                  <span className="text-sm font-medium capitalize">{platform}</span>
-                </span>
+
+        {/* Tab strip: one pill per platform. Enabled platforms get a filled
+            dot + count; the active tab is highlighted. */}
+        <div className="-mb-px flex flex-wrap gap-1 border-b border-border/40">
+          {catalog.platforms.map((platform) => {
+            const ps = state[platform];
+            if (!ps) return null;
+            const defs = catalog.catalog[platform] ?? [];
+            const count = defs.filter(
+              (p) => p.required || ps.products[p.id],
+            ).length;
+            const isActive = platform === activeTab;
+            return (
+              <button
+                type="button"
+                key={platform}
+                onClick={() => setActiveTab(platform)}
+                className={
+                  'flex items-center gap-1.5 rounded-t-md border px-2.5 py-1 text-xs transition-colors ' +
+                  (isActive
+                    ? 'border-border/60 border-b-card bg-card text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground')
+                }
+              >
+                <span
+                  className={
+                    'inline-block h-1.5 w-1.5 rounded-full ' +
+                    (ps.enabled ? 'bg-primary' : 'bg-border')
+                  }
+                  aria-hidden
+                />
+                <span className="capitalize">{platform}</span>
                 {ps.enabled && (
-                  <span className="text-[10px] font-mono text-muted-foreground">
-                    {selectedCount}/{defs.length}
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {count}/{defs.length}
                   </span>
                 )}
-              </label>
-              {ps.enabled && (
-                <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 pl-5 md:grid-cols-3">
-                  {defs.map((product) => (
-                    <label
-                      key={product.id}
-                      className={`flex items-center gap-1.5 text-xs ${product.required ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-                      title={product.hint}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={product.required ? true : (ps.products[product.id] ?? false)}
-                        disabled={product.required}
-                        onChange={(e) => toggleProduct(platform, product.id, e.target.checked)}
-                        className="h-3 w-3 rounded border-border accent-primary"
-                      />
-                      <span className="truncate">{product.label}</span>
-                    </label>
-                  ))}
-                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active panel */}
+        {activePs ? (
+          <div className="min-h-[112px] space-y-2">
+            <label className="flex cursor-pointer items-center justify-between gap-3 rounded-md bg-secondary/20 px-2.5 py-1.5">
+              <span className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={activePs.enabled}
+                  onChange={(e) => togglePlatform(activeTab, e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary"
+                />
+                <span className="text-sm font-medium">
+                  Offer{' '}
+                  <span className="capitalize">{activeTab}</span>
+                </span>
+              </span>
+              {activePs.enabled && (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {activeSelected}/{activeDefs.length} selected
+                </span>
               )}
-            </div>
-          );
-        })}
+            </label>
+
+            {activePs.enabled ? (
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 md:grid-cols-3">
+                {activeDefs.map((product) => (
+                  <label
+                    key={product.id}
+                    className={`flex items-center gap-1.5 text-xs ${product.required ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                    title={product.hint}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        product.required
+                          ? true
+                          : (activePs.products[product.id] ?? false)
+                      }
+                      disabled={product.required}
+                      onChange={(e) =>
+                        toggleProduct(activeTab, product.id, e.target.checked)
+                      }
+                      className="h-3 w-3 rounded border-border accent-primary"
+                    />
+                    <span className="truncate">{product.label}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+                <span className="capitalize">{activeTab}</span> isn't offered
+                to this workspace. Toggle &ldquo;Offer{' '}
+                <span className="capitalize">{activeTab}</span>&rdquo; above
+                to configure its products.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+            Loading…
+          </div>
+        )}
+
         {err && <div className="text-sm text-danger">↯ {err}</div>}
         <div className="flex gap-2 pt-1">
           <Button size="sm" disabled={busy} onClick={onSave}>
