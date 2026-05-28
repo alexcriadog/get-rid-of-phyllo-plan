@@ -1,0 +1,199 @@
+// Digest cron — flushes pending_webhook_events buckets into webhook
+// deliveries on the configured cadence.
+//
+// Buckets are written by DataEventDispatcher when the workspace's
+// cadence for a (product) is "hourly" or "daily". This service is the
+// other half: every :05 it sweeps hourly buckets older than 1 h, and
+// every 09:05 UTC it sweeps daily buckets older than 24 h.
+//
+// Implementation notes:
+//   - Only the `api` container fires the cron (process.argv[2] === 'api')
+//     so worker / scheduler don't race it.
+//   - Each bucket re-checks the endpoint's `events` array before
+//     emitting — if the client unsubscribed between buffer-time and
+//     flush-time, we drop the bucket silently.
+//   - Failed BullMQ enqueues bubble up to the @nestjs/schedule logger;
+//     the bucket is NOT deleted in that case so the next run retries.
+//   - Batches of 1000 with a yield between iterations to keep the
+//     event loop responsive on huge backlogs.
+
+import {
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { PrismaService } from '@shared/database/prisma.service';
+import { OutboundWebhooksService } from './outbound-webhooks.service';
+
+const BATCH_SIZE = 1000;
+
+@Injectable()
+export class WebhooksDigestService implements OnApplicationBootstrap {
+  private readonly logger = new Logger(WebhooksDigestService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly webhooks: OutboundWebhooksService,
+  ) {}
+
+  onApplicationBootstrap(): void {
+    if (process.argv[2] !== 'api') {
+      this.logger.debug(
+        'Digest cron lives on the api process — no-op bootstrap',
+      );
+      return;
+    }
+    this.logger.log(
+      'Digest cron scheduled: hourly at :05, daily at 09:05 UTC',
+    );
+  }
+
+  @Cron('5 * * * *', { name: 'webhooks-digest-hourly', timeZone: 'UTC' })
+  async flushHourly(): Promise<{ flushed: number; failed: number }> {
+    if (process.argv[2] !== 'api') return { flushed: 0, failed: 0 };
+    const cutoff = new Date(Date.now() - 60 * 60_000);
+    return this.flush('hourly', cutoff);
+  }
+
+  @Cron('5 9 * * *', { name: 'webhooks-digest-daily', timeZone: 'UTC' })
+  async flushDaily(): Promise<{ flushed: number; failed: number }> {
+    if (process.argv[2] !== 'api') return { flushed: 0, failed: 0 };
+    const cutoff = new Date(Date.now() - 24 * 60 * 60_000);
+    return this.flush('daily', cutoff);
+  }
+
+  /**
+   * Public so tests + ops can call it without waiting for cron.
+   */
+  async flush(
+    cadence: 'hourly' | 'daily',
+    cutoff: Date,
+  ): Promise<{ flushed: number; failed: number }> {
+    let flushed = 0;
+    let failed = 0;
+    let cycles = 0;
+
+    while (true) {
+      cycles += 1;
+      const batch = await this.prisma.pendingWebhookEvent.findMany({
+        where: { cadence, firstSeenAt: { lte: cutoff } },
+        take: BATCH_SIZE,
+        include: {
+          endpoint: {
+            select: {
+              id: true,
+              active: true,
+              events: true,
+              workspaceId: true,
+            },
+          },
+        },
+      });
+      if (batch.length === 0) break;
+
+      for (const bucket of batch) {
+        try {
+          const ok = await this.flushOne(bucket);
+          if (ok) flushed += 1;
+          else failed += 1;
+        } catch (err) {
+          this.logger.error(
+            `Bucket ${bucket.id} flush failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+          failed += 1;
+        }
+      }
+
+      if (batch.length < BATCH_SIZE) break;
+      // Keep event-loop responsive between batches.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      if (cycles > 100) {
+        // Safety valve: at 1000 buckets per cycle this caps at 100 k per
+        // cron tick. Anything larger means upstream is wedged.
+        this.logger.warn(
+          `Digest flush ${cadence} aborted after 100 cycles; will resume next tick`,
+        );
+        break;
+      }
+    }
+
+    if (flushed > 0 || failed > 0) {
+      this.logger.log(
+        `Digest flush ${cadence}: emitted=${flushed} failed=${failed}`,
+      );
+    }
+    return { flushed, failed };
+  }
+
+  /**
+   * Flush a single bucket. Returns true if the bucket was processed
+   * (delivered or intentionally dropped) and the row deleted; false if
+   * we hit a recoverable error and want to retry next cron.
+   */
+  private async flushOne(bucket: {
+    id: string;
+    endpointId: string;
+    accountId: bigint;
+    product: string;
+    cadence: string;
+    itemsAdded: number;
+    sampleIds: unknown;
+    firstSeenAt: Date;
+    endpoint: {
+      id: string;
+      active: boolean;
+      events: unknown;
+      workspaceId: string;
+    };
+  }): Promise<boolean> {
+    const eventName = `data.${bucket.product}.updated`;
+
+    // Subscription re-check: client may have PATCHed events between
+    // buffer-time and now. Drop silently — they explicitly chose not to
+    // receive it.
+    const events = Array.isArray(bucket.endpoint.events)
+      ? (bucket.endpoint.events as string[])
+      : [];
+    if (!bucket.endpoint.active || !events.includes(eventName)) {
+      await this.prisma.pendingWebhookEvent.delete({ where: { id: bucket.id } });
+      return true;
+    }
+
+    // Reload account context for the platform field. If the account is
+    // gone we drop the bucket — there's no useful payload to send.
+    const account = await this.prisma.account.findUnique({
+      where: { id: bucket.accountId },
+      select: { platform: true, workspaceId: true, isTest: true },
+    });
+    if (!account) {
+      await this.prisma.pendingWebhookEvent.delete({ where: { id: bucket.id } });
+      return true;
+    }
+    if (account.isTest) {
+      await this.prisma.pendingWebhookEvent.delete({ where: { id: bucket.id } });
+      return true;
+    }
+
+    const sampleIds = Array.isArray(bucket.sampleIds)
+      ? (bucket.sampleIds as string[])
+      : [];
+    const now = new Date();
+    await this.webhooks.emit(account.workspaceId, eventName, {
+      account_id: bucket.accountId.toString(),
+      platform: account.platform,
+      workspace_id: account.workspaceId,
+      product: bucket.product,
+      items_added: bucket.itemsAdded,
+      sample_ids: sampleIds,
+      window_start: bucket.firstSeenAt.toISOString(),
+      window_end: now.toISOString(),
+      cadence: bucket.cadence,
+      occurred_at: now.toISOString(),
+    });
+    await this.prisma.pendingWebhookEvent.delete({ where: { id: bucket.id } });
+    return true;
+  }
+}

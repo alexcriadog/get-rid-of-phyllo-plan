@@ -8,6 +8,7 @@ import { OutboundWebhooksController } from './outbound-webhooks.controller';
 import { WebhookDeliveriesController } from './webhook-deliveries.controller';
 import { TokenLifecycleEmitter } from './token-lifecycle-emitter.service';
 import { DataEventDispatcher } from './data-event-dispatcher.service';
+import { WebhooksDigestService } from './webhooks-digest.service';
 
 @Module({
   imports: [SharedDatabaseModule, SharedRedisModule, ApiKeysModule],
@@ -16,6 +17,7 @@ import { DataEventDispatcher } from './data-event-dispatcher.service';
     OutboundWebhooksService,
     TokenLifecycleEmitter,
     DataEventDispatcher,
+    WebhooksDigestService,
     RateLimitInterceptor,
   ],
   exports: [OutboundWebhooksService, TokenLifecycleEmitter, DataEventDispatcher],
