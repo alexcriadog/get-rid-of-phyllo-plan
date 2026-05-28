@@ -51,6 +51,19 @@ log "Reconciling residual Prisma drift (db push fallback)…"
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
   npx prisma db push --accept-data-loss 2>&1 | tail -3 || true
 
+# Defense against Docker layer-cache staleness: occasionally `docker compose
+# build` reuses a cached `RUN npx prisma generate` layer even when the
+# prisma directory changed, leaving the running container with an outdated
+# @prisma/client that doesn't know about new model fields (e.g. the workspace
+# products PATCH would throw PrismaClientValidationError "Unknown argument
+# `products`" until we forced a fresh client). Regenerating inside the live
+# container + restarting picks up the new schema deterministically. Cheap
+# (~400 ms) — safe to always run.
+log "Regenerating Prisma Client + restarting shared-image services…"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
+  npx prisma generate 2>&1 | tail -3
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml restart api worker scheduler 2>&1 | tail -4
+
 # Apply data seed (Cadence defaults + SyncJob backfill for new products).
 # Idempotent via upserts; safe to run on every deploy. Without this step
 # new products like engagement_deep / ads never get cadence rows in prod
