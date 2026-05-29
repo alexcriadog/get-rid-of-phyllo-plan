@@ -9,6 +9,7 @@ import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.intercept
 import { V1CacheInterceptor } from '@/common/interceptors/cache.interceptor';
 import { ManualRefreshController } from './manual-refresh.controller';
 import { V1AccountsController } from './v1-accounts.controller';
+import { SnapshotReader } from './snapshot-reader';
 
 /**
  * API surface used by the public UI and the admin dashboard. Relies on
@@ -25,7 +26,7 @@ import { V1AccountsController } from './v1-accounts.controller';
     ApiKeysModule,
   ],
   controllers: [ManualRefreshController, V1AccountsController],
-  providers: [ManualRefreshController, RateLimitInterceptor, V1CacheInterceptor],
+  providers: [ManualRefreshController, RateLimitInterceptor, V1CacheInterceptor, SnapshotReader],
   exports: [ManualRefreshController],
 })
 export class ApiModule {}
