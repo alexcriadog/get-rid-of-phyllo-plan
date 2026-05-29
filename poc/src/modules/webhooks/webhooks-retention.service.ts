@@ -36,12 +36,25 @@ import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { ulid } from 'ulid';
 import { PrismaService } from '@shared/database/prisma.service';
+import { MongoService } from '@shared/database/mongo.service';
 import { RedisService } from '@shared/redis/redis.service';
 import { runWithLock } from '@shared/redis/cron-lock';
 
 const BATCH_SIZE = 1000;
 const DEFAULT_INBOUND_DAYS = 30;
 const DEFAULT_OUTBOUND_DAYS = 90;
+const DEFAULT_API_CALL_LOG_DAYS = 30;
+const DEFAULT_MONGO_RAW_DAYS = 14;
+
+// The two Mongo collections purged by recency, with their (verified)
+// timestamp fields. NOTE the field-name drift: event_log uses snake_case
+// (emitted_at) while raw_platform_responses uses camelCase (fetchedAt) —
+// both are stored as native Date by their writers.
+const MONGO_RAW_COLLECTIONS: ReadonlyArray<{ name: string; dateField: string }> =
+  [
+    { name: 'event_log', dateField: 'emitted_at' },
+    { name: 'raw_platform_responses', dateField: 'fetchedAt' },
+  ];
 // Retention can run long on a large backlog; give the lock 30 min.
 const LOCK_TTL_MS = 30 * 60_000;
 
@@ -52,6 +65,8 @@ export class WebhooksRetentionService
   private readonly logger = new Logger(WebhooksRetentionService.name);
   private inboundDays = DEFAULT_INBOUND_DAYS;
   private outboundDays = DEFAULT_OUTBOUND_DAYS;
+  private apiCallLogDays = DEFAULT_API_CALL_LOG_DAYS;
+  private mongoRawDays = DEFAULT_MONGO_RAW_DAYS;
   private dryRun = false;
   private readonly instanceToken = ulid();
 
@@ -59,6 +74,7 @@ export class WebhooksRetentionService
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly redis: RedisService,
+    private readonly mongo: MongoService,
   ) {}
 
   onModuleInit(): void {
@@ -74,6 +90,16 @@ export class WebhooksRetentionService
       outd,
       DEFAULT_OUTBOUND_DAYS,
       'OUTBOUND_DELIVERY_RETENTION_DAYS',
+    );
+    this.apiCallLogDays = parsePositiveInt(
+      this.config.get<string>('API_CALL_LOG_RETENTION_DAYS'),
+      DEFAULT_API_CALL_LOG_DAYS,
+      'API_CALL_LOG_RETENTION_DAYS',
+    );
+    this.mongoRawDays = parsePositiveInt(
+      this.config.get<string>('MONGO_RAW_RETENTION_DAYS'),
+      DEFAULT_MONGO_RAW_DAYS,
+      'MONGO_RAW_RETENTION_DAYS',
     );
     this.dryRun = dry !== undefined && /^(1|true|yes|on)$/i.test(dry.trim());
     if (this.dryRun) {
@@ -93,7 +119,9 @@ export class WebhooksRetentionService
       return;
     }
     this.logger.log(
-      `Retention sweep scheduled (03:00 UTC daily). inbound=${this.inboundDays}d outbound=${this.outboundDays}d${this.dryRun ? ' [DRY RUN]' : ''}`,
+      `Retention sweep scheduled (03:00 UTC daily). inbound=${this.inboundDays}d ` +
+        `outbound=${this.outboundDays}d api_call_log=${this.apiCallLogDays}d ` +
+        `mongo_raw=${this.mongoRawDays}d${this.dryRun ? ' [DRY RUN]' : ''}`,
     );
   }
 
@@ -103,15 +131,11 @@ export class WebhooksRetentionService
    * synchronously.
    */
   @Cron('0 3 * * *', { name: 'webhooks-retention', timeZone: 'UTC' })
-  async runRetention(): Promise<{
-    inbound_deleted: number;
-    outbound_deleted: number;
-    duration_ms: number;
-  }> {
+  async runRetention(): Promise<RetentionResult> {
     if (process.argv[2] !== 'api') {
       // Cron fires in every container by default; gate on the process role
       // so worker/scheduler don't race the api.
-      return { inbound_deleted: 0, outbound_deleted: 0, duration_ms: 0 };
+      return emptyResult();
     }
     // Distributed lock so 2+ api replicas don't double-delete.
     const locked = await runWithLock(
@@ -121,30 +145,49 @@ export class WebhooksRetentionService
       LOCK_TTL_MS,
       async () => {
         const startedAt = Date.now();
-        const inboundCutoff = new Date(
-          Date.now() - this.inboundDays * 24 * 60 * 60_000,
+        const cutoff = (days: number): Date =>
+          new Date(Date.now() - days * 24 * 60 * 60_000);
+
+        const inboundDeleted = await this.sweepInbound(cutoff(this.inboundDays));
+        const outboundDeleted = await this.sweepOutbound(
+          cutoff(this.outboundDays),
         );
-        const outboundCutoff = new Date(
-          Date.now() - this.outboundDays * 24 * 60 * 60_000,
+        const apiCallLogDeleted = await this.sweepApiCallLog(
+          cutoff(this.apiCallLogDays),
         );
-        const inboundDeleted = await this.sweepInbound(inboundCutoff);
-        const outboundDeleted = await this.sweepOutbound(outboundCutoff);
+        const mongoRawCutoff = cutoff(this.mongoRawDays);
+        const mongoRawDeleted: Record<string, number> = {};
+        for (const { name, dateField } of MONGO_RAW_COLLECTIONS) {
+          mongoRawDeleted[name] = await this.sweepMongoCollection(
+            name,
+            dateField,
+            mongoRawCutoff,
+          );
+        }
+
         const ms = Date.now() - startedAt;
+        const mongoSummary = Object.entries(mongoRawDeleted)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(' ');
         this.logger.log(
-          `Retention sweep complete in ${ms}ms — inbound=${inboundDeleted} outbound=${outboundDeleted}${this.dryRun ? ' [DRY RUN]' : ''}`,
+          `Retention sweep complete in ${ms}ms — inbound=${inboundDeleted} ` +
+            `outbound=${outboundDeleted} api_call_log=${apiCallLogDeleted} ` +
+            `${mongoSummary}${this.dryRun ? ' [DRY RUN]' : ''}`,
         );
         return {
           inbound_deleted: inboundDeleted,
           outbound_deleted: outboundDeleted,
+          api_call_log_deleted: apiCallLogDeleted,
+          mongo_raw_deleted: mongoRawDeleted,
           duration_ms: ms,
         };
       },
     );
     if (!locked.ran) {
       this.logger.debug('Retention skipped — lock held by another instance');
-      return { inbound_deleted: 0, outbound_deleted: 0, duration_ms: 0 };
+      return emptyResult();
     }
-    return locked.result ?? { inbound_deleted: 0, outbound_deleted: 0, duration_ms: 0 };
+    return locked.result ?? emptyResult();
   }
 
   private async sweepInbound(cutoff: Date): Promise<number> {
@@ -193,6 +236,81 @@ export class WebhooksRetentionService
     }
     return total;
   }
+
+  /**
+   * api_call_log grows one row per outbound platform request — the dominant
+   * write volume in the DB. Delete everything older than the cutoff
+   * (calledAt is indexed). Batched like the others to avoid a long lock.
+   */
+  private async sweepApiCallLog(cutoff: Date): Promise<number> {
+    let total = 0;
+    while (true) {
+      const rows = await this.prisma.apiCallLog.findMany({
+        where: { calledAt: { lt: cutoff } },
+        select: { id: true },
+        take: BATCH_SIZE,
+      });
+      if (rows.length === 0) break;
+      if (!this.dryRun) {
+        const ids = rows.map((r) => r.id);
+        await this.prisma.apiCallLog.deleteMany({ where: { id: { in: ids } } });
+      }
+      total += rows.length;
+      if (rows.length < BATCH_SIZE) break;
+      await yieldToEventLoop();
+    }
+    return total;
+  }
+
+  /**
+   * Purge a Mongo append-only collection by recency. `dateField` differs per
+   * collection (event_log → emitted_at, raw_platform_responses → fetchedAt);
+   * both are native Date. In dry-run we only COUNT (a delete-less loop over a
+   * filter that keeps matching would spin forever).
+   */
+  private async sweepMongoCollection(
+    collection: string,
+    dateField: string,
+    cutoff: Date,
+  ): Promise<number> {
+    const col = this.mongo.getCollection(collection);
+    const filter = { [dateField]: { $lt: cutoff } };
+    if (this.dryRun) {
+      return col.countDocuments(filter);
+    }
+    let total = 0;
+    while (true) {
+      const docs = await col
+        .find(filter, { projection: { _id: 1 } })
+        .limit(BATCH_SIZE)
+        .toArray();
+      if (docs.length === 0) break;
+      const ids = docs.map((d) => d._id);
+      const res = await col.deleteMany({ _id: { $in: ids } });
+      total += res.deletedCount ?? docs.length;
+      if (docs.length < BATCH_SIZE) break;
+      await yieldToEventLoop();
+    }
+    return total;
+  }
+}
+
+interface RetentionResult {
+  inbound_deleted: number;
+  outbound_deleted: number;
+  api_call_log_deleted: number;
+  mongo_raw_deleted: Record<string, number>;
+  duration_ms: number;
+}
+
+function emptyResult(): RetentionResult {
+  return {
+    inbound_deleted: 0,
+    outbound_deleted: 0,
+    api_call_log_deleted: 0,
+    mongo_raw_deleted: {},
+    duration_ms: 0,
+  };
 }
 
 function parsePositiveInt(

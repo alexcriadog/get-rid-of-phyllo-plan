@@ -89,7 +89,10 @@ export class MongoService implements OnModuleInit, OnModuleDestroy {
       { collection: 'ads_campaigns', keys: { account_id: 1, platform: 1 }, options: { unique: true } },
       // ── append-only logs (read/purged by recency) ──
       { collection: 'event_log', keys: { account_id: 1, emitted_at: -1 } },
-      { collection: 'raw_platform_responses', keys: { account_id: 1, created_at: -1 } },
+      // raw_platform_responses writers (graph/tiktok raw-archive) store
+      // camelCase accountId + fetchedAt — match them so the recency purge
+      // (webhooks-retention) and admin listing are index-backed.
+      { collection: 'raw_platform_responses', keys: { accountId: 1, fetchedAt: -1 } },
     ];
 
     let created = 0;
