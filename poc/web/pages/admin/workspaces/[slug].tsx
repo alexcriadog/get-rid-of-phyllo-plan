@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Empty } from '@/components/admin/empty';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import ScopeBadge from '../../../components/ScopeBadge';
 
 type ProductDef = {
   id: string;
@@ -100,15 +102,43 @@ export default function WorkspaceDetail({ catalog }: PageProps) {
         </Link>
       }
     >
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <BrandingSection slug={slug} ws={ws.data} onSaved={ws.refresh} />
-        <ProductsSection slug={slug} ws={ws.data} catalog={catalog} onSaved={ws.refresh} />
-        <SummarySection ws={ws.data} />
-        <ApiKeysSection slug={slug} keys={keys.data ?? []} onChange={keys.refresh} />
-        <WebhooksSection slug={slug} endpoints={endpoints.data ?? []} />
-        <CadenceSection slug={slug} ws={ws.data} catalog={catalog} onSaved={ws.refresh} />
-        <AllowedOriginsSection slug={slug} ws={ws.data} onSaved={ws.refresh} />
-      </div>
+      <ScopeBadge scope="tenant" tenant={slug} />
+      {/* Tenant object hub: everything about one workspace under one route,
+          organized as tabs instead of a flat stack of cards. Overview leads
+          with the summary; the rest are the per-concern config surfaces. */}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="mb-2 flex h-auto flex-wrap justify-start gap-1">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="branding">Branding</TabsTrigger>
+          <TabsTrigger value="products">Products</TabsTrigger>
+          <TabsTrigger value="api-keys">API keys</TabsTrigger>
+          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
+          <TabsTrigger value="cadence">Cadence</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview">
+          <SummarySection ws={ws.data} />
+        </TabsContent>
+        <TabsContent value="branding">
+          <BrandingSection slug={slug} ws={ws.data} onSaved={ws.refresh} />
+        </TabsContent>
+        <TabsContent value="products">
+          <ProductsSection slug={slug} ws={ws.data} catalog={catalog} onSaved={ws.refresh} />
+        </TabsContent>
+        <TabsContent value="api-keys">
+          <ApiKeysSection slug={slug} keys={keys.data ?? []} onChange={keys.refresh} />
+        </TabsContent>
+        <TabsContent value="webhooks">
+          <WebhooksSection slug={slug} endpoints={endpoints.data ?? []} />
+        </TabsContent>
+        <TabsContent value="cadence">
+          <CadenceSection slug={slug} ws={ws.data} catalog={catalog} onSaved={ws.refresh} />
+        </TabsContent>
+        <TabsContent value="security">
+          <AllowedOriginsSection slug={slug} ws={ws.data} onSaved={ws.refresh} />
+        </TabsContent>
+      </Tabs>
     </AdminLayout>
   );
 }
