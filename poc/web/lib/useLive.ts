@@ -9,6 +9,23 @@ export type LiveState<T> = {
 };
 
 /**
+ * Standardized polling cadences keyed to data volatility. Use these instead
+ * of ad-hoc millisecond literals so refresh pressure is consistent and
+ * tunable in one place.
+ *
+ * - `live`    real-time streams / activity feeds
+ * - `list`    list + table views that change often
+ * - `config`  configuration / health that changes slowly
+ * - `catalog` near-static reference data (support matrix, etc.)
+ */
+export const POLL = {
+  live: 3000,
+  list: 5000,
+  config: 15000,
+  catalog: 30000,
+} as const;
+
+/**
  * Polls a connector admin endpoint every `intervalMs` milliseconds.
  * Pass a relative path (e.g. `/admin/overview`) or an absolute URL.
  */

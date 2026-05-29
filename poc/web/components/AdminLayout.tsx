@@ -38,47 +38,48 @@ import {
 type NavItem = { href: string; label: string; icon: typeof LayoutDashboard };
 type NavSection = { title: string; items: NavItem[] };
 
+// Information architecture mapped to the operator's three jobs-to-be-done:
+// keep the machine running (Operations), answer "what happened?"
+// (Observability), and serve a tenant (Tenants). Onboarding is the
+// cross-cutting "connect a new account" entry. Routes are migrated to their
+// final tree incrementally; labels reflect the target IA today.
 const NAV: NavSection[] = [
   {
-    title: 'Live',
-    items: [
-      { href: '/admin', label: 'Overview', icon: LayoutDashboard },
-      { href: '/admin/calls', label: 'API calls', icon: Activity },
-      { href: '/admin/events', label: 'Events', icon: ListOrdered },
-      { href: '/admin/webhooks', label: 'Webhooks', icon: Webhook },
-    ],
+    title: 'Home',
+    items: [{ href: '/admin', label: 'Overview', icon: LayoutDashboard }],
   },
   {
-    title: 'Accounts',
+    title: 'Operations',
     items: [
-      { href: '/admin/accounts', label: 'Accounts', icon: Users },
-      { href: '/admin/connect', label: 'Connect new', icon: Plug2 },
-    ],
-  },
-  {
-    title: 'Policy',
-    items: [
-      { href: '/admin/rate-limits', label: 'Rate buckets', icon: Gauge },
+      { href: '/admin/next-runs', label: 'Scheduling', icon: Clock },
+      { href: '/admin/rate-limits', label: 'Rate limits', icon: Gauge },
       { href: '/admin/cadence', label: 'Cadence', icon: Repeat },
-      { href: '/admin/next-runs', label: 'Next runs', icon: Clock },
       { href: '/admin/throttle-locks', label: 'Throttle locks', icon: Lock },
-    ],
-  },
-  {
-    title: 'Audit',
-    items: [
-      { href: '/admin/raw', label: 'Raw responses', icon: FileJson },
       { href: '/admin/support-matrix', label: 'Support matrix', icon: TableProperties },
     ],
   },
   {
-    title: 'SaaS',
+    title: 'Observability',
+    items: [
+      { href: '/admin/calls', label: 'API calls', icon: Activity },
+      { href: '/admin/events', label: 'Events', icon: ListOrdered },
+      { href: '/admin/webhooks', label: 'Inbound webhooks', icon: Webhook },
+      { href: '/admin/webhook-deliveries', label: 'Webhook deliveries', icon: Send },
+      { href: '/admin/raw', label: 'Raw responses', icon: FileJson },
+      { href: '/admin/usage', label: 'Usage', icon: Database },
+    ],
+  },
+  {
+    title: 'Tenants',
     items: [
       { href: '/admin/workspaces', label: 'Workspaces', icon: Building2 },
+      { href: '/admin/accounts', label: 'Accounts', icon: Users },
       { href: '/admin/api-keys', label: 'API keys', icon: KeyRound },
-      { href: '/admin/webhook-deliveries', label: 'Webhook deliveries', icon: Send },
-      { href: '/admin/usage', label: 'Usage', icon: Gauge },
     ],
+  },
+  {
+    title: 'Onboarding',
+    items: [{ href: '/admin/connect', label: 'Connect new', icon: Plug2 }],
   },
 ];
 
@@ -130,6 +131,7 @@ export default function AdminLayout({ title, children, actions }: Props) {
               <div className="ml-auto flex items-center gap-2">
                 {actions}
                 <WorkspaceSelect />
+                <ThemeToggle />
                 <SystemHealthBadge health={health.data} apiDown={apiDown} />
               </div>
             </header>
@@ -145,7 +147,7 @@ export default function AdminLayout({ title, children, actions }: Props) {
                   <span className="text-danger/80">{health.error}</span>
                 </div>
               )}
-              {children}
+              <ErrorBoundary surface={title}>{children}</ErrorBoundary>
             </main>
           </div>
         </div>

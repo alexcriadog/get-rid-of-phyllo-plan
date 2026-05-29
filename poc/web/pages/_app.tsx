@@ -19,11 +19,13 @@ export default function App({ Component, pageProps }: AppProps) {
       {/* TooltipProvider is required by Radix's <Tooltip>. delayDuration=200
           gives a snappier hover than the 700ms default. WorkspaceProvider
           exposes the topbar filter (slug + withQuery) to every admin page. */}
-      <TooltipProvider delayDuration={200}>
-        <WorkspaceProvider>
-          <Component {...pageProps} />
-        </WorkspaceProvider>
-      </TooltipProvider>
+      <ThemeProvider>
+        <TooltipProvider delayDuration={200}>
+          <WorkspaceProvider>
+            <Component {...pageProps} />
+          </WorkspaceProvider>
+        </TooltipProvider>
+      </ThemeProvider>
     </>
   );
 }
