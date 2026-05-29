@@ -166,6 +166,16 @@ model Workspace {
   // fire on each successful sync. PATCHed from the admin UI via
   // PATCH /admin/workspaces/:slug/webhook-cadence.
   webhookCadence Json? @map("webhook_cadence")
+  // Sec-4: per-workspace origin allow-list for SDK-token postMessage scoping.
+  // JSON array of canonical web origins, e.g.
+  // ["https://app.example.com","https://example.com"]. The mint endpoint
+  // embeds this as the token's signed `origins` claim; connect-tool validates
+  // the popup's ?origin against it at /api/oauth/start and only ever
+  // postMessages the OAuth result back to a listed origin. null/absent means
+  // "no origin restriction" (legacy behaviour — the SDK-supplied origin is
+  // trusted as-is), so the column is additive + nullable and zero-downtime.
+  // Edited from the admin UI via PATCH /admin/workspaces/:slug/allowed-origins.
+  allowedOrigins Json? @map("allowed_origins")
   planTier  String   @default("standard") @map("plan_tier")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

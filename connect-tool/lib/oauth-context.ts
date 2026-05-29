@@ -20,6 +20,12 @@ export interface SdkTokenClaims {
   ws_slug: string;
   sub: string;
   platforms?: ReadonlyArray<string>;
+  /**
+   * Sec-4: per-workspace origin allow-list. When present, the popup's
+   * `?origin` must be a member; only a listed origin is ever used as a
+   * postMessage target. Absent → no origin restriction (legacy behaviour).
+   */
+  origins?: ReadonlyArray<string>;
   /** 'test' → account will be marked is_test on seed (no webhooks). */
   env?: 'live' | 'test';
   iss: string;

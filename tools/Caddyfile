@@ -13,9 +13,25 @@ smconnector.camaleonicanalytics.com {
 		respond 403
 	}
 
-	# POC backend exposed under /api/poc — bearer-guarded by ConnectToolGuard
-	# for /admin/connect/*; the rest of /admin/* on the API is also reachable
-	# (read-only operator endpoints).
+	# Admin API surface (operator-only). The admin dashboard at /admin* calls
+	# these endpoints from the browser at /api/poc/admin/*, so lock them at the
+	# edge with the SAME basic_auth as the /admin* block below — same origin +
+	# realm means the browser reuses the operator's credentials for those XHRs.
+	# MUST precede the /api/poc/* passthrough (handle blocks match in source
+	# order). connect-tool's server-to-server seed (POST /admin/connect/seed)
+	# reaches the API directly over the compose network — not through Caddy — so
+	# it is unaffected here (and is independently bearer-guarded server-side).
+	# `uri strip_prefix /api/poc` keeps the API path as /admin/* after the gate.
+	handle /api/poc/admin* {
+		basic_auth {
+			alex $2y$12$FRUN6ZltRlZsFygdSj0ED.ExibDXMV7zrDqAbflTRg6Cel0Oc7XRq
+		}
+		uri strip_prefix /api/poc
+		reverse_proxy api:3000
+	}
+
+	# POC backend exposed under /api/poc. /api/poc/admin/* is gated above; the
+	# rest (e.g. /v1/* proxied helpers the client dashboard uses) passes through.
 	handle_path /api/poc/* {
 		reverse_proxy api:3000
 	}
@@ -27,14 +43,16 @@ smconnector.camaleonicanalytics.com {
 		reverse_proxy api:3000
 	}
 
-	# Admin dashboard. Operator-trust by default — flip on the basic_auth
-	# directive below once a real customer ships. Generate the hash with:
-	#   docker run --rm caddy:2-alpine caddy hash-password --plaintext '<pw>'
-	# Then uncomment + paste the `<user> <hash>` line(s) and redeploy.
+	# Admin dashboard — operator-only. basic_auth enabled (Sec-4 hardening): the
+	# admin surface mutates security-critical config (workspace origin allow-
+	# lists, product scopes, live API keys), so it must not be anonymously
+	# reachable. Same user+hash as the /api/poc/admin* gate above so the browser
+	# authenticates once and reuses the credentials for the dashboard's XHRs.
+	# Rotate with: htpasswd -bnBC 12 "" '<newpw>'  (or caddy hash-password).
 	handle /admin* {
-		# basic_auth {
-		#     alex JDJhJDE0JFJFUExBQ0VfV0lUSF9SRUFMX0JDUllQVF9IQVNI
-		# }
+		basic_auth {
+			alex $2y$12$FRUN6ZltRlZsFygdSj0ED.ExibDXMV7zrDqAbflTRg6Cel0Oc7XRq
+		}
 		reverse_proxy web:3001
 	}
 

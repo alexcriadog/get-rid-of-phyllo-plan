@@ -4,6 +4,7 @@ import { internalAuthHeader } from '../../lib/poc-internal';
 import { sanitizeAccent } from '../../lib/css-color';
 import { fetchConnections } from '../../lib/connections';
 import { fetchWorkspaceProducts, offeredPlatforms } from '../../lib/workspace-config';
+import { isOriginAllowed } from '../../lib/origin-allowlist';
 import { ConnectShell } from './ConnectShell';
 import { isPlatformKey, type PlatformKey } from './shell-machine';
 
@@ -55,9 +56,27 @@ export default async function ConnectPage({
 
   let endUserId = '';
   let error: string | null = null;
+  // Sec-4: only trust the embedder's ?origin if the workspace's allow-list
+  // (carried in the signed token) permits it. Otherwise drop it to undefined so
+  // ConnectShell's chrome postMessages (resize/exit/error) fall back to the
+  // iframe's own origin — which the browser refuses to deliver cross-origin,
+  // rather than leaking to an unlisted embedder. The sensitive success result
+  // is independently gated at /api/oauth/start. No allow-list → origin kept
+  // as-is (legacy behaviour).
+  let validatedOrigin: string | undefined = origin;
   try {
     const claims = await verifySdkToken(token);
     endUserId = claims.sub;
+    // Sec-4: if the workspace has an allow-list and this embedder isn't on it,
+    // fail fast — drop the origin AND surface an error so ConnectShell renders
+    // the error state immediately, rather than letting the user pick a platform
+    // and then hit a hard rejection at /api/oauth/start (stranded popup).
+    // isOriginAllowed returns true when no allow-list exists (legacy flow).
+    if (!isOriginAllowed(origin, claims.origins)) {
+      validatedOrigin = undefined;
+      error =
+        'This page is not authorised to use the Connect widget for this workspace. Contact your administrator.';
+    }
   } catch (e) {
     console.error('[connect] sdk token verify failed:', e);
     error = 'This connect link is invalid or has expired. Restart from the app you came from.';
@@ -86,7 +105,7 @@ export default async function ConnectPage({
     <ConnectShell
       ws={ws}
       token={token}
-      origin={origin ?? ''}
+      origin={validatedOrigin ?? ''}
       fixedPlatform={platform}
       theme={theme}
       accent={accent}

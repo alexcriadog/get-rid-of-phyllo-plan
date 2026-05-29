@@ -18,6 +18,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { RedisService } from '@shared/redis/redis.service';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
+import { normalizeOrigins } from '@modules/workspaces/workspace-origins';
 import {
   ApiKeysService,
   IssuedApiKey,
@@ -32,6 +33,16 @@ import {
   PLATFORM_IDS,
   PRODUCT_IDS,
 } from '@modules/accounts/products.catalog';
+import {
+  decodeBigIntCursor,
+  decodeCompositeCursor,
+  encodeCompositeCursor,
+  encodeCursor,
+  envelopeStatic,
+  paginate,
+  parseLimit,
+  type Paginated,
+} from '@shared/pagination/cursor';
 
 const CADENCE_VALUES = ['immediate', 'hourly', 'daily'] as const;
 
@@ -44,16 +55,16 @@ const WebhookCadenceSchema = z
     z.enum(CADENCE_VALUES),
   )
   .default({});
-import {
-  decodeBigIntCursor,
-  decodeCompositeCursor,
-  encodeCompositeCursor,
-  encodeCursor,
-  envelopeStatic,
-  paginate,
-  parseLimit,
-  type Paginated,
-} from '@shared/pagination/cursor';
+
+// Sec-4: per-workspace origin allow-list. Wire shape is a flat array of origin
+// strings (no platform split — an origin is where the SDK is embedded, which is
+// platform-independent). Each entry is canonicalised + validated in the handler
+// via normalizeOrigins(); the schema only enforces the array/string envelope
+// and a sane cardinality cap. Empty array clears the list (= no restriction).
+const AllowedOriginsSchema = z
+  .array(z.string().min(1).max(2048))
+  .max(50)
+  .default([]);
 
 const WorkspaceCreateSchema = z
   .object({
@@ -263,6 +274,7 @@ export class AdminSaasController {
       branding: ws.branding,
       products: ws.products,
       webhook_cadence: ws.webhookCadence,
+      allowed_origins: ws.allowedOrigins ?? null,
       account_count: accountCount,
       active_api_key_count: apiKeyCount,
       webhook_endpoint_count: endpointCount,
@@ -395,6 +407,60 @@ export class AdminSaasController {
       }`,
     );
     return { slug, webhook_cadence: isClear ? null : newConfig };
+  }
+
+  /**
+   * Sec-4: per-workspace origin allow-list.
+   *
+   * Body: a JSON array of web origins (scheme://host[:port], no path), e.g.
+   * ["https://app.example.com","http://localhost:4000"]. Each is canonicalised
+   * + de-duplicated; an invalid entry fails the whole request with the
+   * offending value. An empty array clears the list — which means "no origin
+   * restriction" (the legacy, pre-Sec-4 behaviour), so clearing is an explicit,
+   * auditable operator choice rather than a silent default.
+   *
+   * Once set, the value is embedded into every freshly-minted SDK token's
+   * signed `origins` claim; connect-tool only launches OAuth for — and only
+   * postMessages results back to — a listed origin. Tokens minted BEFORE a
+   * change keep their old claim until they expire (≤30 min), so changes
+   * propagate within one token TTL.
+   */
+  @Patch('workspaces/:slug/allowed-origins')
+  async updateAllowedOrigins(
+    @Param('slug') slug: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    const parsed = AllowedOriginsSchema.safeParse(body ?? []);
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: 'Invalid allowed-origins payload',
+        issues: parsed.error.issues,
+      });
+    }
+    let normalized: string[];
+    try {
+      normalized = normalizeOrigins(parsed.data);
+    } catch (err) {
+      throw new BadRequestException({
+        message: err instanceof Error ? err.message : 'Invalid origin',
+      });
+    }
+    const ws = await this.workspaces.findBySlug(slug);
+    const isClear = normalized.length === 0;
+    await this.prisma.workspace.update({
+      where: { id: ws.id },
+      data: {
+        allowedOrigins: isClear
+          ? Prisma.JsonNull
+          : (normalized as Prisma.InputJsonValue),
+      },
+    });
+    this.logger.log(
+      `updateAllowedOrigins(${slug}): ${
+        isClear ? 'cleared (no origin restriction)' : JSON.stringify(normalized)
+      }`,
+    );
+    return { slug, allowed_origins: isClear ? null : normalized };
   }
 
   // ─── API keys ───────────────────────────────────────────────────────────

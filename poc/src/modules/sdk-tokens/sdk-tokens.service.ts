@@ -51,6 +51,14 @@ export interface SdkTokenClaims {
   sub: string;
   /** Optional whitelist of platforms the popup may offer. */
   platforms?: ReadonlyArray<string>;
+  /**
+   * Sec-4: optional per-workspace origin allow-list (from
+   * workspace.allowedOrigins). When present, connect-tool only launches OAuth
+   * for — and only postMessages the result back to — an origin in this set.
+   * Absent → no origin restriction (legacy behaviour). Signed as part of the
+   * JWT so connect-tool can trust it without a second DB round-trip.
+   */
+  origins?: ReadonlyArray<string>;
   /** 'test' marks accounts seeded via this token as sandbox (no webhooks). */
   env?: 'live' | 'test';
   iss: string;
@@ -98,6 +106,11 @@ export class SdkTokensService {
     }
 
     const expandedPlatforms = expandPlatformAliases(input.allowedPlatforms);
+    // Fetched once and reused for both the platform-offer gate below (Gate #1)
+    // and the Sec-4 origin allow-list embedded into the token. mint() is a
+    // cold-path call (once per connect-flow launch), so the extra read is
+    // negligible.
+    const ws = await this.workspaces.findById(input.workspaceId);
     // Gate #1: if the caller asked for a restricted platform set, ensure each
     // requested platform is offered by this workspace (workspace.products
     // keys). null products = unrestricted (default) → accept anything in
@@ -107,7 +120,6 @@ export class SdkTokensService {
       // Phase C: workspace.products is always set, so the G1 gate is a flat
       // comparison against the offered-platforms set — no "unrestricted"
       // bypass anymore.
-      const ws = await this.workspaces.findById(input.workspaceId);
       const offered = new Set(Object.keys(ws.products));
       const notOffered = expandedPlatforms.filter((p) => !offered.has(p));
       if (notOffered.length > 0) {
@@ -124,6 +136,10 @@ export class SdkTokensService {
     }
     const secret = await this.workspaces.getSecret(input.workspaceId);
     const now = Math.floor(Date.now() / 1000);
+    // Sec-4: carry the workspace's origin allow-list as a signed claim. Only
+    // emitted when the workspace has configured one; absent → connect-tool
+    // applies no origin restriction (backward-compatible).
+    const origins = ws.allowedOrigins;
     const payload: SdkTokenClaims = {
       ws: input.workspaceId,
       ws_slug: input.workspaceSlug,
@@ -131,6 +147,7 @@ export class SdkTokensService {
       ...(expandedPlatforms && expandedPlatforms.length > 0
         ? { platforms: expandedPlatforms }
         : {}),
+      ...(origins && origins.length > 0 ? { origins } : {}),
       ...(input.environment === 'test' ? { env: 'test' } : {}),
       iss: ISS,
       aud: AUD,

@@ -43,6 +43,11 @@ export interface WorkspaceView {
   // default to "immediate". See data-event-dispatcher.service.ts for the
   // dispatch logic. Schema: Record<product, "immediate"|"hourly"|"daily">.
   webhookCadence: Record<string, string> | null;
+  // Sec-4: per-workspace origin allow-list. Canonical web origins the SDK may
+  // be embedded on (e.g. "https://app.example.com"). undefined/empty → no
+  // restriction (legacy behaviour). Embedded into the minted SDK token's
+  // signed `origins` claim and enforced by connect-tool at /api/oauth/start.
+  allowedOrigins?: ReadonlyArray<string>;
   planTier: string;
 }
 
@@ -153,6 +158,7 @@ export class WorkspacesService implements OnModuleInit {
     branding: unknown;
     products: unknown;
     webhookCadence: unknown;
+    allowedOrigins?: unknown;
     planTier: string;
   }): WorkspaceView {
     return {
@@ -162,8 +168,24 @@ export class WorkspacesService implements OnModuleInit {
       branding: this.parseBranding(row.branding),
       products: this.parseProducts(row.products),
       webhookCadence: this.parseCadence(row.webhookCadence),
+      allowedOrigins: this.parseOrigins(row.allowedOrigins),
       planTier: row.planTier,
     };
+  }
+
+  /**
+   * Parse the `allowed_origins` JSON column into a clean string[] of origins
+   * (or undefined when unset/empty). Defensive against a row that somehow
+   * holds a non-array or non-string entries — we drop junk rather than crash.
+   * Returns undefined (not []) for the "no restriction" case so the mint path
+   * can branch on a single falsy check.
+   */
+  private parseOrigins(raw: unknown): ReadonlyArray<string> | undefined {
+    if (!Array.isArray(raw)) return undefined;
+    const origins = raw.filter(
+      (x): x is string => typeof x === 'string' && x.length > 0,
+    );
+    return origins.length > 0 ? origins : undefined;
   }
 
   private parseCadence(raw: unknown): Record<string, string> | null {

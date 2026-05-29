@@ -73,10 +73,20 @@ $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T api \
   npm run seed 2>&1 | tail -10 || true
 
 # Caddy bind-mounts the Caddyfile but doesn't auto-reload on file changes.
-# `docker compose up -d` won't restart the container unless its compose
-# definition changed. Force a restart so Caddyfile edits propagate.
-log "Restarting Caddy to pick up Caddyfile changes…"
-$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml restart caddy 2>&1 | tail -2 || true
+# Validate the (git-pulled) Caddyfile INSIDE the running container FIRST — a
+# syntax error must never take the edge proxy down. `set -euo pipefail` makes a
+# failed validation abort the deploy here, leaving the running Caddy untouched.
+log "Validating Caddyfile before reload…"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T caddy \
+  caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 | tail -15
+
+# Zero-downtime hot reload (atomic — an invalid config would leave the running
+# one live). Fall back to a full restart only if the admin-API reload path is
+# unavailable for a non-config reason.
+log "Reloading Caddy to pick up Caddyfile changes…"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T caddy \
+  caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 | tail -5 \
+  || $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml restart caddy 2>&1 | tail -2
 
 log "Status:"
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml ps

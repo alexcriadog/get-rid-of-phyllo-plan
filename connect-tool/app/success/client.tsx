@@ -43,7 +43,7 @@ export function SuccessClient() {
       // an iframe, not a popup). The SDK tears down the overlay.
       sentRef.current = true;
       try {
-        window.parent.postMessage(payload, openerOrigin && openerOrigin.length > 0 ? openerOrigin : '*');
+        window.parent.postMessage(payload, openerOrigin && openerOrigin.length > 0 ? openerOrigin : window.location.origin);
       } catch {
         /* host cross-origin policy — host's problem */
       }
@@ -55,7 +55,7 @@ export function SuccessClient() {
     if (!opener || opener === window) return;
     sentRef.current = true;
     try {
-      opener.postMessage(payload, openerOrigin && openerOrigin.length > 0 ? openerOrigin : '*');
+      opener.postMessage(payload, openerOrigin && openerOrigin.length > 0 ? openerOrigin : window.location.origin);
     } catch {
       /* opener cross-origin */
     }

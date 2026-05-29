@@ -37,6 +37,8 @@ type WorkspaceDetail = {
   branding: Branding | null;
   products?: Record<string, string[]> | null;
   webhook_cadence?: Record<string, Cadence> | null;
+  // Sec-4: origin allow-list. null/absent → no restriction (legacy behaviour).
+  allowed_origins?: string[] | null;
   account_count: number;
   active_api_key_count: number;
   webhook_endpoint_count: number;
@@ -105,6 +107,7 @@ export default function WorkspaceDetail({ catalog }: PageProps) {
         <ApiKeysSection slug={slug} keys={keys.data ?? []} onChange={keys.refresh} />
         <WebhooksSection slug={slug} endpoints={endpoints.data ?? []} />
         <CadenceSection slug={slug} ws={ws.data} catalog={catalog} onSaved={ws.refresh} />
+        <AllowedOriginsSection slug={slug} ws={ws.data} onSaved={ws.refresh} />
       </div>
     </AdminLayout>
   );
@@ -284,6 +287,144 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </label>
       {children}
     </div>
+  );
+}
+
+// ─── Allowed origins (Sec-4) ────────────────────────────────────────────────
+
+// Normalise an admin-entered origin to scheme://host[:port]. Mirrors the
+// server-side validator (workspace-origins.ts) so the UI rejects the same
+// inputs the API would — fail fast, before the round-trip. Returns null on
+// anything that isn't a bare http(s) origin.
+function normalizeOriginInput(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    // Expression kept literally identical to the server-side mirrors
+    // (workspace-origins.ts / origin-allowlist.ts) so the three can't drift.
+    if (u.pathname !== '/' && u.pathname !== '') return null;
+    if (u.search || u.hash || u.username || u.password) return null;
+    if (u.hostname.endsWith('.')) return null;
+    return u.origin;
+  } catch {
+    return null;
+  }
+}
+
+function AllowedOriginsSection({
+  slug,
+  ws,
+  onSaved,
+}: {
+  slug: string;
+  ws: WorkspaceDetail | null;
+  onSaved: () => void;
+}) {
+  const [origins, setOrigins] = useState<string[]>([]);
+  const [draft, setDraft] = useState('');
+  const [hydrated, setHydrated] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Hydrate once from the live workspace (kept out of the poll loop, matching
+  // the other editors on this page).
+  if (!busy && !hydrated && ws) {
+    setOrigins(ws.allowed_origins ?? []);
+    setHydrated(true);
+  }
+
+  const add = () => {
+    const normalized = normalizeOriginInput(draft);
+    if (!normalized) {
+      setErr('Enter a full origin like https://app.example.com (scheme + host, no path).');
+      return;
+    }
+    setErr(null);
+    setDraft('');
+    if (!origins.includes(normalized)) setOrigins([...origins, normalized]);
+  };
+
+  const remove = (o: string) => setOrigins(origins.filter((x) => x !== o));
+
+  const save = async (next: string[]) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await adminPatch(`/admin/workspaces/${slug}/allowed-origins`, next);
+      setOrigins(next);
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Allowed origins
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Web origins permitted to embed the Connect SDK for this workspace. OAuth
+          launches and results are only ever scoped to a listed origin. Empty = no
+          restriction (the origin the SDK runs on is trusted as-is).
+        </p>
+        {origins.length > 0 ? (
+          <div className="space-y-1.5">
+            {origins.map((o) => (
+              <div
+                key={o}
+                className="flex items-center justify-between rounded-md bg-secondary/20 px-2.5 py-1.5 text-xs"
+              >
+                <code className="flex-1 break-all font-mono">{o}</code>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => remove(o)}
+                  aria-label={`Remove ${o}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs italic text-muted-foreground">
+            No origins configured — no restriction applied.
+          </div>
+        )}
+        <div className="flex gap-2">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                add();
+              }
+            }}
+            placeholder="https://app.example.com"
+          />
+          <Button size="sm" variant="secondary" disabled={busy || !draft.trim()} onClick={add}>
+            <Plus className="h-3.5 w-3.5" /> Add
+          </Button>
+        </div>
+        {err && <div className="text-sm text-danger">↯ {err}</div>}
+        <div className="flex gap-2 pt-1">
+          <Button size="sm" disabled={busy} onClick={() => save(origins)}>
+            {busy ? 'Saving…' : 'Save'}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => save([])}>
+            Clear origins
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

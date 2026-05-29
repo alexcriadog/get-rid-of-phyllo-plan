@@ -59,7 +59,7 @@ export function ConnectShell(props: Props) {
     const post = () =>
       window.parent?.postMessage(
         { type: 'camaleonic.connect.resize', height: document.body.scrollHeight },
-        props.origin || '*',
+        props.origin || window.location.origin,
       );
     post();
     const ro = new ResizeObserver(post);
@@ -91,7 +91,7 @@ export function ConnectShell(props: Props) {
   useEffect(() => () => { if (popupTimer.current !== null) window.clearInterval(popupTimer.current); }, []);
 
   function exit() {
-    window.parent?.postMessage({ type: 'camaleonic.connect.exit' }, props.origin || '*');
+    window.parent?.postMessage({ type: 'camaleonic.connect.exit' }, props.origin || window.location.origin);
   }
 
   function login(p: PlatformKey) {
@@ -102,7 +102,7 @@ export function ConnectShell(props: Props) {
       setError('Your browser blocked the login window. Please allow pop-ups and try again.');
       window.parent?.postMessage(
         { type: 'camaleonic.connect.error', code: 'popup_blocked', message: 'Provider login popup blocked' },
-        props.origin || '*',
+        props.origin || window.location.origin,
       );
       return;
     }
