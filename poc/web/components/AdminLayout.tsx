@@ -54,6 +54,7 @@ const NAV: NavSection[] = [
     title: 'Operations',
     items: [
       { href: '/admin/next-runs', label: 'Scheduling', icon: Clock },
+      { href: '/admin/queues', label: 'Queues', icon: ListOrdered },
       { href: '/admin/rate-limits', label: 'Rate limits', icon: Gauge },
       { href: '/admin/cadence', label: 'Cadence', icon: Repeat },
       { href: '/admin/throttle-locks', label: 'Throttle locks', icon: Lock },
