@@ -11,9 +11,12 @@ const ALG = 'HS256';
 const TYP = 'JWT';
 const ISS = 'camaleonic';
 const AUD = 'connect-ui';
-const DEFAULT_TTL_SECONDS = 1800; // 30 min
+// Default kept deliberately short to shrink the replay window if a minted
+// token is intercepted. 5 min is ample for a user to open the widget and
+// pick a platform. Clients that need longer may request up to MAX.
+const DEFAULT_TTL_SECONDS = 300; // 5 min
 const MIN_TTL_SECONDS = 60;
-const MAX_TTL_SECONDS = 1800;
+const MAX_TTL_SECONDS = 1800; // 30 min hard ceiling
 
 const ALLOWED_PLATFORMS: ReadonlyArray<string> = [
   'instagram',
@@ -240,8 +243,15 @@ function base64UrlDecode(input: string): Buffer {
 }
 
 function randomJti(): string {
-  // 16 random bytes → 22-char base64url. Enough entropy for replay
-  // detection if we ever track issued tokens; today it's just identifying.
+  // 16 random bytes → 22-char base64url. Used as a stable per-token id for
+  // audit logging. NOTE: we deliberately do NOT enforce single-use at
+  // verify() — verify is idempotent and called multiple times for the same
+  // token within one legitimate flow (the /connect iframe SSR verifies to
+  // render, then /api/oauth/start verifies again to launch). Rejecting the
+  // second verify would break every OAuth launch. Replay misuse is bounded
+  // instead by the short TTL above + the per-workspace origin allow-list
+  // (postMessage results can only reach a registered origin), so a leaked
+  // token can't be turned into a cross-origin data leak.
   return base64UrlEncode(randomBytes(16));
 }
 

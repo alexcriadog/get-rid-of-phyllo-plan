@@ -21,7 +21,7 @@ import {
 import type { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 
-const LOOPBACK_PREFIXES = ['127.', '::1', '::ffff:127.', 'localhost'];
+const LOOPBACK_PREFIXES = ['127.', '::1', '::ffff:127.'];
 
 @Injectable()
 export class ConnectToolGuard implements CanActivate {
@@ -41,14 +41,15 @@ export class ConnectToolGuard implements CanActivate {
       return true;
     }
 
-    // Loopback bypass (operator on the host running curl, paste-token UI).
+    // Loopback bypass (operator on the host running curl). We key ONLY on
+    // the real socket IP — NOT the Host header, which a client fully
+    // controls (an attacker could send `Host: localhost:3000` through the
+    // proxy to forge a bypass). req.ip is trustworthy here because the app
+    // does not enable Express `trust proxy`, so X-Forwarded-For can't spoof
+    // it — behind Caddy req.ip is the proxy's container IP (non-loopback),
+    // which correctly forces the bearer check for all proxied traffic.
     const ip = (req.ip ?? req.socket?.remoteAddress ?? '').toLowerCase();
-    const host = (req.headers.host ?? '').toLowerCase();
-    const isLoopback =
-      LOOPBACK_PREFIXES.some((p) => ip.startsWith(p)) ||
-      host.startsWith('localhost:') ||
-      host.startsWith('127.0.0.1:');
-    if (isLoopback) {
+    if (LOOPBACK_PREFIXES.some((p) => ip.startsWith(p))) {
       return true;
     }
 
