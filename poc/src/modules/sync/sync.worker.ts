@@ -8,6 +8,7 @@ import {
 import { createHash } from 'node:crypto';
 import { ulid } from 'ulid';
 import type { Job, Worker } from 'bullmq';
+import type { AnyBulkWriteOperation } from 'mongodb';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { MongoService } from '@shared/database/mongo.service';
@@ -640,32 +641,35 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
         return { itemsAdded: 0, sampleIds: [] };
       }
       const col = this.mongo.getCollection('comments');
-      let inserted = 0;
-      const sampleIds: string[] = [];
+      // One bulkWrite instead of N sequential updateOne — at 500 comments
+      // that's 1 round-trip vs 500. ordered:false lets Mongo parallelise.
+      const ops: AnyBulkWriteOperation[] = [];
+      const idByOpIndex: string[] = [];
       for (const comment of comments) {
         const cid = (comment as { platformCommentId?: string }).platformCommentId;
         if (!cid) continue;
-        const r = await col.updateOne(
-          { account_id: accountIdStr, platform_comment_id: cid },
-          {
-            $set: {
-              account_id: accountIdStr,
-              platform,
-              platform_content_id: comment.platformContentId,
-              platform_comment_id: cid,
-              data: comment,
-              updated_at: now,
+        idByOpIndex.push(cid);
+        ops.push({
+          updateOne: {
+            filter: { account_id: accountIdStr, platform_comment_id: cid },
+            update: {
+              $set: {
+                account_id: accountIdStr,
+                platform,
+                platform_content_id: comment.platformContentId,
+                platform_comment_id: cid,
+                data: comment,
+                updated_at: now,
+              },
+              $setOnInsert: { created_at: now },
             },
-            $setOnInsert: { created_at: now },
+            upsert: true,
           },
-          { upsert: true },
-        );
-        if (r.upsertedCount === 1) {
-          inserted += 1;
-          if (sampleIds.length < 20) sampleIds.push(cid);
-        }
+        });
       }
-      return { itemsAdded: inserted, sampleIds };
+      if (ops.length === 0) return { itemsAdded: 0, sampleIds: [] };
+      const res = await col.bulkWrite(ops, { ordered: false });
+      return this.deltaFromBulk(res, idByOpIndex);
     }
 
     // content (engagement_new, stories, mentions)
@@ -674,31 +678,52 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
       return { itemsAdded: 0, sampleIds: [] };
     }
     const col = this.mongo.getCollection('posts');
-    let inserted = 0;
-    const sampleIds: string[] = [];
+    const ops: AnyBulkWriteOperation[] = [];
+    const idByOpIndex: string[] = [];
     for (const post of posts) {
       const platformContentId = this.extractContentId(post);
       if (!platformContentId) continue;
-      const r = await col.updateOne(
-        { account_id: accountIdStr, platform_content_id: platformContentId },
-        {
-          $set: {
-            account_id: accountIdStr,
-            platform,
-            platform_content_id: platformContentId,
-            data: post,
-            updated_at: now,
+      idByOpIndex.push(platformContentId);
+      ops.push({
+        updateOne: {
+          filter: { account_id: accountIdStr, platform_content_id: platformContentId },
+          update: {
+            $set: {
+              account_id: accountIdStr,
+              platform,
+              platform_content_id: platformContentId,
+              data: post,
+              updated_at: now,
+            },
+            $setOnInsert: { created_at: now },
           },
-          $setOnInsert: { created_at: now },
+          upsert: true,
         },
-        { upsert: true },
-      );
-      if (r.upsertedCount === 1) {
-        inserted += 1;
-        if (sampleIds.length < 20) sampleIds.push(platformContentId);
-      }
+      });
     }
-    return { itemsAdded: inserted, sampleIds };
+    if (ops.length === 0) return { itemsAdded: 0, sampleIds: [] };
+    const res = await col.bulkWrite(ops, { ordered: false });
+    return this.deltaFromBulk(res, idByOpIndex);
+  }
+
+  /**
+   * Derive {itemsAdded, sampleIds} from a bulkWrite result. Mongo's
+   * `upsertedIds` is keyed by the op's index in the ops array; we map
+   * those indices back to the platform id we recorded per op. Only
+   * genuinely-new docs (upserts) count — updates to existing docs are
+   * not "new items" for the data.<product>.updated webhook.
+   */
+  private deltaFromBulk(
+    res: { upsertedCount: number; upsertedIds?: Record<number, unknown> },
+    idByOpIndex: ReadonlyArray<string>,
+  ): { itemsAdded: number; sampleIds: string[] } {
+    const upsertedIndices = Object.keys(res.upsertedIds ?? {});
+    const sampleIds: string[] = [];
+    for (const idxStr of upsertedIndices) {
+      const id = idByOpIndex[Number(idxStr)];
+      if (id && sampleIds.length < 20) sampleIds.push(id);
+    }
+    return { itemsAdded: res.upsertedCount ?? upsertedIndices.length, sampleIds };
   }
 
   private extractContentId(post: ContentData): string | null {

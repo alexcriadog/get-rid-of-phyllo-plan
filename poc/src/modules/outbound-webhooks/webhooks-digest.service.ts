@@ -92,9 +92,22 @@ export class WebhooksDigestService implements OnApplicationBootstrap {
       });
       if (batch.length === 0) break;
 
+      // Batch-load every account referenced by this batch in ONE query
+      // instead of a findUnique per bucket (was N+1). Build a Map keyed
+      // by stringified id (BigInt isn't a usable Map key across re-reads).
+      const accountIds = [...new Set(batch.map((b) => b.accountId))];
+      const accounts = await this.prisma.account.findMany({
+        where: { id: { in: accountIds } },
+        select: { id: true, platform: true, workspaceId: true, isTest: true },
+      });
+      const accountById = new Map(
+        accounts.map((a) => [a.id.toString(), a]),
+      );
+
       for (const bucket of batch) {
         try {
-          const ok = await this.flushOne(bucket);
+          const account = accountById.get(bucket.accountId.toString()) ?? null;
+          const ok = await this.flushOne(bucket, account);
           if (ok) flushed += 1;
           else failed += 1;
         } catch (err) {
@@ -133,22 +146,25 @@ export class WebhooksDigestService implements OnApplicationBootstrap {
    * (delivered or intentionally dropped) and the row deleted; false if
    * we hit a recoverable error and want to retry next cron.
    */
-  private async flushOne(bucket: {
-    id: string;
-    endpointId: string;
-    accountId: bigint;
-    product: string;
-    cadence: string;
-    itemsAdded: number;
-    sampleIds: unknown;
-    firstSeenAt: Date;
-    endpoint: {
+  private async flushOne(
+    bucket: {
       id: string;
-      active: boolean;
-      events: unknown;
-      workspaceId: string;
-    };
-  }): Promise<boolean> {
+      endpointId: string;
+      accountId: bigint;
+      product: string;
+      cadence: string;
+      itemsAdded: number;
+      sampleIds: unknown;
+      firstSeenAt: Date;
+      endpoint: {
+        id: string;
+        active: boolean;
+        events: unknown;
+        workspaceId: string;
+      };
+    },
+    account: { platform: string; workspaceId: string; isTest: boolean } | null,
+  ): Promise<boolean> {
     const eventName = `data.${bucket.product}.updated`;
 
     // Subscription re-check: client may have PATCHed events between
@@ -162,17 +178,9 @@ export class WebhooksDigestService implements OnApplicationBootstrap {
       return true;
     }
 
-    // Reload account context for the platform field. If the account is
-    // gone we drop the bucket — there's no useful payload to send.
-    const account = await this.prisma.account.findUnique({
-      where: { id: bucket.accountId },
-      select: { platform: true, workspaceId: true, isTest: true },
-    });
-    if (!account) {
-      await this.prisma.pendingWebhookEvent.delete({ where: { id: bucket.id } });
-      return true;
-    }
-    if (account.isTest) {
+    // Account was batch-loaded by the caller. If it's gone or test-mode,
+    // drop the bucket — there's no useful payload to send.
+    if (!account || account.isTest) {
       await this.prisma.pendingWebhookEvent.delete({ where: { id: bucket.id } });
       return true;
     }
