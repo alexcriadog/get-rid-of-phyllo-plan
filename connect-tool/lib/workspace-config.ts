@@ -1,6 +1,15 @@
 import axios from 'axios';
+import { getRedis } from './redis';
 
 export type ProductsConfig = Record<string, string[]> | null;
+
+// Workspace products config is read on every /api/oauth/start. It only
+// changes when an operator edits the workspace in the admin UI, so a short
+// Redis cache cuts the per-start round-trip to POC without making stale
+// data linger. 5 min is well within tolerance for a config change to
+// propagate.
+const WS_CONFIG_TTL_SECONDS = 5 * 60;
+const WS_CONFIG_PREFIX = 'wsconfig:';
 
 // Catalog types — mirror poc/src/modules/accounts/products.catalog.ts. The
 // shape comes over the wire via GET /internal/products-catalog (single
@@ -61,18 +70,54 @@ export function platformReachableAtOAuthStart(
   return Object.prototype.hasOwnProperty.call(config, oauthPlatform);
 }
 
-/** Server-only: fetch a workspace's products config from POC (null on any failure). */
+/**
+ * Server-only: fetch a workspace's products config from POC (null on any
+ * failure). Backed by a 5-min Redis cache.
+ *
+ * IMPORTANT: only SUCCESSFUL fetches are cached — including a legitimate
+ * `null` (= unrestricted workspace), stored as `{"products": null}`. A
+ * failure (POC unreachable / non-200) returns null WITHOUT writing the
+ * cache, so a transient POC blip can never get pinned as "unrestricted"
+ * for 5 minutes and wrongly widen the OAuth scopes we request.
+ *
+ * The cache is best-effort: any Redis error (read or write, including a
+ * missing REDIS_URL) is swallowed and we fall through to the live fetch.
+ */
 export async function fetchWorkspaceProducts(slug: string): Promise<ProductsConfig> {
   const baseUrl = process.env.POC_API_URL;
   if (!baseUrl) return null;
+
+  const cacheKey = `${WS_CONFIG_PREFIX}${slug}`;
+  try {
+    const cached = await getRedis().get(cacheKey);
+    if (cached !== null) {
+      const env = JSON.parse(cached) as { products: ProductsConfig };
+      return env.products ?? null;
+    }
+  } catch {
+    // Cache miss-by-error — fall through to the live fetch.
+  }
+
   try {
     const res = await axios.get<{ products: ProductsConfig }>(
       `${baseUrl}/internal/workspaces/${encodeURIComponent(slug)}/branding`,
       { timeout: 5_000, proxy: false, validateStatus: () => true },
     );
-    return res.status === 200 ? (res.data.products ?? null) : null;
+    if (res.status !== 200) return null; // do NOT cache failures
+    const products = res.data.products ?? null;
+    try {
+      await getRedis().set(
+        cacheKey,
+        JSON.stringify({ products }),
+        'EX',
+        WS_CONFIG_TTL_SECONDS,
+      );
+    } catch {
+      // Cache write failure is non-fatal.
+    }
+    return products;
   } catch {
-    return null;
+    return null; // network error — do NOT cache
   }
 }
 
