@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { verifySdkToken } from '../../lib/oauth-context';
 import { internalAuthHeader } from '../../lib/poc-internal';
+import { sanitizeAccent } from '../../lib/css-color';
 import { fetchConnections } from '../../lib/connections';
 import { fetchWorkspaceProducts, offeredPlatforms } from '../../lib/workspace-config';
 import { ConnectShell } from './ConnectShell';
@@ -77,10 +78,9 @@ export default async function ConnectPage({
     typeof branding?.logo_url === 'string' && /^https?:\/\//.test(branding.logo_url)
       ? branding.logo_url
       : null;
-  const accent =
-    typeof branding?.primary_color === 'string' && branding.primary_color.trim().length > 0
-      ? branding.primary_color.trim()
-      : null;
+  const accent = sanitizeAccent(
+    typeof branding?.primary_color === 'string' ? branding.primary_color : null,
+  );
 
   return (
     <ConnectShell

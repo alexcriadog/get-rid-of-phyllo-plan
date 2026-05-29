@@ -4,6 +4,7 @@
 
 import { redirect } from 'next/navigation';
 import { getFbSession } from '../../../lib/session';
+import { sanitizeAccent } from '../../../lib/css-color';
 import {
   fetchProductsCatalog,
   fetchWorkspaceProducts,
@@ -35,7 +36,7 @@ export default async function FacebookPagesPage({
   const embed = first(sp.embed);
   const origin = first(sp.origin);
   const theme = first(sp.theme) === 'dark' ? 'dark' : 'light';
-  const accent = first(sp.accent);
+  const accent = sanitizeAccent(first(sp.accent));
   if (!sessionId) {
     redirect('/?error=' + encodeURIComponent('Missing session id'));
   }

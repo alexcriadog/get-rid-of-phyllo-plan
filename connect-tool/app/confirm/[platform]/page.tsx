@@ -4,6 +4,7 @@
 
 import { redirect } from 'next/navigation';
 import { getSimpleSession } from '../../../lib/session';
+import { sanitizeAccent } from '../../../lib/css-color';
 import type { PlatformKey } from '../../../lib/platforms';
 import {
   fetchProductsCatalog,
@@ -42,7 +43,7 @@ export default async function ConfirmPage({
   const embed = first(sp.embed);
   const origin = first(sp.origin);
   const theme = first(sp.theme) === 'dark' ? 'dark' : 'light';
-  const accent = first(sp.accent);
+  const accent = sanitizeAccent(first(sp.accent));
 
   const catalog = await fetchProductsCatalog();
   if (!sessionId || !catalog || !catalog.catalog[platform]) {

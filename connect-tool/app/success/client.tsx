@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { useEmbedAutosize } from '../../lib/useEmbedAutosize';
+import { sanitizeAccent } from '../../lib/css-color';
 import { PlatformIcon, BRAND } from '../connect/PlatformIcon';
 import { isPlatformKey } from '../connect/shell-machine';
 
@@ -67,7 +68,7 @@ export function SuccessClient() {
     const pk = isPlatformKey(platform) ? platform : null;
     const handle = typeof summary?.handle === 'string' ? (summary.handle as string) : '';
     const theme = params.get('theme') === 'dark' ? 'dark' : 'light';
-    const accent = params.get('accent');
+    const accent = sanitizeAccent(params.get('accent'));
     const rootStyle = accent
       ? ({ ['--cml-accent']: accent, ['--cml-on-accent']: '#ffffff' } as React.CSSProperties)
       : undefined;

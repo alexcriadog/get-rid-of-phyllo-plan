@@ -35,7 +35,10 @@ await build({
   globalName: '__CamaleonicConnectBundle',
   target: ['es2018'],
   minify: true,
-  sourcemap: true,
+  // No source map for the public bundle — we don't want to ship the full
+  // TS source (and the sourceMappingURL comment that auto-loads it) to
+  // every visitor. The dist/ build (for npm consumers) is unaffected.
+  sourcemap: false,
   banner: { js: banner },
   footer: {
     // Promote the default export so `CamaleonicConnect.init(...)` works
