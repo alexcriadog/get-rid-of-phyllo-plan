@@ -17,6 +17,7 @@ import {
   Plug2,
   Repeat,
   Send,
+  Server,
   TableProperties,
   Users,
   Webhook,
@@ -83,6 +84,10 @@ const NAV: NavSection[] = [
   {
     title: 'Onboarding',
     items: [{ href: '/admin/connect', label: 'Connect new', icon: Plug2 }],
+  },
+  {
+    title: 'Platform',
+    items: [{ href: '/admin/system-health', label: 'System health', icon: Server }],
   },
 ];
 
