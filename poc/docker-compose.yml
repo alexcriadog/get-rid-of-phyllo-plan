@@ -96,10 +96,15 @@ services:
       PUBLIC_BASE_URL: "${CONNECT_TOOL_PUBLIC_URL:-http://localhost:3002}"
       POC_ADMIN_URL: "${POC_ADMIN_URL:-http://localhost:3001/admin}"
       NEXT_PUBLIC_POC_ADMIN_URL: "${POC_ADMIN_URL:-http://localhost:3001/admin}"
+      # Shared Redis (same instance the POC core uses) — backs the OAuth
+      # session store so connect-tool is stateless / horizontally scalable.
+      REDIS_URL: "redis://redis:6379"
       NODE_ENV: production
     ports: ["3002:3002"]
     depends_on:
       api:
+        condition: service_started
+      redis:
         condition: service_started
     restart: unless-stopped
 

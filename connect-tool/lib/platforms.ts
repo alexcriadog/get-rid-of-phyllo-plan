@@ -165,7 +165,7 @@ const facebook: PlatformDef = {
       );
     }
 
-    const sessionId = putSession({ kind: 'fb', userToken, pages });
+    const sessionId = await putSession({ kind: 'fb', userToken, pages });
     return {
       kind: 'fb-picker',
       sessionId,
@@ -253,7 +253,7 @@ const youtube: PlatformDef = {
     };
     const handle =
       ch.snippet?.customUrl?.replace(/^@/, '') ?? ch.snippet?.title;
-    const sessionId = putSession({
+    const sessionId = await putSession({
       kind: 'simple',
       platform: 'youtube',
       seedBody,
@@ -383,7 +383,7 @@ const tiktok: PlatformDef = {
           : undefined,
       },
     };
-    const sessionId = putSession({
+    const sessionId = await putSession({
       kind: 'simple',
       platform: 'tiktok',
       seedBody,
@@ -485,7 +485,7 @@ const threads: PlatformDef = {
       // response). POC doesn't read this field, so we drop it.
       metadata: { user_id: userId },
     };
-    const sessionId = putSession({
+    const sessionId = await putSession({
       kind: 'simple',
       platform: 'threads',
       seedBody,
@@ -633,7 +633,7 @@ const twitch: PlatformDef = {
         scopes,
       },
     };
-    const sessionId = putSession({
+    const sessionId = await putSession({
       kind: 'simple',
       platform: 'twitch',
       seedBody,

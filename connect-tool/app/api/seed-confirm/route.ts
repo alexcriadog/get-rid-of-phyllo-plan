@@ -41,7 +41,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const session = getSimpleSession(parsed.data.sessionId);
+  const session = await getSimpleSession(parsed.data.sessionId);
   if (!session) {
     return NextResponse.json(
       { error: 'session expired or unknown — restart OAuth' },
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const contextSessionId = getContextCookie(req);
   const context =
     session.ctx ??
-    (contextSessionId ? getOAuthContextSession(contextSessionId) : null);
+    (contextSessionId ? await getOAuthContextSession(contextSessionId) : null);
 
   const seedBody = {
     ...session.seedBody,
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     const seeded = await postToPocSeed(seedBody);
-    dropSession(parsed.data.sessionId);
+    await dropSession(parsed.data.sessionId);
     const response = NextResponse.json({
       account_id: seeded.account_id,
       sync_jobs_created: seeded.sync_jobs_created,
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       opener_origin: context?.openerOrigin ?? null,
     });
     if (contextSessionId) {
-      dropSession(contextSessionId);
+      await dropSession(contextSessionId);
       setContextCookie(response, null);
     }
     return response;

@@ -48,7 +48,7 @@ export default async function ConfirmPage({
   if (!sessionId || !catalog || !catalog.catalog[platform]) {
     redirect('/?error=' + encodeURIComponent('Missing session or platform'));
   }
-  const session = getSimpleSession(sessionId);
+  const session = await getSimpleSession(sessionId);
   if (!session) {
     redirect(
       '/?error=' +

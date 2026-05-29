@@ -58,7 +58,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const session = getFbSession(parsed.data.sessionId);
+  const session = await getFbSession(parsed.data.sessionId);
   if (!session) {
     return NextResponse.json(
       { error: 'session expired or unknown — restart Facebook OAuth' },
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const contextSessionId = getContextCookie(req);
   const context =
     session.ctx ??
-    (contextSessionId ? getOAuthContextSession(contextSessionId) : null);
+    (contextSessionId ? await getOAuthContextSession(contextSessionId) : null);
   const tenantFields = context
     ? {
         workspace_id: context.workspaceId,
@@ -143,14 +143,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     results.push(result);
   }
 
-  // Drop the session so the user_token doesn't linger in memory.
-  dropSession(parsed.data.sessionId);
+  // Drop the session so the user_token doesn't linger in Redis.
+  await dropSession(parsed.data.sessionId);
   const response = NextResponse.json({
     results,
     opener_origin: context?.openerOrigin ?? null,
   });
   if (contextSessionId) {
-    dropSession(contextSessionId);
+    await dropSession(contextSessionId);
     setContextCookie(response, null);
   }
   return response;

@@ -39,7 +39,7 @@ export default async function FacebookPagesPage({
   if (!sessionId) {
     redirect('/?error=' + encodeURIComponent('Missing session id'));
   }
-  const session = getFbSession(sessionId);
+  const session = await getFbSession(sessionId);
   if (!session) {
     redirect(
       '/?error=' +

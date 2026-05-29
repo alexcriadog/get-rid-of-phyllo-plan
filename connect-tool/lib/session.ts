@@ -1,18 +1,26 @@
-// In-memory session store for OAuth flows that need a confirmation step
-// (product picker for all 5 platforms; page picker for FB).
+// Redis-backed session store for OAuth flows that need a confirmation
+// step (product picker for all 5 platforms; page picker for FB).
 //
 // Why: between the OAuth callback (which has the freshly-exchanged
 // access token) and the seed POST (where the operator confirms which
 // products to enable) we need to remember the token + preview info. But
 // we MUST NOT persist it to disk — it's a transient bridge.
 //
-// TTL is 10 minutes; the operator should pick within that window. After
-// expiration the session is dropped and the operator must restart OAuth.
+// TTL is 10 minutes (Redis-native PX expiry); the operator should pick
+// within that window. After expiration the key is gone and the operator
+// must restart OAuth.
+//
+// Why Redis (not the old in-memory Map): connect-tool must be stateless
+// so it can run behind a load balancer — the OAuth callback may land on
+// a different instance than the one that started the flow. The shared
+// Redis (same instance POC uses) gives every instance the same view.
 
 import { randomBytes } from 'node:crypto';
 import type { SeedBody } from './seed-client';
+import { getRedis } from './redis';
 
 const TTL_MS = 10 * 60 * 1000;
+const KEY_PREFIX = 'session:';
 
 export interface FbPageInSession {
   id: string;
@@ -99,26 +107,12 @@ export interface OAuthContextSession {
 
 export type Session = FbSession | SimpleSession | OAuthContextSession;
 
-// Singleton in-process map. The connect-tool runs as a single Next.js
-// server, so there's only ever one instance.
-//
-// IMPORTANT: Next.js in production (`output: 'standalone'`) bundles API
-// routes and Page SSR into SEPARATE webpack chunks. Module-level state
-// is therefore duplicated across bundles even though they run in the
-// same Node process — a session put from /api/oauth/callback/facebook
-// would be invisible from /facebook/pages getServerSideProps. Anchoring
-// the Map on globalThis dedupes it back to a single instance.
-//
-// If we ever scale horizontally, replace with Redis or move to encrypted
-// cookies.
-const GLOBAL_KEY = '__connect_tool_oauth_sessions__';
-type GlobalStore = { [GLOBAL_KEY]?: Map<string, Session> };
-const g = globalThis as unknown as GlobalStore;
-const store: Map<string, Session> =
-  g[GLOBAL_KEY] ?? (g[GLOBAL_KEY] = new Map<string, Session>());
-
 export function newSessionId(): string {
   return randomBytes(16).toString('hex');
+}
+
+function redisKey(id: string): string {
+  return `${KEY_PREFIX}${id}`;
 }
 
 // Distributive omit so the discriminated union stays intact (TS doesn't
@@ -128,44 +122,58 @@ type PutSessionInput =
   | Omit<SimpleSession, 'createdAt'>
   | Omit<OAuthContextSession, 'createdAt'>;
 
-export function putSession(session: PutSessionInput): string {
-  pruneExpired();
+export async function putSession(session: PutSessionInput): Promise<string> {
   const id = newSessionId();
-  store.set(id, { ...session, createdAt: Date.now() } as Session);
+  const payload: Session = { ...session, createdAt: Date.now() } as Session;
+  await getRedis().set(redisKey(id), JSON.stringify(payload), 'PX', TTL_MS);
   return id;
 }
 
-export function getSession(id: string): Session | null {
-  pruneExpired();
-  const hit = store.get(id);
-  if (!hit) return null;
-  if (Date.now() - hit.createdAt > TTL_MS) {
-    store.delete(id);
+export async function getSession(id: string): Promise<Session | null> {
+  if (!id) return null;
+  const raw = await getRedis().get(redisKey(id));
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Session;
+    // Defensive: a value with no recognised discriminator is corrupt.
+    if (
+      parsed.kind === 'fb' ||
+      parsed.kind === 'simple' ||
+      parsed.kind === 'oauth-context'
+    ) {
+      return parsed;
+    }
+    return null;
+  } catch {
     return null;
   }
-  return hit;
 }
 
 /** Convenience: returns the session only if it's of the FB shape. */
-export function getFbSession(id: string): FbSession | null {
-  const s = getSession(id);
+export async function getFbSession(id: string): Promise<FbSession | null> {
+  const s = await getSession(id);
   return s && s.kind === 'fb' ? s : null;
 }
 
 /** Convenience: returns the session only if it's a simple-platform shape. */
-export function getSimpleSession(id: string): SimpleSession | null {
-  const s = getSession(id);
+export async function getSimpleSession(
+  id: string,
+): Promise<SimpleSession | null> {
+  const s = await getSession(id);
   return s && s.kind === 'simple' ? s : null;
 }
 
 /** Convenience: returns the session only if it's the SDK OAuth context shape. */
-export function getOAuthContextSession(id: string): OAuthContextSession | null {
-  const s = getSession(id);
+export async function getOAuthContextSession(
+  id: string,
+): Promise<OAuthContextSession | null> {
+  const s = await getSession(id);
   return s && s.kind === 'oauth-context' ? s : null;
 }
 
-export function dropSession(id: string): void {
-  store.delete(id);
+export async function dropSession(id: string): Promise<void> {
+  if (!id) return;
+  await getRedis().del(redisKey(id));
 }
 
 /**
@@ -173,17 +181,17 @@ export function dropSession(id: string): void {
  * OAuth callback (which still runs top-level in the popup, so the context
  * cookie is readable there) so the seed handlers can read workspace/end-user
  * from the session id — not the cookie, which a third-party iframe withholds.
+ *
+ * Read-modify-write preserving the remaining TTL: we re-SET with KEEPTTL so
+ * attaching context never resets the 10-minute expiry window.
  */
-export function attachContext(id: string, ctx: SessionContext): void {
-  const s = store.get(id);
+export async function attachContext(
+  id: string,
+  ctx: SessionContext,
+): Promise<void> {
+  const s = await getSession(id);
   if (s && (s.kind === 'simple' || s.kind === 'fb')) {
-    s.ctx = ctx;
-  }
-}
-
-function pruneExpired(): void {
-  const cutoff = Date.now() - TTL_MS;
-  for (const [id, s] of store.entries()) {
-    if (s.createdAt < cutoff) store.delete(id);
+    const updated: Session = { ...s, ctx };
+    await getRedis().set(redisKey(id), JSON.stringify(updated), 'KEEPTTL');
   }
 }

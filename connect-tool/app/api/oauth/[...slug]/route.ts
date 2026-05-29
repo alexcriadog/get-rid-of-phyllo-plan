@@ -50,7 +50,17 @@ const VALID_PLATFORMS = new Set<PlatformKey>([
 //
 // Anchored on globalThis because Next.js standalone bundles route
 // handlers into a separate webpack chunk — a module-level Map would be
-// duplicated across bundles (same trick session.ts uses).
+// duplicated across bundles.
+//
+// NOTE (multi-instance): this dedupe is per-process — it caches the
+// in-flight Promise, which can't be serialized to Redis. With 2+
+// instances behind a load balancer a duplicate callback for the SAME
+// code could land on a different instance and re-attempt the (single-use)
+// exchange, which fails. That's the rare Chrome-preload race; the first
+// request still succeeds and creates the (Redis-backed) session, so the
+// blast radius is one spurious error on the duplicate. Accepted tradeoff
+// — a cross-instance lock here would mean polling Redis for a session the
+// other instance may not have written yet.
 const CALLBACK_CACHE_TTL_MS = 60_000;
 type CallbackEntry = { promise: Promise<CallbackResult>; clearAt: number };
 const CALLBACK_CACHE_KEY = '__connect_tool_callback_inflight__';
@@ -164,7 +174,7 @@ export async function GET(
         }
         const origin = sp.get('origin') ?? undefined;
         const embedded = sp.get('embed') === '1';
-        contextSessionId = putSession({
+        contextSessionId = await putSession({
           kind: 'oauth-context',
           workspaceId: claims.ws,
           workspaceSlug: ws,
@@ -234,7 +244,7 @@ export async function GET(
       }
       const result = await entry.promise;
       const ctxId = getContextCookie(req);
-      const ctx = ctxId ? getOAuthContextSession(ctxId) : null;
+      const ctx = ctxId ? await getOAuthContextSession(ctxId) : null;
       const embedded = !!ctx?.embedded;
 
       // Persist tenant context ON the result session (keyed by sessionId,
@@ -243,7 +253,7 @@ export async function GET(
       // withholds (SameSite=Lax). This callback runs top-level in the popup,
       // so the cookie is still readable here.
       if (ctx) {
-        attachContext(result.sessionId, {
+        await attachContext(result.sessionId, {
           workspaceId: ctx.workspaceId,
           endUserId: ctx.endUserId,
           environment: ctx.environment,
