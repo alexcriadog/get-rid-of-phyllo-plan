@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { verifySdkToken } from '../../lib/oauth-context';
+import { internalAuthHeader } from '../../lib/poc-internal';
 import { fetchConnections } from '../../lib/connections';
 import { fetchWorkspaceProducts, offeredPlatforms } from '../../lib/workspace-config';
 import { ConnectShell } from './ConnectShell';
@@ -20,7 +21,7 @@ async function fetchBranding(slug: string): Promise<Branding | null> {
   try {
     const res = await axios.get<{ branding: Branding | null }>(
       `${baseUrl}/internal/workspaces/${encodeURIComponent(slug)}/branding`,
-      { timeout: 5_000, proxy: false, validateStatus: () => true },
+      { timeout: 5_000, proxy: false, validateStatus: () => true, headers: { ...internalAuthHeader() } },
     );
     return res.status === 200 ? res.data.branding : null;
   } catch {

@@ -4,6 +4,15 @@
 smconnector.camaleonicanalytics.com {
 	encode gzip
 
+	# /internal/* is a service-to-service zone (sdk-token verify, workspace
+	# branding, end-user account lists). It must NEVER be reachable from the
+	# public internet. Deny it at the edge BEFORE the /api/poc/* passthrough
+	# below (handle blocks evaluate in source order). The api also guards
+	# /internal/* server-side (InternalAuthGuard) — this is defence in depth.
+	handle /api/poc/internal/* {
+		respond 403
+	}
+
 	# POC backend exposed under /api/poc — bearer-guarded by ConnectToolGuard
 	# for /admin/connect/*; the rest of /admin/* on the API is also reachable
 	# (read-only operator endpoints).

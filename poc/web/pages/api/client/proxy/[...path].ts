@@ -11,10 +11,11 @@ import { CONNECTOR_API_URL } from '../../../../lib/api';
 import { readApiKeyFromRequest } from '../../../../lib/client-session';
 
 const ALLOWED_METHODS = new Set(['GET', 'POST', 'DELETE', 'PATCH', 'PUT']);
-// Only /v1/* and /internal/sdk-tokens/verify (the rest of /internal is
-// operator-only). Block everything else so the proxy can't be turned
-// into a tunnel for /admin/*.
-const ALLOWED_PREFIXES = ['v1/', 'internal/sdk-tokens/verify'];
+// Only /v1/* — the public, workspace-scoped SaaS surface. The /internal/*
+// zone is service-to-service (bearer-guarded) and must never be reachable
+// from a browser, so this proxy refuses to tunnel to it. Block everything
+// else so the proxy can't be turned into a tunnel for /admin/* either.
+const ALLOWED_PREFIXES = ['v1/'];
 
 export default async function handler(
   req: NextApiRequest,

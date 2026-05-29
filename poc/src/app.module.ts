@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { InternalAuthGuard } from '@shared/auth/internal-auth.guard';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppConfigModule } from '@shared/config/config.module';
 import { PlatformErrorFilter } from '@/common/filters/platform-error.filter';
@@ -50,6 +51,12 @@ import { AdminSaasModule } from '@modules/admin-saas/admin-saas.module';
       // discover, etc.) and surfaces them as proper 401 / 502 / 503.
       provide: APP_FILTER,
       useClass: PlatformErrorFilter,
+    },
+    {
+      // Global guard — enforces the connect-tool service bearer on every
+      // /internal/* route (no-op on all other paths). See InternalAuthGuard.
+      provide: APP_GUARD,
+      useClass: InternalAuthGuard,
     },
   ],
 })

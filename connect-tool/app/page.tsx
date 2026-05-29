@@ -8,6 +8,7 @@
 import Link from 'next/link';
 import axios from 'axios';
 import { PlatformTile, type PlatformInfo } from '../components/PlatformTile';
+import { internalAuthHeader } from '../lib/poc-internal';
 
 interface Branding {
   logo_url?: string;
@@ -38,7 +39,7 @@ async function fetchBranding(slug: string): Promise<Branding | null> {
   try {
     const res = await axios.get<{ slug: string; branding: Branding | null }>(
       `${baseUrl}/internal/workspaces/${encodeURIComponent(slug)}/branding`,
-      { timeout: 5_000, proxy: false, validateStatus: () => true },
+      { timeout: 5_000, proxy: false, validateStatus: () => true, headers: { ...internalAuthHeader() } },
     );
     if (res.status !== 200) return null;
     return res.data.branding;

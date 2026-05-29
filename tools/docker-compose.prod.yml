@@ -115,6 +115,10 @@ services:
       # SSR calls — go via the compose network at runtime.
       CONNECTOR_API_URL: "http://api:3000"
       MONGO_URL: "mongodb://mongo:27017/connector_ui"
+      # Shared internal-service bearer for guarded /internal/* SSR calls
+      # (e.g. /internal/products-catalog). Server-side only. Interpolated
+      # from poc/.env so it stays in sync with the api's value.
+      CONNECT_TOOL_SECRET: "${CONNECT_TOOL_SECRET}"
     expose:
       - "3001"
     depends_on:

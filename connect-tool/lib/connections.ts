@@ -1,5 +1,6 @@
 import 'server-only';
 import axios from 'axios';
+import { internalAuthHeader } from './poc-internal';
 
 export interface Connection {
   id: string;
@@ -30,6 +31,7 @@ export async function fetchConnections(
       timeout: 5_000,
       proxy: false,
       validateStatus: () => true,
+      headers: { ...internalAuthHeader() },
     });
     if (res.status !== 200) return [];
     return res.data.data ?? [];

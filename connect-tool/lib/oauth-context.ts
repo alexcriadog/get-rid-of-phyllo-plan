@@ -8,6 +8,7 @@
 
 import axios from 'axios';
 import type { NextRequest, NextResponse } from 'next/server';
+import { internalAuthHeader } from './poc-internal';
 
 export const CONNECT_CONTEXT_COOKIE = 'camaleonic_connect_session';
 const COOKIE_TTL_SECONDS = 10 * 60;
@@ -42,7 +43,7 @@ export async function verifySdkToken(token: string): Promise<SdkTokenClaims> {
     { token },
     {
       timeout: 10_000,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...internalAuthHeader() },
       // Bypass any HTTPS_PROXY env — see seed-client.ts for the rationale.
       proxy: false,
       // Don't auto-throw on non-2xx; we want to surface the upstream message.

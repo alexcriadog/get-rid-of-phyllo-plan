@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getRedis } from './redis';
+import { internalAuthHeader } from './poc-internal';
 
 export type ProductsConfig = Record<string, string[]> | null;
 
@@ -101,7 +102,7 @@ export async function fetchWorkspaceProducts(slug: string): Promise<ProductsConf
   try {
     const res = await axios.get<{ products: ProductsConfig }>(
       `${baseUrl}/internal/workspaces/${encodeURIComponent(slug)}/branding`,
-      { timeout: 5_000, proxy: false, validateStatus: () => true },
+      { timeout: 5_000, proxy: false, validateStatus: () => true, headers: { ...internalAuthHeader() } },
     );
     if (res.status !== 200) return null; // do NOT cache failures
     const products = res.data.products ?? null;

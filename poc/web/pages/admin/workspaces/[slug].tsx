@@ -125,7 +125,15 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async () => {
     process.env.NEXT_PUBLIC_CONNECTOR_API_URL ||
     'http://localhost:3000';
   const url = `${baseUrl}/internal/products-catalog`;
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
+  // /internal/* is a guarded service zone — present the shared service
+  // bearer. SSR runs server-side so the secret never reaches the browser.
+  const internalSecret = process.env.CONNECT_TOOL_SECRET;
+  const res = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      ...(internalSecret ? { authorization: `Bearer ${internalSecret}` } : {}),
+    },
+  });
   if (!res.ok) {
     throw new Error(
       `Failed to load products catalog from ${url}: ${res.status} ${res.statusText}`,
