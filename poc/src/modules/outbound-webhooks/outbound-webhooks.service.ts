@@ -96,12 +96,17 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
     // Stand up the delivery worker inside the API process for now. A
     // dedicated worker container can be added later by registering this
     // module in the worker bootstrap too.
+    // Tunable so a deep delivery backlog (e.g. a noisy data.* fan-out) can
+    // be drained faster by raising the env without a code change. Parsed
+    // defensively: non-numeric / out-of-range falls back to 4.
+    const raw = Number(process.env.WEBHOOK_DELIVERY_CONCURRENCY);
+    const concurrency = Number.isInteger(raw) && raw >= 1 && raw <= 64 ? raw : 4;
     this.worker = this.bull.getWorker<DeliveryJob>(
       QUEUE,
       async (job: Job<DeliveryJob>) => this.handleDelivery(job),
-      { concurrency: 4 },
+      { concurrency },
     );
-    this.logger.log('Webhook delivery worker started');
+    this.logger.log(`Webhook delivery worker started (concurrency=${concurrency})`);
   }
 
   async onModuleDestroy(): Promise<void> {

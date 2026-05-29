@@ -34,11 +34,16 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
+import { ulid } from 'ulid';
 import { PrismaService } from '@shared/database/prisma.service';
+import { RedisService } from '@shared/redis/redis.service';
+import { runWithLock } from '@shared/redis/cron-lock';
 
 const BATCH_SIZE = 1000;
 const DEFAULT_INBOUND_DAYS = 30;
 const DEFAULT_OUTBOUND_DAYS = 90;
+// Retention can run long on a large backlog; give the lock 30 min.
+const LOCK_TTL_MS = 30 * 60_000;
 
 @Injectable()
 export class WebhooksRetentionService
@@ -48,10 +53,12 @@ export class WebhooksRetentionService
   private inboundDays = DEFAULT_INBOUND_DAYS;
   private outboundDays = DEFAULT_OUTBOUND_DAYS;
   private dryRun = false;
+  private readonly instanceToken = ulid();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly redis: RedisService,
   ) {}
 
   onModuleInit(): void {
@@ -106,26 +113,38 @@ export class WebhooksRetentionService
       // so worker/scheduler don't race the api.
       return { inbound_deleted: 0, outbound_deleted: 0, duration_ms: 0 };
     }
-    const startedAt = Date.now();
-    const inboundCutoff = new Date(
-      Date.now() - this.inboundDays * 24 * 60 * 60_000,
+    // Distributed lock so 2+ api replicas don't double-delete.
+    const locked = await runWithLock(
+      this.redis.client,
+      this.redis.key('cron', 'webhooks-retention'),
+      this.instanceToken,
+      LOCK_TTL_MS,
+      async () => {
+        const startedAt = Date.now();
+        const inboundCutoff = new Date(
+          Date.now() - this.inboundDays * 24 * 60 * 60_000,
+        );
+        const outboundCutoff = new Date(
+          Date.now() - this.outboundDays * 24 * 60 * 60_000,
+        );
+        const inboundDeleted = await this.sweepInbound(inboundCutoff);
+        const outboundDeleted = await this.sweepOutbound(outboundCutoff);
+        const ms = Date.now() - startedAt;
+        this.logger.log(
+          `Retention sweep complete in ${ms}ms — inbound=${inboundDeleted} outbound=${outboundDeleted}${this.dryRun ? ' [DRY RUN]' : ''}`,
+        );
+        return {
+          inbound_deleted: inboundDeleted,
+          outbound_deleted: outboundDeleted,
+          duration_ms: ms,
+        };
+      },
     );
-    const outboundCutoff = new Date(
-      Date.now() - this.outboundDays * 24 * 60 * 60_000,
-    );
-
-    const inboundDeleted = await this.sweepInbound(inboundCutoff);
-    const outboundDeleted = await this.sweepOutbound(outboundCutoff);
-
-    const ms = Date.now() - startedAt;
-    this.logger.log(
-      `Retention sweep complete in ${ms}ms — inbound=${inboundDeleted} outbound=${outboundDeleted}${this.dryRun ? ' [DRY RUN]' : ''}`,
-    );
-    return {
-      inbound_deleted: inboundDeleted,
-      outbound_deleted: outboundDeleted,
-      duration_ms: ms,
-    };
+    if (!locked.ran) {
+      this.logger.debug('Retention skipped — lock held by another instance');
+      return { inbound_deleted: 0, outbound_deleted: 0, duration_ms: 0 };
+    }
+    return locked.result ?? { inbound_deleted: 0, outbound_deleted: 0, duration_ms: 0 };
   }
 
   private async sweepInbound(cutoff: Date): Promise<number> {

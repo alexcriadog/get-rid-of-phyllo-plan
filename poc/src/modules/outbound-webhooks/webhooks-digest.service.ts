@@ -23,18 +23,28 @@ import {
   OnApplicationBootstrap,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { ulid } from 'ulid';
 import { PrismaService } from '@shared/database/prisma.service';
+import { RedisService } from '@shared/redis/redis.service';
+import { runWithLock } from '@shared/redis/cron-lock';
 import { OutboundWebhooksService } from './outbound-webhooks.service';
 
 const BATCH_SIZE = 1000;
+// Lock TTL must exceed the worst-case flush runtime (100 cycles × ~1k
+// buckets). 10 min is comfortably above that; if a flush somehow runs
+// longer the lock expires and the next tick can pick up.
+const LOCK_TTL_MS = 10 * 60_000;
 
 @Injectable()
 export class WebhooksDigestService implements OnApplicationBootstrap {
   private readonly logger = new Logger(WebhooksDigestService.name);
+  // Unique per process — identifies who holds the lock for safe release.
+  private readonly instanceToken = ulid();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly webhooks: OutboundWebhooksService,
+    private readonly redis: RedisService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -53,14 +63,36 @@ export class WebhooksDigestService implements OnApplicationBootstrap {
   async flushHourly(): Promise<{ flushed: number; failed: number }> {
     if (process.argv[2] !== 'api') return { flushed: 0, failed: 0 };
     const cutoff = new Date(Date.now() - 60 * 60_000);
-    return this.flush('hourly', cutoff);
+    const res = await runWithLock(
+      this.redis.client,
+      this.redis.key('cron', 'webhooks-digest-hourly'),
+      this.instanceToken,
+      LOCK_TTL_MS,
+      () => this.flush('hourly', cutoff),
+    );
+    if (!res.ran) {
+      this.logger.debug('Hourly digest skipped — lock held by another instance');
+      return { flushed: 0, failed: 0 };
+    }
+    return res.result ?? { flushed: 0, failed: 0 };
   }
 
   @Cron('5 9 * * *', { name: 'webhooks-digest-daily', timeZone: 'UTC' })
   async flushDaily(): Promise<{ flushed: number; failed: number }> {
     if (process.argv[2] !== 'api') return { flushed: 0, failed: 0 };
     const cutoff = new Date(Date.now() - 24 * 60 * 60_000);
-    return this.flush('daily', cutoff);
+    const locked = await runWithLock(
+      this.redis.client,
+      this.redis.key('cron', 'webhooks-digest-daily'),
+      this.instanceToken,
+      LOCK_TTL_MS,
+      () => this.flush('daily', cutoff),
+    );
+    if (!locked.ran) {
+      this.logger.debug('Daily digest skipped — lock held by another instance');
+      return { flushed: 0, failed: 0 };
+    }
+    return locked.result ?? { flushed: 0, failed: 0 };
   }
 
   /**
