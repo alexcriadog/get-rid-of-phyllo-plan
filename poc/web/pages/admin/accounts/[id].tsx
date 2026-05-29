@@ -89,7 +89,12 @@ export default function AccountDetailPage() {
     id ? `/admin/accounts/${id}` : null,
     5000,
   );
-  const callsLive = useLive<ApiCall[]>('/admin/api-calls?limit=500', 5000);
+  // Scope to this account server-side (account_id) instead of pulling the
+  // whole-fleet firehose; the client filter below stays as a guard.
+  const callsLive = useLive<ApiCall[]>(
+    id ? `/admin/api-calls?account_id=${encodeURIComponent(String(id))}&limit=500` : null,
+    5000,
+  );
 
   const [tab, setTab] = useState('timeline');
   const [busy, setBusy] = useState<string | null>(null);

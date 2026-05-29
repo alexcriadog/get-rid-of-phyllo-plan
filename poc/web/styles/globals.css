@@ -2,13 +2,79 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─────────────────────────────────────────────────────────────────
-   shadcn design tokens (HSL triplets, no hsl() wrapper).
-   Tuned to the existing dark connector palette so the migration
-   keeps the same visual identity, just consistent + modern.
-   ───────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════
+   Connector Admin — Design System tokens.
+
+   Two intentional themes (light + dark), both first-class, switched by a
+   `.dark` class on <html> (see lib/theme.tsx + the no-flash script in
+   _document.tsx). Tailwind reads the `--sh-*` HSL triplets via
+   tailwind.config.ts; the legacy raw tokens (`--bg`, `--text`, …) are
+   re-derived from the same source so older pages flip themes for free
+   until they are migrated onto primitives.
+
+   Triplets are bare `H S% L%` (no hsl() wrapper) so Tailwind's
+   `hsl(var(--x) / <alpha>)` opacity syntax works.
+   ─────────────────────────────────────────────────────────────────── */
 @layer base {
+  /* LIGHT — Swiss-influenced command center: cool near-white surfaces,
+     deep slate ink, a single disciplined blue accent. */
   :root {
+    --sh-background: 220 24% 97%;
+    --sh-foreground: 222 32% 14%;
+
+    --sh-card: 0 0% 100%;
+    --sh-card-foreground: 222 32% 14%;
+
+    --sh-popover: 0 0% 100%;
+    --sh-popover-foreground: 222 32% 14%;
+
+    --sh-primary: 222 83% 53%;
+    --sh-primary-foreground: 0 0% 100%;
+
+    --sh-secondary: 220 18% 93%;
+    --sh-secondary-foreground: 222 28% 22%;
+
+    --sh-muted: 220 18% 94%;
+    --sh-muted-foreground: 222 12% 42%;
+
+    --sh-accent: 220 20% 91%;
+    --sh-accent-foreground: 222 30% 18%;
+
+    --sh-destructive: 0 72% 48%;
+    --sh-destructive-foreground: 0 0% 100%;
+
+    --sh-border: 220 18% 88%;
+    --sh-input: 220 18% 86%;
+    --sh-ring: 222 83% 53%;
+
+    --status-ok: 142 64% 36%;
+    --status-warn: 32 90% 42%;
+    --status-danger: 0 72% 48%;
+    --status-info: 205 85% 42%;
+
+    --radius-lg-tw: 10px;
+
+    /* Categorical chart palette — tuned for contrast on light surfaces. */
+    --c1: #2563eb;
+    --c2: #0d9488;
+    --c3: #db2777;
+    --c4: #d97706;
+    --c5: #7c3aed;
+    --c6: #0284c7;
+    --c7: #dc2626;
+    --c8: #c026d3;
+
+    /* Elevation — soft, low-opacity on light. */
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
+    --shadow-lg: 0 14px 40px rgba(15, 23, 42, 0.12);
+
+    color-scheme: light;
+  }
+
+  /* DARK — refined control-room: deep charcoal, clear panel hierarchy,
+     luminous blue accent. (Carries the previous connector identity.) */
+  .dark {
     --sh-background: 225 18% 5%;
     --sh-foreground: 220 16% 92%;
 
@@ -42,7 +108,20 @@
     --status-danger: 0 72% 56%;
     --status-info: 199 89% 60%;
 
-    --radius-lg-tw: 12px;
+    --c1: #7aa2ff;
+    --c2: #5dd4ad;
+    --c3: #ff6bcb;
+    --c4: #fbbf24;
+    --c5: #a78bfa;
+    --c6: #38bdf8;
+    --c7: #f87171;
+    --c8: #f472b6;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+
+    color-scheme: dark;
   }
 }
 
@@ -52,45 +131,37 @@
   }
 }
 
+/* ───────────────────────────────────────────────────────────────────
+   Legacy raw tokens — re-derived from the theme source above so pages
+   still using `.panel`, `.kpi-value`, bare <table>/<button>, etc. flip
+   themes automatically. New code should prefer Tailwind theme classes
+   and the UI primitives.
+   ─────────────────────────────────────────────────────────────────── */
 :root {
-  /* Surfaces — slightly deeper black, clearer panel hierarchy */
-  --bg: #0a0b0e;
-  --bg-panel: #14161c;
-  --bg-panel-hi: #1c1f27;
-  --bg-panel-elev: #232730;
-  --border: #262a33;
-  --border-hi: #383d49;
+  --bg: hsl(var(--sh-background));
+  --bg-panel: hsl(var(--sh-card));
+  --bg-panel-hi: hsl(var(--sh-secondary));
+  --bg-panel-elev: hsl(var(--sh-popover));
+  --border: hsl(var(--sh-border));
+  --border-hi: hsl(var(--sh-accent));
 
-  /* Text */
-  --text: #e8eaf0;
-  --text-muted: #9ba3b3;
-  --text-faint: #5b6376;
+  --text: hsl(var(--sh-foreground));
+  --text-muted: hsl(var(--sh-muted-foreground));
+  --text-faint: hsl(var(--sh-muted-foreground) / 0.7);
 
-  /* Brand + status */
-  --accent: #7aa2ff;
-  --accent-hi: #9cbcff;
-  --mint: #5dd4ad;
-  --mint-hi: #7eecc4;
-  --pink: #ff6bcb;
-  --purple: #a78bfa;
-  --amber: #fbbf24;
-  --danger: #ef4444;
-  --warn: #f59e0b;
-  --ok: #22c55e;
-  --info: #38bdf8;
+  --accent: hsl(var(--sh-primary));
+  --accent-hi: hsl(var(--sh-primary) / 0.85);
+  --mint: hsl(var(--status-ok));
+  --mint-hi: hsl(var(--status-ok) / 0.85);
+  --pink: var(--c3);
+  --purple: var(--c5);
+  --amber: hsl(var(--status-warn));
+  --danger: hsl(var(--status-danger));
+  --warn: hsl(var(--status-warn));
+  --ok: hsl(var(--status-ok));
+  --info: hsl(var(--status-info));
 
-  /* Categorical palette for charts (used cyclically) */
-  --c1: #7aa2ff;
-  --c2: #5dd4ad;
-  --c3: #ff6bcb;
-  --c4: #fbbf24;
-  --c5: #a78bfa;
-  --c6: #38bdf8;
-  --c7: #f87171;
-  --c8: #f472b6;
-
-  /* Type + spacing */
-  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --mono: ui-monospace, 'Space Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --radius: 8px;
   --radius-sm: 6px;
   --radius-lg: 14px;
@@ -102,11 +173,6 @@
   --space-5: 24px;
   --space-6: 32px;
   --space-7: 48px;
-
-  /* Elevation shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
 
 * {
@@ -118,11 +184,30 @@ body {
   margin: 0;
   padding: 0;
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Smooth the flip between themes (but never animate the very first paint,
+   and respect reduced-motion). */
+html.theme-ready body,
+html.theme-ready .panel,
+html.theme-ready button,
+html.theme-ready input,
+html.theme-ready table td,
+html.theme-ready table th {
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-ready * {
+    transition: none !important;
+  }
 }
 
 a {
@@ -156,7 +241,7 @@ button {
 
 button:hover:not(:disabled) {
   border-color: var(--border-hi);
-  background: var(--bg-panel);
+  background: var(--bg-panel-elev);
 }
 
 button:disabled {
@@ -166,7 +251,7 @@ button:disabled {
 
 button.primary {
   background: var(--accent);
-  color: #0f1115;
+  color: hsl(var(--sh-primary-foreground));
   border-color: var(--accent);
   font-weight: 600;
 }
@@ -177,8 +262,8 @@ button.primary:hover:not(:disabled) {
 }
 
 button.danger {
-  border-color: #5a2020;
-  color: #ffb4b4;
+  border-color: hsl(var(--status-danger) / 0.45);
+  color: hsl(var(--status-danger));
 }
 
 input,
@@ -198,6 +283,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px hsl(var(--sh-ring) / 0.18);
 }
 
 table {
@@ -231,6 +317,7 @@ tr:hover td {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-title {
@@ -260,29 +347,29 @@ tr:hover td {
 }
 
 .badge.ok {
-  color: var(--ok);
-  border-color: #1f4d2c;
-  background: #0d1f12;
+  color: hsl(var(--status-ok));
+  border-color: hsl(var(--status-ok) / 0.35);
+  background: hsl(var(--status-ok) / 0.12);
 }
 
 .badge.warn {
-  color: var(--warn);
-  border-color: #5a3e10;
-  background: #1f1808;
+  color: hsl(var(--status-warn));
+  border-color: hsl(var(--status-warn) / 0.35);
+  background: hsl(var(--status-warn) / 0.12);
 }
 
 .badge.danger {
-  color: var(--danger);
-  border-color: #5a2020;
-  background: #1f0a0a;
+  color: hsl(var(--status-danger));
+  border-color: hsl(var(--status-danger) / 0.35);
+  background: hsl(var(--status-danger) / 0.12);
 }
 
 .banner {
   padding: var(--space-3) var(--space-4);
-  background: #1f0a0a;
-  border: 1px solid #5a2020;
+  background: hsl(var(--status-danger) / 0.12);
+  border: 1px solid hsl(var(--status-danger) / 0.4);
   border-radius: var(--radius);
-  color: #ffb4b4;
+  color: hsl(var(--status-danger));
   margin-bottom: var(--space-4);
 }
 
@@ -418,7 +505,6 @@ tr:hover td {
 .v-display {
   font-family: var(--v-display);
   font-weight: 400;
-  /* Anton is wider than Manuka; per design-note loosen by +0.12. */
   line-height: 0.92;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -739,12 +825,6 @@ tr:hover td {
 
 /* --- Responsive post dialog -------------------------------------- */
 
-/* Two-column lightbox layout (Instagram / Pinterest style):
-   - Desktop: media left (fluid), info right (scrolls independently).
-   - Mobile: stacked single column.
-   - Dialog uses a FIXED height so the info pane has a predictable scroll
-     context — using min/max-height makes the pane shrink to content and
-     defeats overflow:auto. */
 .v-dialog {
   display: grid;
   grid-template-columns: minmax(420px, 1.4fr) minmax(380px, 0.95fr);
@@ -769,7 +849,7 @@ tr:hover td {
 }
 
 .v-dialog-info {
-  overflow-y: scroll; /* Always show the scrollbar gutter — no surprise. */
+  overflow-y: scroll;
   padding: 28px 22px 60px;
   display: flex;
   flex-direction: column;
@@ -794,8 +874,6 @@ tr:hover td {
   background: #6e1aff;
 }
 
-/* Bottom fade hint that more content is below — purely cosmetic, helps
-   users see at a glance the pane is scrollable even before they touch it. */
 .v-dialog-info::after {
   content: '';
   position: sticky;
