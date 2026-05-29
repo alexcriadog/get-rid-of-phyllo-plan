@@ -28,6 +28,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import WorkspaceSelect from './WorkspaceSelect';
+import ThemeToggle from './ThemeToggle';
+import ErrorBoundary from './ErrorBoundary';
 import {
   Tooltip,
   TooltipContent,

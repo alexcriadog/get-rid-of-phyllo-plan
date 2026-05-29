@@ -1,9 +1,12 @@
 import { Html, Head, Main, NextScript } from 'next/document';
+import { THEME_NO_FLASH_SCRIPT } from '../lib/theme';
 
 export default function Document() {
   return (
     <Html lang="en">
       <Head>
+        {/* Resolve light/dark before first paint to avoid a theme flash. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_NO_FLASH_SCRIPT }} />
         {/* Verge type stack — Anton = Manuka substitute, Space Grotesk = PolySans,
             Space Mono = PolySans Mono. Weights picked to match the spec
             (Anton 400 is the only weight; Space Grotesk 300/400/500/700;

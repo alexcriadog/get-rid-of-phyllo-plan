@@ -2,6 +2,7 @@ import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { WorkspaceProvider } from '../lib/workspace-context';
+import { ThemeProvider } from '../lib/theme';
 import '../styles/globals.css';
 
 export default function App({ Component, pageProps }: AppProps) {
