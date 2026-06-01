@@ -16,6 +16,7 @@ import {
 } from '../../components/charts';
 import { Section } from '@/components/admin/section';
 import { KpiCard } from '@/components/admin/kpi-card';
+import { NeedsAttention } from '@/components/admin/needs-attention';
 import { Empty } from '@/components/admin/empty';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -127,6 +128,8 @@ export default function AdminOverview() {
           Admin API error: {overviewLive.error}
         </div>
       )}
+
+      <NeedsAttention accounts={accounts} dlqDepth={overview?.dlq_depth ?? 0} />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
