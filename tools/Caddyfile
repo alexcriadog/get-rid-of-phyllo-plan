@@ -67,6 +67,20 @@ smconnector.camaleonicanalytics.com {
 		reverse_proxy web:3001
 	}
 
+	# Admin dashboard's own server-side API routes (Next /pages/api/admin/*).
+	# These run ON the web container and attach CONNECT_TOOL_SECRET server-side
+	# to reach ConnectToolGuard-protected connector endpoints (e.g. the
+	# token-debug proxy). They return operator-only data (plaintext OAuth
+	# tokens), so gate them with the SAME basic_auth as /admin* — and route to
+	# web, not the default connect-tool handler (which would 404). MUST precede
+	# the catch-all `handle {}` at the bottom.
+	handle /api/admin* {
+		basic_auth {
+			alex $2y$12$FRUN6ZltRlZsFygdSj0ED.ExibDXMV7zrDqAbflTRg6Cel0Oc7XRq
+		}
+		reverse_proxy web:3001
+	}
+
 	# Public account profile pages (e.g. /account/2, /account/2/posts).
 	handle /account* {
 		reverse_proxy web:3001
