@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft, Copy, ExternalLink, Eye, Pause, Play, RefreshCw } from 'lucide-react';
 import AdminLayout from '../../../components/AdminLayout';
 import { useLive } from '../../../lib/useLive';
-import { adminPost, CONNECTOR_API_URL } from '../../../lib/api';
+import { adminPost } from '../../../lib/api';
 import { fmtRelative, fmtMs, fmtTime, productFromCall, type ProductKind } from '../../../lib/format';
 import {
   LineChart,
@@ -600,8 +600,12 @@ function TokenDebugPanel({
     setErr(null);
     setToken(null);
     try {
+      // Go through the same-origin Next API proxy (pages/api/admin/access-token)
+      // rather than calling the connector directly: the upstream route is
+      // ConnectToolGuard-protected and the browser can't present the bearer.
+      // The proxy attaches CONNECT_TOOL_SECRET server-side.
       const res = await fetch(
-        `${CONNECTOR_API_URL}/admin/accounts/${accountId}/access-token?product=${product}`,
+        `/api/admin/access-token?id=${accountId}&product=${product}`,
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
