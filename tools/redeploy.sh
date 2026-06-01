@@ -80,13 +80,17 @@ log "Validating Caddyfile before reload…"
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T caddy \
   caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 | tail -15
 
-# Zero-downtime hot reload (atomic — an invalid config would leave the running
-# one live). Fall back to a full restart only if the admin-API reload path is
-# unavailable for a non-config reason.
-log "Reloading Caddy to pick up Caddyfile changes…"
+# Apply the (already-validated) Caddyfile. We use a container restart rather
+# than `caddy reload`: the Caddyfile is a `:ro` bind-mount, and an in-place
+# `caddy reload` proved unreliable at picking up host-file changes (it would
+# report success yet keep serving the previous routes). A restart always
+# re-reads the mounted file. The config was validated above, so this is safe;
+# downtime is ~1s. NOTE: never `… | tail` the apply step — a pipeline's exit
+# status is tail's (always 0), which would mask a real failure.
+log "Restarting Caddy to apply Caddyfile changes…"
+$DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml restart caddy
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml exec -T caddy \
-  caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 | tail -5 \
-  || $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml restart caddy 2>&1 | tail -2
+  caddy version 2>&1 | tail -1 || true
 
 log "Status:"
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml ps
