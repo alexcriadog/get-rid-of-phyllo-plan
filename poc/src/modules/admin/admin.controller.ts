@@ -138,6 +138,11 @@ export class AdminController {
     return this.admin.systemHealth();
   }
 
+  @Get('system/config')
+  systemConfig(): unknown {
+    return this.admin.systemConfig();
+  }
+
   @Get('rate-limits')
   async rateLimits(): Promise<unknown> {
     return this.admin.rateLimitsSnapshot();

@@ -18,6 +18,7 @@ import {
   Repeat,
   Send,
   Server,
+  SlidersHorizontal,
   TableProperties,
   Users,
   Webhook,
@@ -87,7 +88,10 @@ const NAV: NavSection[] = [
   },
   {
     title: 'Platform',
-    items: [{ href: '/admin/system-health', label: 'System health', icon: Server }],
+    items: [
+      { href: '/admin/system-health', label: 'System health', icon: Server },
+      { href: '/admin/settings', label: 'Settings', icon: SlidersHorizontal },
+    ],
   },
 ];
 

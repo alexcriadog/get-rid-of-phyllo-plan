@@ -50,6 +50,33 @@ const QUEUE_NAMES: ReadonlyArray<QueueName> = [
 
 const WEBHOOK_DRIVEN_PRODUCTS: ReadonlyArray<string> = ['engagement_new'];
 
+/**
+ * A runtime-resolved numeric knob: the value in effect plus where it came
+ * from (an explicit env override vs the built-in default). Lets the admin UI
+ * show, e.g., "concurrency 8 (env)" vs "concurrency 4 (default)".
+ */
+export interface ResolvedNumber {
+  value: number;
+  source: 'env' | 'default';
+  env: string;
+}
+
+/**
+ * Resolve an integer env knob the same way the services do: a valid positive
+ * integer in the env wins, otherwise the default. Mirrors the parsing in
+ * sync.worker / scheduler / retention so the reported value matches reality.
+ */
+function resolveEnvInt(envName: string, fallback: number): ResolvedNumber {
+  const raw = process.env[envName];
+  if (raw !== undefined && raw !== '') {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) {
+      return { value: Math.floor(n), source: 'env', env: envName };
+    }
+  }
+  return { value: fallback, source: 'default', env: envName };
+}
+
 export type Freshness = 'green' | 'yellow' | 'red';
 
 export interface SyncJobFilter {
@@ -1730,6 +1757,56 @@ export class AdminService {
       redis,
       worker,
       summary: allOk ? 'ok' : allDown ? 'danger' : 'warn',
+    };
+  }
+
+  /**
+   * Effective operational configuration — the env + defaults the worker,
+   * scheduler, and retention sweep actually resolve at runtime, mirrored
+   * here so an operator can see how the platform is tuned without shelling
+   * into the containers. Read-only: these are process-level knobs set via
+   * env, surfaced (not mutated) by the admin UI.
+   *
+   * Each numeric field reports both the source (`env` vs `default`) and the
+   * resolved value, so a misconfiguration ("why is the worker only doing 1
+   * job at a time?") is diagnosable from the console.
+   */
+  systemConfig(): {
+    worker: {
+      concurrency: ResolvedNumber;
+      engagement_lookback_days: ResolvedNumber;
+    };
+    scheduler: {
+      tick_ms: ResolvedNumber;
+      backpressure_max: ResolvedNumber;
+    };
+    retention: {
+      inbound_log_days: ResolvedNumber;
+      outbound_delivery_days: ResolvedNumber;
+      api_call_log_days: ResolvedNumber;
+      mongo_raw_days: ResolvedNumber;
+      dry_run: boolean;
+      schedule: string;
+    };
+  } {
+    const dry = this.config.get<string>('WEBHOOKS_RETENTION_DRY_RUN');
+    return {
+      worker: {
+        concurrency: resolveEnvInt('WORKER_CONCURRENCY', 4),
+        engagement_lookback_days: resolveEnvInt('ENGAGEMENT_LOOKBACK_DAYS', 30),
+      },
+      scheduler: {
+        tick_ms: resolveEnvInt('SCHEDULER_TICK_MS', 30_000),
+        backpressure_max: resolveEnvInt('SCHEDULER_BACKPRESSURE_MAX', 2000),
+      },
+      retention: {
+        inbound_log_days: resolveEnvInt('INBOUND_LOG_RETENTION_DAYS', 30),
+        outbound_delivery_days: resolveEnvInt('OUTBOUND_DELIVERY_RETENTION_DAYS', 90),
+        api_call_log_days: resolveEnvInt('API_CALL_LOG_RETENTION_DAYS', 30),
+        mongo_raw_days: resolveEnvInt('MONGO_RAW_RETENTION_DAYS', 14),
+        dry_run: dry !== undefined && /^(1|true|yes|on)$/i.test(dry.trim()),
+        schedule: '03:00 UTC daily',
+      },
     };
   }
 
