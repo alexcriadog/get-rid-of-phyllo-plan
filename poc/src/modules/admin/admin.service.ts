@@ -30,7 +30,8 @@ import { AccountsService, Platform } from '@modules/accounts/accounts.service';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
 import { ThreadsTokenRefreshService } from '@modules/platforms/shared/threads-api/threads-token-refresh.service';
 import { BucTelemetryService } from '@modules/platforms/shared/meta-graph/buc-telemetry.service';
-import { FIELD_TO_PRODUCT } from '@modules/webhooks/meta-webhook-fields';
+import { FIELD_TO_PRODUCT, pageFieldsForProducts } from '@modules/webhooks/meta-webhook-fields';
+import { subscribePageToApp } from '@modules/webhooks/meta-webhook-subscribe';
 import { ConfigService } from '@nestjs/config';
 
 const GRAPH_VERSION = 'v22.0';
@@ -38,6 +39,7 @@ const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 const THREADS_GRAPH_BASE = 'https://graph.threads.net/v1.0';
 const YOUTUBE_DATA_BASE = 'https://www.googleapis.com/youtube/v3';
 const DISCOVER_TIMEOUT_MS = 15_000;
+const SUBSCRIBE_TIMEOUT_MS = 10_000;
 
 const SYNC_QUEUE_NAME: QueueName = 'sync';
 const EVENTS_QUEUE_NAME: QueueName = 'events';
@@ -2600,7 +2602,11 @@ export class AdminService {
     workspaceSlug?: string;
     endUserId?: string;
     isTest?: boolean;
-  }): Promise<{ account_id: string; sync_jobs_created: string[] }> {
+  }): Promise<{
+    account_id: string;
+    sync_jobs_created: string[];
+    webhook_subscribed?: boolean;
+  }> {
     let accessToken = input.accessToken;
     let expiresAt = input.expiresAt;
 
@@ -2646,7 +2652,7 @@ export class AdminService {
       }
     }
 
-    return this.accountsService.seedAccount({
+    const seeded = await this.accountsService.seedAccount({
       platform: input.platform,
       accessToken,
       refreshToken: input.refreshToken,
@@ -2658,6 +2664,46 @@ export class AdminService {
       endUserId: input.endUserId,
       isTest: input.isTest,
     });
+
+    // Auto-subscribe the Page to the app's webhooks (non-blocking). This is
+    // what makes real-time events flow after a one-time connect. Subscribing
+    // the Page also activates delivery for its linked IG business account.
+    let webhookSubscribed = false;
+    if (input.platform === 'facebook' || input.platform === 'instagram') {
+      const md = (input.metadata ?? {}) as Record<string, unknown>;
+      const pageId = typeof md.page_id === 'string' ? md.page_id : null;
+      const products = Array.isArray(md.products)
+        ? (md.products as unknown[]).filter(
+            (p): p is string => typeof p === 'string',
+          )
+        : [];
+      const fields = pageFieldsForProducts(products);
+      if (pageId && fields.length > 0) {
+        const result = await subscribePageToApp(
+          {
+            post: (url, params) =>
+              axios
+                .post(url, null, {
+                  params,
+                  timeout: SUBSCRIBE_TIMEOUT_MS,
+                  validateStatus: () => true,
+                })
+                .then((r) => ({ status: r.status, data: r.data })),
+            metrics: this.metrics,
+            logger: this.logger,
+          },
+          {
+            platform: input.platform,
+            pageId,
+            fields,
+            accessToken,
+          },
+        );
+        webhookSubscribed = result.subscribed;
+      }
+    }
+
+    return { ...seeded, webhook_subscribed: webhookSubscribed };
   }
 
   private async graphGet<T>(
