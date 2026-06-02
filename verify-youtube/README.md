@@ -15,15 +15,17 @@ Public URL (prod): https://yt-connector.camaleonicanalytics.com
 ## What it does
 
 1. Landing → "Connect your YouTube channel" CTA.
-2. OAuth start → 302 to Google with six scopes:
+2. OAuth start → 302 to Google with five scopes:
    - `openid`, `userinfo.email`, `userinfo.profile`
    - `youtube.readonly` (sensitive)
    - `yt-analytics.readonly`
-   - `adwords` (sensitive) — Google Ads, for reading the user's YouTube
-     video campaigns. Requires a developer token (see Google Cloud setup).
+   - NOTE: `adwords` (Google Ads) was pulled out of this verification round
+     so Google reviews a pure YouTube-analytics app. The MCC + Basic developer
+     token stay valid for a future round; re-add later (see
+     `PLAN-monetary-removal-and-google-ads.md`, Parte C).
 3. OAuth callback → exchanges `code` for tokens, calls every data surface
-   (userinfo, channel, analytics views, Google Ads campaigns) and renders
-   a verified page where the reviewer can see each scope being used.
+   (userinfo, channel, analytics views) and renders a verified page where the
+   reviewer can see each scope being used.
 4. Privacy policy at `/privacy`, Terms of Service at `/terms` — linked
    from the consent screen via Google Cloud Console.
 
@@ -46,8 +48,8 @@ In the existing **`GROP-Youtube`** project (same one connect-tool uses):
      YouTube API does not actually expose a download endpoint for it).
    - Remove `https://www.googleapis.com/auth/yt-analytics-monetary.readonly`
      (we dropped revenue reporting from this app).
-   - Add `https://www.googleapis.com/auth/adwords` (Google Ads API, for
-     reading video campaigns — sensitive scope).
+   - Do NOT add `https://www.googleapis.com/auth/adwords` for this round — it
+     was deliberately deferred (see step 4 and the note in §"What it does").
    - Keep `openid`, `userinfo.email`, `userinfo.profile`, `youtube.readonly`,
      `yt-analytics.readonly`.
 3. **Credentials → existing Web OAuth client**:
@@ -56,13 +58,12 @@ In the existing **`GROP-Youtube`** project (same one connect-tool uses):
      alongside the existing smconnector ones.
    - Authorized JavaScript origins → **add**
      `https://yt-connector.camaleonicanalytics.com`.
-4. **Google Ads developer token** (separate from Cloud Console — done in
-   the Google Ads UI at `https://ads.google.com/aw/apicenter`):
-   - Create a Google Ads Manager (MCC) account if you don't have one.
-   - Request a developer token. Basic Access is approved in ~2 business
-     days and is required to query production data (Test Access only sees
-     synthetic accounts with zero metrics).
-   - Set `GOOGLE_ADS_DEVELOPER_TOKEN` in `verify-youtube/.env` once issued.
+4. **Google Ads developer token** — DEFERRED. The MCC was created and Basic
+   Access was approved (`https://ads.google.com/aw/apicenter`), and that stays
+   valid, but the `adwords` scope is intentionally NOT part of this YouTube
+   verification round (a reviewer questioning Google Ads access on a YouTube-
+   analytics app could stall the whole batch). Re-add it in a later round /
+   the real product. Full plan: `PLAN-monetary-removal-and-google-ads.md`.
 
 ## Local dev
 

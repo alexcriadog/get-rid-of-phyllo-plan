@@ -55,20 +55,8 @@ import {
   type VideoTrafficRow,
   type ViewsByDay,
 } from '../../lib/youtube';
-import {
-  describeGoogleAdsError,
-  fetchAccessibleCustomers,
-  fetchVideoCampaigns30d,
-  type AccessibleCustomer,
-  type VideoCampaignReport,
-} from '../../lib/google-ads';
 
 type Outcome<T> = { ok: true; data: T } | { ok: false; error: string };
-
-interface AdsSnapshot {
-  customers: AccessibleCustomer[];
-  primary: VideoCampaignReport | null;
-}
 
 type PageProps = {
   scopesGranted: string[];
@@ -94,7 +82,6 @@ type PageProps = {
   videoDemographicsByVideo: Outcome<Record<string, VideoDemographicRow[]>>;
   videoSharingByVideo: Outcome<Record<string, VideoSharingRow[]>>;
   topVideoRetention: Outcome<{ videoId: string; points: RetentionPoint[] } | null>;
-  ads: Outcome<AdsSnapshot>;
 };
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
@@ -141,7 +128,6 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
     geography,
     devices,
     traffic,
-    ads,
   ] = await Promise.all([
     uploadsId
       ? safe(() => fetchRecentVideos(at, uploadsId, 12), describeGoogleError)
@@ -158,7 +144,6 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
     safe(() => fetchGeography28d(at, 10), describeGoogleError),
     safe(() => fetchDevices28d(at), describeGoogleError),
     safe(() => fetchTrafficSources28d(at), describeGoogleError),
-    safe(() => fetchAdsSnapshot(at), describeGoogleAdsError),
   ]);
 
   // Third pass: per-video deep dive, batched (one call per dimension
@@ -222,7 +207,6 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
       videoDemographicsByVideo,
       videoSharingByVideo,
       topVideoRetention,
-      ads,
     },
   };
 };
@@ -236,13 +220,6 @@ async function safe<T>(
   } catch (err) {
     return { ok: false, error: describe(err) };
   }
-}
-
-async function fetchAdsSnapshot(accessToken: string): Promise<AdsSnapshot> {
-  const customers = await fetchAccessibleCustomers(accessToken);
-  if (customers.length === 0) return { customers, primary: null };
-  const primary = await fetchVideoCampaigns30d(accessToken, customers[0].id);
-  return { customers, primary };
 }
 
 // ─── Page component ────────────────────────────────────────────────────
@@ -278,7 +255,6 @@ export default function Verified(props: PageProps) {
           <a href="#youtube">YouTube</a>
           <a href="#analytics">Analytics</a>
           <a href="#per-video">Per-video</a>
-          <a href="#ads">Google Ads</a>
         </nav>
 
         <DiagnosticsSection diag={diag} />
@@ -311,7 +287,6 @@ export default function Verified(props: PageProps) {
           videoSharingByVideo={props.videoSharingByVideo}
           topVideoRetention={props.topVideoRetention}
         />
-        <AdsSection ads={props.ads} />
 
         <footer className="v-footer">
           <Link href="/">← Back</Link>
@@ -379,9 +354,6 @@ function computeDiagnostics(p: PageProps): DiagEntry[] {
     e(p.videoDemographicsByVideo, 'Per-video demographics', 'analytics:reports?dim=video,ageGroup,gender', (m) => Object.keys(m).length),
     e(p.videoSharingByVideo, 'Per-video sharing', 'analytics:reports?dim=video,sharingService', (m) => Object.keys(m).length),
     e(p.topVideoRetention, 'Retention curve (top video)', 'analytics:reports?dim=elapsedVideoTimeRatio', (r) => (r ? r.points.length : 0)),
-    e(p.ads, 'Google Ads campaigns', 'listAccessibleCustomers + googleAds:search', (a) =>
-      a.primary ? a.primary.rows.length : a.customers.length,
-    ),
   ];
 }
 
@@ -1450,101 +1422,6 @@ function RetentionChart({ points }: { points: RetentionPoint[] }) {
       <text x={padding} y={H - 1} fontSize="9" fill="rgba(255,255,255,0.4)" fontFamily="var(--v-mono)">0%</text>
       <text x={W - 22} y={H - 1} fontSize="9" fill="rgba(255,255,255,0.4)" fontFamily="var(--v-mono)">100%</text>
     </svg>
-  );
-}
-
-// ─── Section: Google Ads ───────────────────────────────────────────────
-
-function AdsSection({ ads }: { ads: Outcome<AdsSnapshot> }) {
-  return (
-    <section id="ads" className="v-section">
-      <div className="v-section-head">
-        <h2 className="v-section-title">Google Ads</h2>
-        <span className="v-section-scope">adwords · Google Ads API v24</span>
-      </div>
-      <div className="v-scope-grid">
-        <ScopeDemoCard
-          title="YouTube ad campaigns — last 30 days"
-          scope="listAccessibleCustomers + googleAds:search · advertising_channel_type=VIDEO"
-          status={
-            ads.ok
-              ? ads.data.primary && ads.data.primary.rows.length > 0
-                ? 'ok'
-                : 'empty'
-              : 'err'
-          }
-          statusLabel={
-            ads.ok && ads.data.customers.length === 0
-              ? 'No Ads accounts'
-              : ads.ok && ads.data.primary && ads.data.primary.rows.length === 0
-                ? 'No video campaigns'
-                : undefined
-          }
-        >
-          {!ads.ok && <ErrorBlock message={ads.error} />}
-          {ads.ok && ads.data.customers.length === 0 && (
-            <p className="v-body muted">
-              This Google account has no Google Ads accounts associated.
-              The <code>listAccessibleCustomers</code> call returned an
-              empty list — which confirms the <code>adwords</code> scope
-              is granted and the developer token is valid.
-            </p>
-          )}
-          {ads.ok &&
-            ads.data.customers.length > 0 &&
-            ads.data.primary &&
-            ads.data.primary.rows.length === 0 && (
-              <p className="v-body muted">
-                Connected to Google Ads customer <code>{ads.data.primary.customerId}</code>.
-                No video campaigns served in the last 30 days. (
-                {ads.data.customers.length}{' '}
-                {ads.data.customers.length === 1 ? 'account' : 'accounts'} accessible.)
-              </p>
-            )}
-          {ads.ok && ads.data.primary && ads.data.primary.rows.length > 0 && (
-            <>
-              <p className="v-body muted" style={{ marginBottom: 6 }}>
-                Customer <code>{ads.data.primary.customerId}</code>
-                {ads.data.customers.length > 1
-                  ? ` · ${ads.data.customers.length} accounts accessible`
-                  : ''}
-              </p>
-              <div className="v-stat">
-                <span className="v-stat-num">
-                  {ads.data.primary.totalViews.toLocaleString()}
-                </span>
-                <span className="v-stat-unit">video views · 30d</span>
-              </div>
-              <p className="v-body muted" style={{ marginTop: 4 }}>
-                Spend: ${ads.data.primary.totalCostUsd.toFixed(2)} USD
-              </p>
-              <table className="v-table">
-                <thead>
-                  <tr>
-                    <th>Campaign</th>
-                    <th style={{ textAlign: 'right' }}>Views</th>
-                    <th style={{ textAlign: 'right' }}>Avg CPV</th>
-                    <th style={{ textAlign: 'right' }}>Spend</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ads.data.primary.rows.slice(0, 10).map((c) => (
-                    <tr key={c.campaignId}>
-                      <td title={c.status}>{c.campaignName}</td>
-                      <td style={{ textAlign: 'right' }}>{c.videoViews.toLocaleString()}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        {c.averageCpvUsd !== null ? `$${c.averageCpvUsd.toFixed(3)}` : '—'}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>${c.costUsd.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-        </ScopeDemoCard>
-      </div>
-    </section>
   );
 }
 

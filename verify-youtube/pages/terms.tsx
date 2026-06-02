@@ -32,10 +32,9 @@ export default function Terms() {
           <h2>2. The service</h2>
           <p>
             Camaleonic Analytics provides a dashboard that displays the
-            audience and engagement metrics of YouTube channels — and the
-            YouTube video advertising campaigns — of users who have connected
-            their accounts through Google&rsquo;s OAuth flow. Access is
-            read-only and limited to the accounts the user owns.
+            audience and engagement metrics of YouTube channels of users who
+            have connected their accounts through Google&rsquo;s OAuth flow.
+            Access is read-only and limited to the accounts the user owns.
           </p>
 
           <h2>3. Acceptable use</h2>

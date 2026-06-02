@@ -61,13 +61,6 @@ export default function Privacy() {
               for the connected channel&rsquo;s own content (views, watch time,
               audience demographics, traffic sources).
             </li>
-            <li>
-              <code>adwords</code> (Google Ads API) — to read the connected
-              user&rsquo;s <strong>video advertising campaigns on YouTube</strong>{' '}
-              (campaign name, video views, view rate, average cost-per-view,
-              total spend) for the campaigns the user themselves runs. We do
-              not create, modify, or pause campaigns.
-            </li>
           </ul>
           <p>
             We never request scopes that allow us to post, edit, delete, or
@@ -99,7 +92,7 @@ export default function Privacy() {
             and deletes them within 30 days of disconnection.
           </p>
           <p>
-            Cached metric data (views, revenue, etc.) is retained for the
+            Cached metric data (views, watch time, etc.) is retained for the
             shortest period necessary to render the dashboard, and is deleted
             on request or upon account closure.
           </p>

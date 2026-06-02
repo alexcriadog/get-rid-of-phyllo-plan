@@ -20,9 +20,11 @@ export const YT_SCOPES = [
   'https://www.googleapis.com/auth/userinfo.profile',
   'https://www.googleapis.com/auth/youtube.readonly',
   'https://www.googleapis.com/auth/yt-analytics.readonly',
-  // Google Ads — lets us read the connected user's video campaign metrics.
-  // Requires GOOGLE_ADS_DEVELOPER_TOKEN to actually make API calls.
-  'https://www.googleapis.com/auth/adwords',
+  // NOTE: `adwords` (Google Ads) was intentionally removed from this
+  // verification round so Google's OAuth review sees a pure YouTube-analytics
+  // app. The MCC + Basic developer token stay valid for a future round; the
+  // Google Ads client lives in lib/google-ads.ts (currently unused). See
+  // PLAN-monetary-removal-and-google-ads.md (Parte C).
 ] as const;
 
 // ─── Authorize URL ─────────────────────────────────────────────────────
