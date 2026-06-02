@@ -60,8 +60,9 @@ export interface BucketRuntimeMeta {
  *   { 0, bucketKey, resetInMs }        -- denied
  */
 const LUA_ACQUIRE = `
-local now = tonumber(ARGV[#ARGV])
-local n = (#ARGV - 1) / 3
+local ttl = tonumber(ARGV[#ARGV])
+local now = tonumber(ARGV[#ARGV - 1])
+local n = (#ARGV - 2) / 3
 local denied_idx = nil
 local denied_reset = 0
 local new_tokens = {}
@@ -112,6 +113,7 @@ if denied_idx ~= nil then
       'last_refill_ts', now,
       'capacity', capacity,
       'refill_per_ms', refill)
+    redis.call('PEXPIRE', key, ttl)
     redis.call('HINCRBY', key, 'denies', 1)
   end
   return { 0, KEYS[denied_idx], denied_reset }
@@ -131,6 +133,7 @@ for i = 1, n do
     'last_acquire_ts', now,
     'capacity', capacity,
     'refill_per_ms', refill)
+  redis.call('PEXPIRE', key, ttl)
   redis.call('HINCRBY', key, 'hits', 1)
   if min_remaining == nil or tok < min_remaining then
     min_remaining = tok
@@ -142,6 +145,14 @@ return { 1, min_key, tostring(min_remaining) }
 `;
 
 type LuaAcquireReply = [0 | 1, string, number | string];
+
+/**
+ * Sliding TTL applied to every rate bucket key on each acquire (Week 3 leak
+ * fix). Longer than a day so dated daily-counter keys survive their active
+ * window and expire ~1 day after the date rolls; long enough that an active
+ * token-bucket is always re-touched before it lapses.
+ */
+const BUCKET_TTL_MS = 48 * 60 * 60_000;
 
 @Injectable()
 export class RateBucketService {
@@ -187,6 +198,14 @@ export class RateBucketService {
     }
 
     args.push(Date.now());
+    // Sliding TTL on every touched bucket key (Week 3). Without it, daily-
+    // counter keys (which carry a {YYYY-MM-DD-UTC} suffix) accumulate one new
+    // key per token per day forever. 48h keeps active buckets alive (they're
+    // re-touched on each acquire) while cleaning up old date-keys and buckets
+    // for accounts that stopped syncing. An idle token-bucket that expires is
+    // simply recreated at full capacity on next acquire — correct, since idle
+    // means not spending.
+    args.push(BUCKET_TTL_MS);
 
     const reply = (await this.redis.client.eval(
       LUA_ACQUIRE,
