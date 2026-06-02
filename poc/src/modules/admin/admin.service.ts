@@ -2201,6 +2201,98 @@ export class AdminService {
     return token;
   }
 
+  // ─── GDPR hard-delete (B-3, admin-only) ─────────────────────────────────
+  //
+  // Soft-disconnect (AccountsService.disconnectAccount) only flips status and
+  // deletes tokens; all the harvested social data lingers in Mongo forever.
+  // This is the right-to-erasure path: it removes the account everywhere.
+  // Operator-only — exposed via the admin surface (behind Caddy basic_auth),
+  // never on the client /v1 surface.
+  //
+  // Every Mongo collection that stores per-(connected-)account data, with the
+  // account-id field each writer actually uses. Verified against the writers:
+  // all use `account_id: String(accountId)` EXCEPT raw_platform_responses,
+  // which the raw-archive writers key by camelCase `accountId` (known drift).
+  // Deliberately EXCLUDED: public_page_snapshots (watchlist, keyed by page_id,
+  // not connected-account data) and bucket_history_snapshots (rate-limit
+  // history, not per-account).
+  private static readonly ERASE_MONGO_TARGETS: ReadonlyArray<{
+    collection: string;
+    field: string;
+  }> = [
+    { collection: 'posts', field: 'account_id' },
+    { collection: 'comments', field: 'account_id' },
+    { collection: 'page_comments', field: 'account_id' },
+    { collection: 'page_ratings', field: 'account_id' },
+    { collection: 'ad_insights', field: 'account_id' },
+    { collection: 'ads_campaigns', field: 'account_id' },
+    { collection: 'identity_snapshots', field: 'account_id' },
+    { collection: 'audience_snapshots', field: 'account_id' },
+    { collection: 'engagement_deep_snapshots', field: 'account_id' },
+    { collection: 'event_log', field: 'account_id' },
+    { collection: 'raw_platform_responses', field: 'accountId' },
+  ];
+
+  /**
+   * GDPR right-to-erasure. Purges every Mongo document for the account, then
+   * hard-deletes the MySQL row (cascading OAuthToken / SyncJob /
+   * AccountCadenceOverride) plus the non-cascading PendingWebhookEvent rows.
+   *
+   * Idempotent + crash-safe ordering: Mongo purge → orphan pending events →
+   * MySQL account.delete LAST. If anything fails mid-way the account row still
+   * exists, so a re-run finishes the job (all deletes are deleteMany/idempotent).
+   *
+   * Returns a per-collection deletion summary so the operator gets an audit
+   * trail of exactly what was removed.
+   */
+  async eraseAccount(accountId: bigint): Promise<{
+    erased: boolean;
+    account_id: string;
+    platform: string;
+    mongo_deleted: Record<string, number>;
+    pending_webhook_events_deleted: number;
+  }> {
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: { id: true, platform: true, workspaceId: true, canonicalUserId: true },
+    });
+    if (!account) {
+      throw new NotFoundException(`Account ${accountId.toString()} not found`);
+    }
+
+    const idStr = accountId.toString();
+    const mongoDeleted: Record<string, number> = {};
+    for (const target of AdminService.ERASE_MONGO_TARGETS) {
+      const res = await this.mongo
+        .getCollection(target.collection)
+        .deleteMany({ [target.field]: idStr });
+      mongoDeleted[target.collection] = res.deletedCount ?? 0;
+    }
+
+    // PendingWebhookEvent has no FK to Account (cascades only from the
+    // endpoint), so account.delete won't clear it — purge explicitly.
+    const pending = await this.prisma.pendingWebhookEvent.deleteMany({
+      where: { accountId },
+    });
+
+    // Last: hard-delete the MySQL row. Cascades OAuthToken, SyncJob,
+    // AccountCadenceOverride (onDelete: Cascade in schema.prisma).
+    await this.prisma.account.delete({ where: { id: accountId } });
+
+    this.logger.warn(
+      `GDPR erase: account ${idStr} (${account.platform}, ws=${account.workspaceId}) ` +
+        `hard-deleted. Mongo=${JSON.stringify(mongoDeleted)} pendingEvents=${pending.count}`,
+    );
+
+    return {
+      erased: true,
+      account_id: idStr,
+      platform: account.platform,
+      mongo_deleted: mongoDeleted,
+      pending_webhook_events_deleted: pending.count,
+    };
+  }
+
   /**
    * Persists a new Account + OAuthToken + sync_jobs by delegating to
    * AccountsService. Stores the page_id (for IG) inside metadata so the IG
