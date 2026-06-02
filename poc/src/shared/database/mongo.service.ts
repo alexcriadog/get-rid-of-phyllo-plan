@@ -39,9 +39,15 @@ export class MongoService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit(): Promise<void> {
     const url = this.config.getOrThrow<string>('MONGO_URL');
+    // Bound the per-process connection pool (Week 3). The driver default is
+    // 100/process — across api + worker + scheduler that's 300 potential
+    // Mongo connections. 20/process (overridable) is ample for our query
+    // volume and keeps the total well within a single-node Mongo's limits.
+    const maxPoolSize = Number(process.env.MONGO_MAX_POOL_SIZE) || 20;
     this.client = new MongoClient(url, {
       serverSelectionTimeoutMS: 5000,
       monitorCommands: false,
+      maxPoolSize,
     });
     await this.client.connect();
 

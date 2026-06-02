@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import * as http from 'node:http';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -47,9 +48,48 @@ async function bootstrapApi(): Promise<void> {
 }
 
 /**
+ * Minimal liveness HTTP server for the headless (worker / scheduler)
+ * processes (Week 3). They serve no app traffic, so an orchestrator had no
+ * way to health-check them directly. This answers `GET /healthz` with 200 —
+ * proof the process is up and its event loop is responsive — so the
+ * docker-compose healthcheck (and any future k8s liveness probe) can restart
+ * a hung container. Bound to HEALTH_PORT (default 3000, the port already
+ * exposed on these containers).
+ */
+function startHealthServer(
+  mode: 'worker' | 'scheduler',
+  logger: Logger,
+): http.Server {
+  const port = Number(process.env.HEALTH_PORT) || 3000;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/healthz' || req.url === '/health') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          mode,
+          uptime_s: Math.round(process.uptime()),
+        }),
+      );
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  server.on('error', (err) => {
+    logger.error(`[${mode}] health server error: ${err.message}`);
+  });
+  server.listen(port, () => {
+    logger.log(`[${mode}] health server listening on :${port}/healthz`);
+  });
+  return server;
+}
+
+/**
  * Worker + scheduler processes don't serve HTTP traffic — they only need
  * the DI container alive so their `onApplicationBootstrap` hooks fire.
- * `createApplicationContext` is the exact Nest primitive for this.
+ * `createApplicationContext` is the exact Nest primitive for this. We do run
+ * a tiny liveness server (see startHealthServer) purely for health probes.
  */
 async function bootstrapHeadless(mode: 'worker' | 'scheduler'): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -57,10 +97,12 @@ async function bootstrapHeadless(mode: 'worker' | 'scheduler'): Promise<void> {
     bufferLogs: false,
   });
   ctx.enableShutdownHooks();
+  const healthServer = startHealthServer(mode, logger);
   logger.log(`[${mode}] bootstrapped; waiting for jobs…`);
 
   const shutdown = (signal: string): void => {
     logger.log(`[${mode}] received ${signal}, shutting down`);
+    healthServer.close();
     ctx
       .close()
       .catch((err) => {

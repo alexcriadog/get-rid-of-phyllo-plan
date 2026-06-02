@@ -9,11 +9,22 @@ import { BullMqService, SyncJobPayload } from '@shared/redis/bullmq.service';
 import { MetricsService } from '@shared/metrics/metrics.service';
 import { RateBucketService } from '@shared/redis/rate-bucket.service';
 import { RedisService } from '@shared/redis/redis.service';
+import { runWithLock } from '@shared/redis/cron-lock';
+import { ulid } from 'ulid';
 import { BucTelemetryService } from '@modules/platforms/shared/meta-graph/buc-telemetry.service';
 
 const DEFAULT_TICK_MS = 30_000;
-const MAX_ROWS_PER_TICK = 500;
+const DEFAULT_MAX_ROWS_PER_TICK = 500;
 const SYNC_QUEUE_NAME = 'sync';
+
+/**
+ * Distributed-lock TTL for a single scheduler tick (Week 3). The scheduler is
+ * meant to be a singleton, but with no lock two instances would double-enqueue
+ * (the status='queued' write bumps updatedAt, defeating BullMQ's jobId dedup).
+ * 60s comfortably exceeds a tick's runtime so the lock never expires mid-tick;
+ * if the holder crashes, the next tick (30s later) re-acquires within ~2 ticks.
+ */
+const SCHEDULER_LOCK_TTL_MS = 60_000;
 
 /**
  * Stop enqueueing when the BullMQ waiting count crosses this watermark — the
@@ -72,6 +83,8 @@ export class SchedulerService
   private inFlight = false;
   /** Increments every tick. Used to throttle the orphan sweep. */
   private tickCounter = 0;
+  /** Unique per process — identifies who holds the tick lock for safe release. */
+  private readonly instanceToken = ulid();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -135,7 +148,26 @@ export class SchedulerService
     }
   }
 
+  /**
+   * Distributed-lock wrapper (Week 3). Ensures only one scheduler instance
+   * runs a given tick — a second instance simply skips. `inFlight` still
+   * guards same-process re-entry above this.
+   */
   private async tick(): Promise<void> {
+    const res = await runWithLock(
+      this.redis.client,
+      this.redis.key('cron', 'scheduler-tick'),
+      this.instanceToken,
+      SCHEDULER_LOCK_TTL_MS,
+      () => this.runTick(),
+    );
+    if (!res.ran) {
+      this.metrics.incr('scheduler_tick_lock_skip', {});
+      this.logger.debug('Scheduler tick skipped — lock held by another instance');
+    }
+  }
+
+  private async runTick(): Promise<void> {
     const now = new Date();
     this.tickCounter += 1;
 
@@ -159,7 +191,7 @@ export class SchedulerService
       return;
     }
     // Cap how many we enqueue this tick so we don't push past the watermark.
-    const enqueueBudget = Math.min(MAX_ROWS_PER_TICK, backpressureMax - waiting);
+    const enqueueBudget = Math.min(this.resolveMaxRowsPerTick(), backpressureMax - waiting);
 
     const rawRows = await this.prisma.syncJob.findMany({
       where: {
@@ -282,6 +314,22 @@ export class SchedulerService
     const n = Number(raw);
     if (!Number.isFinite(n) || n <= 0) {
       return DEFAULT_BACKPRESSURE_MAX;
+    }
+    return Math.floor(n);
+  }
+
+  /**
+   * Max sync_jobs enqueued per tick. Was a hardcoded 500 — a non-obvious
+   * 1000 jobs/min governor regardless of worker count. Now env-tunable
+   * (SCHEDULER_MAX_ROWS_PER_TICK) so throughput can scale with the worker
+   * fleet without a code change.
+   */
+  private resolveMaxRowsPerTick(): number {
+    const raw = process.env.SCHEDULER_MAX_ROWS_PER_TICK;
+    if (!raw) return DEFAULT_MAX_ROWS_PER_TICK;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) {
+      return DEFAULT_MAX_ROWS_PER_TICK;
     }
     return Math.floor(n);
   }
