@@ -22,11 +22,12 @@ const LEGACY_FULL_SCOPES: Record<string, string[]> = {
     'instagram_basic',
     'instagram_manage_insights',
     'read_insights',
+    'pages_manage_metadata',
   ],
   // IG OAuth is covered by FB; on its own (used only in the
   // facebook↔instagram special case in connect-tool) its scope union is the
   // IG-prefixed subset.
-  instagram: ['instagram_basic', 'instagram_manage_insights'],
+  instagram: ['instagram_basic', 'instagram_manage_insights', 'pages_manage_metadata'],
   tiktok: [
     'user.info.basic',
     'user.info.profile',
@@ -185,5 +186,32 @@ describe('defaultSelectedProducts + requiredProducts', () => {
 
   it('youtube ads is NOT in defaults (opt-in)', () => {
     expect(defaultSelectedProducts('youtube')).not.toContain('ads');
+  });
+});
+
+describe('pages_manage_metadata (webhook subscribe scope)', () => {
+  const WEBHOOK_PRODUCTS = ['engagement_new', 'mentions', 'comments', 'stories'];
+
+  it.each(['facebook', 'instagram'] as const)(
+    'is present on every webhook-capable %s product',
+    (platform) => {
+      for (const def of PLATFORM_CATALOG[platform]) {
+        if (WEBHOOK_PRODUCTS.includes(def.id)) {
+          expect(def.scopes).toContain('pages_manage_metadata');
+        }
+      }
+    },
+  );
+
+  it('is requested when a webhook product is selected', () => {
+    expect(scopesForProducts('facebook', ['engagement_new'])).toContain(
+      'pages_manage_metadata',
+    );
+  });
+
+  it('is NOT requested for identity-only connections', () => {
+    expect(scopesForProducts('facebook', [])).not.toContain(
+      'pages_manage_metadata',
+    );
   });
 });
