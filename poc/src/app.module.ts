@@ -20,6 +20,7 @@ import { ApiKeysModule } from '@modules/api-keys/api-keys.module';
 import { SdkTokensModule } from '@modules/sdk-tokens/sdk-tokens.module';
 import { OutboundWebhooksModule } from '@modules/outbound-webhooks/outbound-webhooks.module';
 import { AdminSaasModule } from '@modules/admin-saas/admin-saas.module';
+import { TokenRefreshModule } from '@modules/token-refresh/token-refresh.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AdminSaasModule } from '@modules/admin-saas/admin-saas.module';
     SyncModule,
     ApiModule,
     WebhooksModule,
+    TokenRefreshModule,
   ],
   providers: [
     {
