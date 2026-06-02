@@ -557,6 +557,32 @@ export class AdminController {
   // connect-tool/lib/platforms.ts `youtube` PlatformDef), so the
   // /admin/connect/youtube/* endpoints had no callers.
 
+  // ─── GDPR hard-delete (B-3, admin-only) ─────────────────────────────────
+
+  /**
+   * Right-to-erasure. Irreversibly removes the account everywhere — all Mongo
+   * documents + the MySQL row (cascading tokens / sync jobs / overrides) +
+   * orphan pending webhook events. Admin-only (gated at the edge by Caddy
+   * basic_auth on /admin* and /api/poc/admin*).
+   *
+   * Requires `?confirm=<id>` matching the path id so an accidental request
+   * can't wipe an account. There is no undo.
+   */
+  @Delete('accounts/:id/erase')
+  @HttpCode(200)
+  async eraseAccount(
+    @Param('id') rawId: string,
+    @Query('confirm') confirm: string | undefined,
+  ): Promise<unknown> {
+    const id = this.parseBigInt(rawId);
+    if (confirm !== rawId) {
+      throw new BadRequestException(
+        'Irreversible erase requires ?confirm=<account_id> matching the path id.',
+      );
+    }
+    return this.admin.eraseAccount(id);
+  }
+
   // ─── Helpers ───────────────────────────────────────────────────────────
 
   private parseBigInt(raw: string): bigint {

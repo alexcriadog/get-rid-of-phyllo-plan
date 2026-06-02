@@ -165,12 +165,15 @@ export class SchedulerService
       where: {
         status: 'idle',
         nextRunAt: { lte: now, not: null },
-        // Defence in depth against ban risk: never enqueue for paused or
-        // broken accounts. The worker enforces the same invariants, but
-        // filtering here stops us from even adding the BullMQ job.
+        // Defence in depth against ban risk: never enqueue for paused,
+        // broken, or disconnected accounts. The worker enforces the same
+        // invariants, but filtering here stops us from even adding the
+        // BullMQ job. B-2: `disconnected` is included — a disconnected
+        // account has had its tokens deleted, so enqueuing would just
+        // tight-loop into "No OAuth token" failures until the breaker pauses.
         account: {
           syncTier: { not: 'paused' },
-          status: { not: 'needs_reauth' },
+          status: { notIn: ['needs_reauth', 'disconnected'] },
         },
       },
       orderBy: [{ priority: 'desc' }, { nextRunAt: 'asc' }],

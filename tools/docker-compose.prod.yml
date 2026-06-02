@@ -216,21 +216,38 @@ services:
     logging: *default-logging
 
   redis:
-    # Bounded data set (LRU eviction) so a runaway producer can't fill
-    # Redis. Today's footprint is 3 MB — this cap is mostly insurance.
+    # B-4: Redis backs the BullMQ queues (sync/events/delivery), the rate
+    # buckets, and the cron locks — losing it silently drops in-flight jobs
+    # and webhook deliveries. So:
+    #   --appendonly yes      → AOF persistence; queue survives a restart.
+    #   --maxmemory-policy noeviction → never evict live queue keys under
+    #       memory pressure. Writes fail loudly (caller sees an error) instead
+    #       of Redis silently throwing away a job/delivery. allkeys-lru did the
+    #       opposite and was the silent-job-loss footgun.
+    #   --maxmemory 512mb     → headroom for AOF + no-eviction (was 96mb, sized
+    #       for the old "evict whatever" model). The box is 8 GB; mem_limit
+    #       bumped to 768m to leave room above maxmemory for the AOF buffer.
+    #   --appendfsync everysec → durable to within ~1s, the standard tradeoff.
     command:
       - redis-server
       - --maxmemory
-      - "96mb"
+      - "512mb"
       - --maxmemory-policy
-      - "allkeys-lru"
+      - "noeviction"
       - --appendonly
-      - "no"
-    mem_limit: 128m
-    mem_reservation: 16m
+      - "yes"
+      - --appendfsync
+      - "everysec"
+    mem_limit: 768m
+    mem_reservation: 64m
     cpus: 0.3
     restart: unless-stopped
     logging: *default-logging
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
 
 volumes:
   caddy_data:
