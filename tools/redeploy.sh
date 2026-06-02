@@ -12,14 +12,36 @@ cd "$REPO_DIR"
 log() { printf '\n\033[1;36m▶ %s\033[0m\n' "$*"; }
 
 log "Pulling latest main…"
+# Capture the dependency lockfile hash BEFORE the pull so we can tell whether
+# deps changed. The app services bind-mount a persistent `app_node_modules`
+# named volume over /app/node_modules; that volume is populated once and
+# SHADOWS the image's node_modules on every later rebuild. So a freshly built
+# image with a new dependency still runs against the stale volume → a
+# `Cannot find module` crash-loop. When the lockfile changes we must recreate
+# the volume so it repopulates from the new image.
+LOCK_FILE="poc/package-lock.json"
+LOCK_BEFORE="$(sha1sum "$LOCK_FILE" 2>/dev/null | awk '{print $1}' || echo none)"
 git fetch --all --prune
 git reset --hard origin/main
+LOCK_AFTER="$(sha1sum "$LOCK_FILE" 2>/dev/null | awk '{print $1}' || echo none)"
 
 log "Rebuilding + restarting compose stack…"
 cd poc
 DC="docker compose"
-if ! docker compose version >/dev/null 2>&1; then DC="sudo docker compose"; fi
+DOCKER="docker"
+if ! docker compose version >/dev/null 2>&1; then DC="sudo docker compose"; DOCKER="sudo docker"; fi
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml build --pull
+
+# Refresh the node_modules volume iff deps changed (see note above). Must
+# remove the containers first so the volume is free, then recreate so the
+# fresh (empty) volume repopulates from the rebuilt image on next `up`.
+if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ]; then
+  log "package-lock.json changed — refreshing app_node_modules volume so new deps land…"
+  $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml stop api worker scheduler || true
+  $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml rm -f api worker scheduler || true
+  $DOCKER volume rm poc_app_node_modules 2>/dev/null || true
+fi
+
 $DC -f docker-compose.yml -f ../tools/docker-compose.prod.yml up -d
 
 # Apply Prisma migrations. `migrate deploy` is the production-safe path
