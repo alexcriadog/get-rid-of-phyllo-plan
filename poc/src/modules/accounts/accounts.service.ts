@@ -488,6 +488,15 @@ export class AccountsService {
         data: { status: 'disconnected', disconnectedAt },
       }),
       this.prisma.oAuthToken.deleteMany({ where: { accountId } }),
+      // B-2: park the sync jobs. nextRunAt=null makes them undue, so the
+      // scheduler's `nextRunAt <= now` filter never picks them again even
+      // if the account-status filter were bypassed. status='idle' leaves
+      // them clean to resume if the account reconnects — seedAccount's
+      // syncJob.upsert sets nextRunAt=now + status='idle' again.
+      this.prisma.syncJob.updateMany({
+        where: { accountId },
+        data: { status: 'idle', nextRunAt: null },
+      }),
     ]);
 
     // Fire-and-forget — webhook delivery must not block the response or

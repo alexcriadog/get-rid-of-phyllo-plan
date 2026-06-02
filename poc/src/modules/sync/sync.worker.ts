@@ -241,6 +241,15 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
       return;
     }
 
+    // B-2: a disconnected account has had its tokens deleted and must not
+    // sync. The scheduler already filters these out; this is defence in
+    // depth for jobs that were already queued when the disconnect landed.
+    if (account.status === 'disconnected') {
+      await this.markJobSkipped(syncJobId, now, 'disconnected');
+      this.metrics.incr('sync_worker_skipped_disconnected', { product });
+      return;
+    }
+
     const token = account.tokens[0];
     if (!token) {
       await this.markJobFailed(syncJobId, now, 'No OAuth token on file');
