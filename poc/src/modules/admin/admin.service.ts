@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   Inject,
@@ -1921,7 +1921,13 @@ export class AdminService {
     pages: Array<{
       page_id: string;
       page_name: string;
-      page_access_token: string;
+      // Sec C-3: we no longer return the live Page access token in the
+      // response body. Instead we stash it server-side in Redis under a
+      // short-lived, single-use opaque ref and return only that. The admin
+      // connect UI passes the ref to POST /admin/connect/seed, which resolves
+      // it back to the token server-side. Keeps live OAuth credentials out of
+      // response bodies, proxy logs, and browser history.
+      page_token_ref: string;
       page_already_connected: boolean;
       instagram?: {
         ig_business_id: string;
@@ -2105,7 +2111,7 @@ export class AdminService {
       const row: (typeof out)[number] = {
         page_id: p.page_id,
         page_name: p.page_name,
-        page_access_token: p.page_access_token,
+        page_token_ref: await this.brokerConnectToken(p.page_access_token),
         page_already_connected: connectedSet.has(`facebook:${p.page_id}`),
       };
       const igId = p.instagram_business_account_id;
@@ -2148,6 +2154,51 @@ export class AdminService {
     }
 
     return { me, token_type: tokenType, pages: out, warnings };
+  }
+
+  // ─── Connect token broker (Sec C-3) ────────────────────────────────────
+  //
+  // discoverConnections() must not leak live Page access tokens in its HTTP
+  // response. Instead it stores each token in Redis under a random,
+  // single-use ref with a short TTL and returns only the ref. seedConnection
+  // resolves the ref back to the token server-side. Backwards-compatible:
+  // callers that already hold a raw token (connect-tool, the manual paste
+  // form for tiktok/threads/youtube) keep sending `access_token` directly.
+
+  private static readonly CONNECT_TOKEN_REF_PREFIX = 'connect:ptref';
+  private static readonly CONNECT_TOKEN_REF_TTL_SECONDS = 600;
+
+  private brokerKey(ref: string): string {
+    return this.redis.key(AdminService.CONNECT_TOKEN_REF_PREFIX, ref);
+  }
+
+  /** Stash a live token in Redis and return a short-lived opaque ref. */
+  private async brokerConnectToken(token: string): Promise<string> {
+    const ref = randomBytes(24).toString('hex');
+    await this.redis.client.set(
+      this.brokerKey(ref),
+      token,
+      'EX',
+      AdminService.CONNECT_TOKEN_REF_TTL_SECONDS,
+    );
+    return ref;
+  }
+
+  /**
+   * Resolve a broker ref back to its token. Returns null if the ref is
+   * unknown or expired. Only accepts the hex shape brokerConnectToken emits,
+   * so a caller can't probe arbitrary Redis keys through it.
+   *
+   * Deliberately TTL-bounded rather than single-use: one discovered Page
+   * yields one ref, and the operator may seed BOTH the Facebook Page and its
+   * linked Instagram Business account from it (two seed calls, same Page
+   * token). Deleting on first resolve would break the second. The 10-min TTL
+   * already bounds exposure; the ref never appears in a response body or log.
+   */
+  async resolveConnectTokenRef(ref: string): Promise<string | null> {
+    if (!/^[0-9a-f]{48}$/.test(ref)) return null;
+    const token = await this.redis.client.get(this.brokerKey(ref));
+    return token;
   }
 
   /**

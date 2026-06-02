@@ -82,7 +82,15 @@ const ConnectSeedSchema = z
       'youtube',
       'twitch',
     ]),
-    access_token: z.string().min(20),
+    // Either a raw token (connect-tool, manual paste) OR a single-use broker
+    // ref minted by /admin/connect/discover (Sec C-3 — keeps live Page tokens
+    // out of the discover response body). Exactly one is required; enforced by
+    // the .refine() below.
+    access_token: z.string().min(20).optional(),
+    page_token_ref: z
+      .string()
+      .regex(/^[0-9a-f]{48}$/, 'malformed page_token_ref')
+      .optional(),
     refresh_token: z.string().min(20).optional(),
     expires_at: z.string().datetime({ offset: true }).optional(),
     canonical_user_id: z.string().min(1),
@@ -99,7 +107,11 @@ const ConnectSeedSchema = z
     /** Sandbox flag — accounts seeded with is_test=true don't fire webhooks. */
     is_test: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (d) => Boolean(d.access_token) !== Boolean(d.page_token_ref),
+    { message: 'Provide exactly one of access_token or page_token_ref' },
+  );
 
 const MINS_MIN = 1;
 const MINS_MAX = 1440;
@@ -324,9 +336,12 @@ export class AdminController {
   @Post('accounts/:id/refresh-now')
   @HttpCode(202)
   async refreshNow(@Param('id') rawId: string): Promise<unknown> {
-    // Delegate to the existing manual-refresh controller so the logic stays
-    // DRY. Default products inferred from adapter support.
-    return this.manualRefresh.refresh(rawId, {});
+    // Delegate to the manual-refresh controller's cross-tenant core so the
+    // logic stays DRY. We call runRefresh (not the API-key-guarded refresh
+    // handler) because the admin surface is authenticated at the edge by
+    // Caddy basic_auth and is intentionally cross-tenant. Default products
+    // inferred from adapter support.
+    return this.manualRefresh.runRefresh(rawId, {});
   }
 
   @Post('accounts/:id/pause')
@@ -504,9 +519,24 @@ export class AdminController {
         issues: parsed.error.issues,
       });
     }
+    // Resolve a broker ref (Sec C-3) to the live token server-side. The ref is
+    // single-use and short-lived; a stale/replayed ref yields a clean 400.
+    let accessToken = parsed.data.access_token;
+    if (parsed.data.page_token_ref) {
+      const resolved = await this.admin.resolveConnectTokenRef(
+        parsed.data.page_token_ref,
+      );
+      if (!resolved) {
+        throw new BadRequestException({
+          message:
+            'page_token_ref is invalid or expired — re-run discover and try again.',
+        });
+      }
+      accessToken = resolved;
+    }
     return this.admin.seedConnection({
       platform: parsed.data.platform,
-      accessToken: parsed.data.access_token,
+      accessToken: accessToken as string,
       refreshToken: parsed.data.refresh_token,
       expiresAt: parsed.data.expires_at
         ? new Date(parsed.data.expires_at)
