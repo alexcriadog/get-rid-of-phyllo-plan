@@ -18,25 +18,10 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { BullMqService, SyncJobPayload } from '@shared/redis/bullmq.service';
 import { MetricsService } from '@shared/metrics/metrics.service';
+import { FIELD_TO_PRODUCT } from './meta-webhook-fields';
 
 const SYNC_QUEUE_NAME = 'sync';
 const PAYLOAD_SNIPPET_MAX_BYTES = 2048;
-
-/**
- * Map Meta field names to internal product identifiers. `stories` has a
- * dedicated handler; `media`, `comments`, `mentions`, `feed`, `videos`
- * all resolve to `engagement_new`.
- */
-const FIELD_TO_PRODUCT: Readonly<Record<string, string>> = {
-  media: 'engagement_new',
-  comments: 'engagement_new',
-  mentions: 'engagement_new',
-  feed: 'engagement_new',
-  videos: 'engagement_new',
-  live_videos: 'engagement_new',
-  story_insights: 'stories',
-  stories: 'stories',
-};
 
 interface MetaChange {
   field?: string;
