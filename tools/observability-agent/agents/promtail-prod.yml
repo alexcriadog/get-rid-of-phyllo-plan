@@ -1,0 +1,71 @@
+# =============================================================================
+# Promtail Agent — connector PoC (production)
+#
+# Reads Docker container logs and ships them to the central Loki. Mirrors the
+# social-media prod config; only instance_name differs. Requires the app
+# containers to log with `tag: "{{.Name}}"` (set in tools/docker-compose.prod.yml
+# logging anchor) so the `service` label is populated from the container name.
+# =============================================================================
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: 'http://${OBSERVABILITY_EC2_PRIVATE_IP}:3100/loki/api/v1/push'
+
+scrape_configs:
+  - job_name: docker_containers
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: docker
+          env: production
+          instance_name: connector-prod
+          __path__: /var/lib/docker/containers/*/*-json.log
+    pipeline_stages:
+      # Parse the outer Docker JSON wrapper
+      - json:
+          expressions:
+            log: log
+            stream: stream
+            time: time
+            tag: attrs.tag
+
+      # Label the log with the extracted elements
+      - labels:
+          service: tag
+          stream: stream
+
+      # Set the actual log message as the text to store
+      - output:
+          source: log
+
+      # Attempt to parse the inner log line if it's JSON (NestJS/Pino)
+      - json:
+          expressions:
+            level: level
+            context: context
+
+      # Normalize Pino numeric levels to text
+      - template:
+          source: level
+          template: '{{ if eq .Value "10" }}trace{{ else if eq .Value "20" }}debug{{ else if eq .Value "30" }}info{{ else if eq .Value "40" }}warn{{ else if eq .Value "50" }}error{{ else if eq .Value "60" }}fatal{{ else }}{{ .Value }}{{ end }}'
+
+      # Assign inner variables as labels for filtering
+      - labels:
+          level:
+          context:
+
+      # Use Docker's timestamp
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+
+      # Drop logs older than 7 days to avoid Loki 'timestamp too old' errors
+      - drop:
+          older_than: 168h
+          drop_counter_reason: 'too_old'

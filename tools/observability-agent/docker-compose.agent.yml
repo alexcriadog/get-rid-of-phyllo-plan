@@ -1,0 +1,87 @@
+# =============================================================================
+# Observability Agent Stack — connector PoC
+#
+# Replicates the org's standard per-EC2 agent (same images/shape as the
+# social-media prod box): Prometheus in --agent mode that scrapes the local
+# connector containers and remote_writes to the central Prometheus over the
+# VPC private network, + node-exporter (host metrics) + promtail (container
+# logs → Loki).
+#
+# Deploy on the connector EC2:
+#   cd ~/get-rid-of-phyllo/tools/observability-agent
+#   cp .env.example .env   # set OBSERVABILITY_EC2_PRIVATE_IP, ENV, INSTANCE_NAME
+#   docker compose -f docker-compose.agent.yml up -d
+#
+# Attaches to the connector app network (poc_default, external) so the
+# prometheus-agent can resolve api/worker/scheduler by service name and scrape
+# their internal /metrics ops port (9464). ~85 MB RAM total.
+# =============================================================================
+
+services:
+  prometheus-agent:
+    image: prom/prometheus:v3.5.1
+    container_name: agent-prometheus
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        # Placeholder avoids sed back-reference issues (IPs like 172.31.x.x contain \1, \3, etc.)
+        sed -e "s^__OBSERVABILITY_IP__^$${OBSERVABILITY_EC2_PRIVATE_IP}^g" \
+            /etc/prometheus/prometheus-agent.yml > /tmp/prometheus.yml
+        exec /bin/prometheus --config.file=/tmp/prometheus.yml --agent
+    volumes:
+      - ./agents/prometheus-agent-${ENV:-prod}.yml:/etc/prometheus/prometheus-agent.yml:ro
+    env_file:
+      - .env
+    networks:
+      - app
+    restart: unless-stopped
+    mem_limit: 150m
+
+  promtail:
+    image: grafana/promtail:3.5.0
+    container_name: agent-promtail
+    command: -config.file=/etc/promtail/promtail.yml -config.expand-env=true
+    volumes:
+      - ./agents/promtail-${ENV:-prod}.yml:/etc/promtail/promtail.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    env_file:
+      - .env
+    networks:
+      - app
+    restart: unless-stopped
+    mem_limit: 100m
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: agent-node-exporter
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.disable-defaults
+      - --collector.cpu
+      - --collector.meminfo
+      - --collector.diskstats
+      - --collector.filesystem
+      - --collector.netdev
+      - --collector.os
+      - --collector.loadavg
+      - --collector.stat
+      - --collector.time
+      - --collector.uname
+    networks:
+      - app
+    restart: unless-stopped
+    mem_limit: 50m
+
+# The connector app stack's default network (compose project "poc"). External
+# so the agent can resolve api/worker/scheduler + agent-node-exporter by name.
+networks:
+  app:
+    external: true
+    name: poc_default

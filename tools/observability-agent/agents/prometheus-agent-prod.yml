@@ -1,0 +1,44 @@
+# =============================================================================
+# Prometheus Agent — connector PoC (production)
+#
+# Runs in agent mode: scrapes the local connector containers' internal ops
+# /metrics port (9464) and remote_writes to the central Prometheus. The
+# __OBSERVABILITY_IP__ placeholder is substituted from OBSERVABILITY_EC2_PRIVATE_IP
+# at container start (see docker-compose.agent.yml).
+#
+# external_labels.instance_name = connector-prod keeps these series distinct
+# from the social-media boxes. env = production so the central alert rules
+# (HighErrorRate / HighP95Latency / NodeJsHeapHigh / EventLoopBlocked, which
+# group by (env, job)) apply to the connector with no new config — the metric
+# NAMES already match (http_request_duration_seconds, nodejs_*).
+# =============================================================================
+
+global:
+  scrape_interval: 30s
+  external_labels:
+    env: 'production'
+    instance_name: 'connector-prod'
+
+scrape_configs:
+  - job_name: 'connector-api'
+    static_configs:
+      - targets: ['api:9464']
+
+  - job_name: 'connector-worker'
+    static_configs:
+      - targets: ['worker:9464']
+
+  - job_name: 'connector-scheduler'
+    static_configs:
+      - targets: ['scheduler:9464']
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['agent-node-exporter:9100']
+
+remote_write:
+  - url: 'http://__OBSERVABILITY_IP__:9090/api/v1/write'
+    queue_config:
+      max_shards: 4
+      capacity: 2500
+      max_samples_per_send: 500
