@@ -18,6 +18,10 @@ describe('FIELD_TO_PRODUCT', () => {
   it('routes ratings to the ratings product (not the default)', () => {
     expect(FIELD_TO_PRODUCT['ratings']).toBe('ratings');
   });
+
+  it('returns undefined for an unmapped field (caller applies its own default)', () => {
+    expect(FIELD_TO_PRODUCT['unknown_field']).toBeUndefined();
+  });
 });
 
 describe('pageFieldsForProducts', () => {

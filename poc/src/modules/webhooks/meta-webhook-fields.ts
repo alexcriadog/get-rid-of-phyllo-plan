@@ -29,6 +29,7 @@ export const FIELD_TO_PRODUCT: Readonly<Record<string, string>> = {
 // Product -> Page webhook fields. Only products with Page-object coverage
 // appear. `stories` has no Page story webhook field (IG-only, app-level), so
 // it is intentionally absent.
+// Keys are product-catalog IDs (connect-time selection), not inbound field names.
 const PRODUCT_TO_PAGE_FIELDS: Readonly<
   Record<string, ReadonlyArray<string>>
 > = {

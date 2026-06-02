@@ -30,6 +30,7 @@ import { AccountsService, Platform } from '@modules/accounts/accounts.service';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
 import { ThreadsTokenRefreshService } from '@modules/platforms/shared/threads-api/threads-token-refresh.service';
 import { BucTelemetryService } from '@modules/platforms/shared/meta-graph/buc-telemetry.service';
+import { FIELD_TO_PRODUCT } from '@modules/webhooks/meta-webhook-fields';
 import { ConfigService } from '@nestjs/config';
 
 const GRAPH_VERSION = 'v22.0';
@@ -1392,7 +1393,7 @@ export class AdminService {
 
     const entry = envelope.entry?.[0];
     const fieldName = entry?.changes?.[0]?.field ?? '';
-    const product = this.fieldToProduct(fieldName);
+    const product = FIELD_TO_PRODUCT[fieldName] ?? 'engagement_new';
     const canonicalUserId = entry?.id;
 
     if (!canonicalUserId) {
@@ -1433,11 +1434,6 @@ export class AdminService {
     });
 
     return { ok: true, job_id: String(addedJob.id ?? '') };
-  }
-
-  private fieldToProduct(field: string): string {
-    if (field === 'story_insights' || field === 'stories') return 'stories';
-    return 'engagement_new';
   }
 
   // ──────────────────────────────────────────────────────────────────────────
