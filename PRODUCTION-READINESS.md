@@ -174,12 +174,12 @@ All 6 adapters are real, not stubs. Facebook is the most complete (profile, cont
 - [ ] **B-5**: automated backups (mysqldump + mongodump) — **PENDING a decision** (backup destination: new S3 bucket / local disk / existing bucket). `db push --accept-data-loss` fallback in `redeploy.sh`/`ec2-bootstrap.sh` still to be removed.
 
 ### Week 3 — Ops & scale hardening
-- [ ] Set Prisma `connection_limit` and Mongo `maxPoolSize`
-- [ ] Distributed lock on the scheduler (reuse `cron-lock.ts`); make `MAX_ROWS_PER_TICK` env-configurable
-- [ ] `/metrics` (Prometheus) endpoint + basic alerting (tokens expiring en masse, 5xx spike, queue depth)
-- [ ] Health/readiness probes on worker and scheduler processes
-- [ ] Tests for `sync.worker` + `scheduler` + one backend e2e of the full pipeline; CI/CD with build+test gate
-- [ ] Add EXPIRE to daily-counter Redis keys (fix the leak); review the 10s `listAllBuckets` SCAN cost
+- [x] Prisma `connection_limit` (10, env `PRISMA_CONNECTION_LIMIT`) + Mongo `maxPoolSize` (20, env `MONGO_MAX_POOL_SIZE`) — shipped 2026-06-02.
+- [x] Distributed lock on the scheduler (`runWithLock` cron:scheduler-tick, 60s) + `MAX_ROWS_PER_TICK` env-tunable (`SCHEDULER_MAX_ROWS_PER_TICK`) — shipped 2026-06-02.
+- [x] Health/readiness probes on worker + scheduler (`/healthz` liveness server in `main.ts` + Node-based compose healthchecks) — shipped + verified healthy in prod 2026-06-02.
+- [x] Redis daily-counter leak fixed — rate-bucket Lua now `PEXPIRE`s every key with a 48h sliding TTL (also bounds the `listAllBuckets` SCAN set) — shipped 2026-06-02.
+- [ ] `/metrics` (Prometheus) endpoint + basic alerting (tokens expiring en masse, 5xx spike, queue depth) — **PENDING alerting-destination decision**.
+- [ ] Tests for `sync.worker` + `scheduler` + one backend e2e of the full pipeline; CI/CD with build+test gate — **PENDING CI decision**. (Note: full jest suite OOMs locally — CI runners have more RAM.)
 
 ### Backlog (nice-to-have)
 - [ ] Wire the S3 raw-archive offload before scaling Mongo past ~100k accounts
