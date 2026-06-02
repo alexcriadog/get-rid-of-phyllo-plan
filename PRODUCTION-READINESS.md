@@ -167,11 +167,11 @@ All 6 adapters are real, not stubs. Facebook is the most complete (profile, cont
 - [ ] **H-7**: add an app-level guard for `/admin/*`; confirm port 3000 is not published to the host in prod
 
 ### Week 2 — Data resilience (blockers)
-- [ ] **B-1**: token-refresh cron scanning `OAuthToken.expiresAt` (incl. Meta 60-day re-exchange)
-- [ ] **B-2**: exclude `disconnected` from the scheduler filter; stop/cancel sync jobs on disconnect
-- [ ] **B-3**: GDPR hard-delete (Prisma + tokens + all Mongo collections) + per-end-user export
-- [ ] **B-4**: queue Redis → `appendonly yes` + `noeviction`
-- [ ] **B-5**: automated backups (mysqldump + mongodump → S3) with a tested restore; remove the `db push --accept-data-loss` fallback from `redeploy.sh`
+- [x] **B-1**: proactive token-refresh cron (`poc/src/modules/token-refresh/`) — shipped 2026-06-02. Hourly @ :15 UTC, api-gated + Redis lock. Refreshes tiktok/twitch/youtube (90-min lead) + threads (7-day lead); Meta is NOT refreshable (confirmed) so it flips `needs_reauth` + fires `token.expired` once a Meta token has actually expired so the client re-OAuths. No Meta re-exchange built (not reliably possible).
+- [x] **B-2**: shipped 2026-06-02. Scheduler filter excludes `disconnected`; worker skips disconnected; `disconnectAccount` parks sync jobs (`nextRunAt=null`) in-transaction, resuming on reconnect.
+- [x] **B-3**: shipped 2026-06-02 — **admin-only** per decision. `DELETE /admin/accounts/:id/erase?confirm=<id>` → `AdminService.eraseAccount` purges 11 Mongo collections (correct per-writer account-id field) + `PendingWebhookEvent` + cascading `account.delete`. Client `/v1` keeps soft-disconnect. Per-end-user export NOT built (deferred — wasn't requested).
+- [x] **B-4**: shipped 2026-06-02. Prod Redis → `appendonly yes` (appendfsync everysec) + `noeviction`, maxmemory 512mb, + healthcheck. Verified live.
+- [ ] **B-5**: automated backups (mysqldump + mongodump) — **PENDING a decision** (backup destination: new S3 bucket / local disk / existing bucket). `db push --accept-data-loss` fallback in `redeploy.sh`/`ec2-bootstrap.sh` still to be removed.
 
 ### Week 3 — Ops & scale hardening
 - [ ] Set Prisma `connection_limit` and Mongo `maxPoolSize`
