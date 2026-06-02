@@ -34,6 +34,9 @@ x-logging: &default-logging
   options:
     max-size: "20m"
     max-file: "5"
+    # Embed the container name in each json-log entry so promtail (observability
+    # agent) can label logs by service. Read via attrs.tag in promtail-prod.yml.
+    tag: "{{.Name}}"
 
 services:
   # ── Nest services: switch from dev ts-node to compiled JS ─────────────
