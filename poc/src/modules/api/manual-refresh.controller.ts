@@ -8,6 +8,8 @@ import {
   NotFoundException,
   Param,
   Post,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
 import { PrismaService } from '@shared/database/prisma.service';
@@ -17,6 +19,10 @@ import {
   ADAPTER_REGISTRY,
   AdapterRegistry,
 } from '@modules/platforms/platforms.module';
+import {
+  BearerApiKeyGuard,
+  RequestWithWorkspace,
+} from '@/common/guards/bearer-api-key.guard';
 
 const SYNC_QUEUE_NAME = 'sync';
 const SUPPORTED_PRODUCTS: ReadonlyArray<string> = [
@@ -52,6 +58,7 @@ interface ManualRefreshResponse {
 }
 
 @Controller()
+@UseGuards(BearerApiKeyGuard)
 export class ManualRefreshController {
   private readonly logger = new Logger(ManualRefreshController.name);
 
@@ -62,11 +69,45 @@ export class ManualRefreshController {
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
 
+  /**
+   * Public, API-key-authenticated entry point. The class-level
+   * BearerApiKeyGuard attaches `req.workspace`; we then scope the account to
+   * that workspace and 404 on cross-tenant ids (same IDOR-safe pattern as
+   * V1AccountsController.getAccount). The actual enqueue logic lives in
+   * `runRefresh` so the admin surface (cross-tenant, gated at the edge by
+   * Caddy basic_auth) can call it directly without re-authenticating.
+   */
   @Post('v1/accounts/:id/refresh')
   @HttpCode(202)
   async refresh(
+    @Req() req: RequestWithWorkspace,
     @Param('id') rawId: string,
     @Body() body: unknown,
+  ): Promise<ManualRefreshResponse> {
+    const workspaceId = req.workspace?.workspaceId;
+    if (!workspaceId) {
+      // Guard ran but didn't attach a workspace — route-wiring bug. Loud 500.
+      throw new Error('Workspace context missing on authenticated request');
+    }
+    const accountId = this.parseBigInt(rawId);
+    const owner = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: { workspaceId: true },
+    });
+    if (!owner || owner.workspaceId !== workspaceId) {
+      throw new NotFoundException(`Account ${rawId} not found`);
+    }
+    return this.runRefresh(rawId, body);
+  }
+
+  /**
+   * Cross-tenant refresh core. NOT exposed as its own HTTP route — callers
+   * are either the scoped `refresh()` handler above or the admin controller
+   * (already authenticated at the edge). Does no workspace scoping by design.
+   */
+  async runRefresh(
+    rawId: string,
+    body: unknown,
   ): Promise<ManualRefreshResponse> {
     const accountId = this.parseBigInt(rawId);
     const parsed = RefreshBodySchema.safeParse(body ?? {});

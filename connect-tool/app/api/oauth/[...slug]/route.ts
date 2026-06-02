@@ -6,6 +6,7 @@
 // Each platform's logic lives in lib/platforms.ts. This file is just
 // routing and error handling.
 
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   PLATFORMS,
@@ -118,6 +119,56 @@ function errorRedirect(baseUrl: string, message: string): NextResponse {
   );
 }
 
+// ─── OAuth state (Sec C-2: CSRF / authorization-code injection) ──────────
+//
+// We mint a random `state` at /start, bind it to the browser via an
+// HttpOnly SameSite=Lax cookie, and force it onto the outbound authorize URL
+// (overwriting any per-platform default). At /callback we require the
+// returned ?state to match the cookie in constant time. This blocks the
+// classic login-CSRF / code-injection attack where an attacker feeds their
+// own authorization code into a victim's callback. SameSite=Lax survives the
+// top-level redirect back from the provider; the 10-min TTL bounds the flow.
+const OAUTH_STATE_COOKIE = 'camaleonic_oauth_state';
+const OAUTH_STATE_TTL_SECONDS = 600;
+
+function newOAuthState(): string {
+  return randomBytes(32).toString('hex');
+}
+
+function setStateCookie(res: NextResponse, state: string): void {
+  res.cookies.set(OAUTH_STATE_COOKIE, state, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: OAUTH_STATE_TTL_SECONDS,
+  });
+}
+
+function clearStateCookie(res: NextResponse): void {
+  res.cookies.set(OAUTH_STATE_COOKIE, '', {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 0,
+  });
+}
+
+/** Force our controlled state onto an authorize URL, replacing any default. */
+function withForcedState(authorizeUrl: string, state: string): string {
+  const u = new URL(authorizeUrl);
+  u.searchParams.set('state', state);
+  return u.toString();
+}
+
+/** Constant-time string compare that never throws on length mismatch. */
+function statesMatch(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false;
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
+
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ slug: string[] }> },
@@ -221,7 +272,13 @@ export async function GET(
         err instanceof Error ? err.message : String(err),
       );
     }
+    // Sec C-2: bind this flow to the browser with a CSRF state we verify at
+    // the callback. Force it onto the authorize URL so the provider echoes
+    // our value back regardless of any per-platform default.
+    const state = newOAuthState();
+    authorizeUrl = withForcedState(authorizeUrl, state);
     const response = NextResponse.redirect(authorizeUrl, { status: 302 });
+    setStateCookie(response, state);
     if (contextSessionId) {
       setContextCookie(response, contextSessionId);
     }
@@ -233,10 +290,26 @@ export async function GET(
     const error = sp.get('error');
     if (error) {
       const desc = sp.get('error_description') ?? '';
-      return errorRedirect(
+      const res = errorRedirect(
         baseUrl,
         `${platform} denied: ${error}${desc ? ` — ${desc}` : ''}`,
       );
+      clearStateCookie(res);
+      return res;
+    }
+    // Sec C-2: the returned ?state MUST match the cookie we set at /start.
+    // Reject before touching the authorization code so a code injected by an
+    // attacker (who can't forge the victim's HttpOnly cookie) is never
+    // exchanged.
+    const returnedState = sp.get('state');
+    const cookieState = req.cookies.get(OAUTH_STATE_COOKIE)?.value ?? null;
+    if (!statesMatch(returnedState, cookieState)) {
+      const res = errorRedirect(
+        baseUrl,
+        `${platform} callback failed state verification — please retry the connection.`,
+      );
+      clearStateCookie(res);
+      return res;
     }
     const code = sp.get('code');
     if (!code) {
@@ -278,12 +351,16 @@ export async function GET(
         const target = embedded
           ? `${baseUrl}/oauth/complete?session=${result.sessionId}&kind=fb-picker&platform=facebook`
           : `${baseUrl}/facebook/pages?session=${result.sessionId}`;
-        return NextResponse.redirect(target, { status: 302 });
+        const res = NextResponse.redirect(target, { status: 302 });
+        clearStateCookie(res);
+        return res;
       }
       const target = embedded
         ? `${baseUrl}/oauth/complete?session=${result.sessionId}&kind=confirm&platform=${result.platform}`
         : `${baseUrl}/confirm/${result.platform}?session=${result.sessionId}`;
-      return NextResponse.redirect(target, { status: 302 });
+      const res = NextResponse.redirect(target, { status: 302 });
+      clearStateCookie(res);
+      return res;
     } catch (err) {
       return errorRedirect(
         baseUrl,

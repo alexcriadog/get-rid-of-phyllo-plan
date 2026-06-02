@@ -29,7 +29,9 @@ import { cn } from '@/lib/utils';
 type DiscoveredPage = {
   page_id: string;
   page_name: string;
-  page_access_token: string;
+  // Sec C-3: discover no longer returns the live Page token; it returns a
+  // short-lived, single-use server-side ref we pass to /admin/connect/seed.
+  page_token_ref: string;
   page_already_connected: boolean;
   instagram?: {
     ig_business_id: string;
@@ -87,7 +89,10 @@ type ConnectKey = string; // `${platform}:${id}`
 
 type SeedBody = {
   platform: 'instagram' | 'facebook' | 'tiktok' | 'threads';
-  access_token: string;
+  // Exactly one of these. FB/IG seeds from discover use a broker ref
+  // (Sec C-3); manual/tiktok/threads paste flows send the raw token.
+  access_token?: string;
+  page_token_ref?: string;
   refresh_token?: string;
   expires_at?: string; // ISO 8601 with offset
   canonical_user_id: string;
@@ -680,7 +685,7 @@ function PageCard({
         onClick={() =>
           onConnect(fbKey, {
             platform: 'facebook',
-            access_token: page.page_access_token,
+            page_token_ref: page.page_token_ref,
             canonical_user_id: page.page_id,
             handle: page.page_name,
             metadata: { page_id: page.page_id },
@@ -709,7 +714,7 @@ function PageCard({
           onClick={() =>
             onConnect(igKey, {
               platform: 'instagram',
-              access_token: page.page_access_token,
+              page_token_ref: page.page_token_ref,
               canonical_user_id: page.instagram!.ig_business_id,
               handle:
                 page.instagram!.username ?? page.instagram!.name ?? undefined,
