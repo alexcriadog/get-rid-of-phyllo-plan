@@ -19,6 +19,7 @@ import { postToPocSeed } from '../../../lib/seed-client';
 import {
   fetchProductsCatalog,
   defaultSelectedProducts,
+  clampProductsToScope,
 } from '../../../lib/workspace-config';
 import {
   getContextCookie,
@@ -73,12 +74,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 503 },
     );
   }
-  const productsFb = parsed.data.productsFb?.length
-    ? parsed.data.productsFb
-    : defaultSelectedProducts(catalog, 'facebook');
-  const productsIg = parsed.data.productsIg?.length
-    ? parsed.data.productsIg
-    : defaultSelectedProducts(catalog, 'instagram');
+  const scopeFb = session.ctx?.connectionProducts?.facebook;
+  const scopeIg = session.ctx?.connectionProducts?.instagram;
+  const productsFb = clampProductsToScope(
+    parsed.data.productsFb?.length
+      ? parsed.data.productsFb
+      : defaultSelectedProducts(catalog, 'facebook'),
+    scopeFb,
+  );
+  const productsIg = clampProductsToScope(
+    parsed.data.productsIg?.length
+      ? parsed.data.productsIg
+      : defaultSelectedProducts(catalog, 'instagram'),
+    scopeIg,
+  );
 
   // Prefer the context captured on the session at the OAuth callback (works
   // inside a third-party iframe); fall back to the cookie for the legacy

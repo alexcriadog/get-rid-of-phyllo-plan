@@ -13,6 +13,7 @@ import { postToPocSeed } from '../../../lib/seed-client';
 import {
   fetchProductsCatalog,
   requiredProducts,
+  clampProductsToScope,
 } from '../../../lib/workspace-config';
 import {
   getContextCookie,
@@ -57,8 +58,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
   const required = requiredProducts(catalog, session.platform);
-  const products = Array.from(
-    new Set([...required, ...parsed.data.productIds]),
+  // Clamp to this connection's signed product scope (if any). A tampered
+  // productIds body can never widen past it; the POC seedAccount() still
+  // re-enforces the workspace ceiling on top of this.
+  const scope = session.ctx?.connectionProducts?.[session.platform];
+  const products = clampProductsToScope(
+    Array.from(new Set([...required, ...parsed.data.productIds])),
+    scope,
   );
 
   // Prefer the context captured on the session at the OAuth callback (works
