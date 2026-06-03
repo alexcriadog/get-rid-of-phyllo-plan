@@ -39,6 +39,8 @@ export interface SeedBody {
 export interface SeedResponse {
   account_id: string;
   sync_jobs_created: string[];
+  /** Whether the Meta Page was auto-subscribed to webhooks (facebook seeds only; informational). */
+  webhook_subscribed?: boolean;
 }
 
 const TIMEOUT_MS = 20_000;

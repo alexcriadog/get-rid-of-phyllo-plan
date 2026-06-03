@@ -115,6 +115,8 @@ export const PLATFORM_CATALOG: Readonly<
       label: 'Stories',
       hint: 'Page Stories API (24h-expiring)',
       default: true,
+      // pages_manage_metadata: enables the Page->app webhook subscription that
+      // also activates IG story delivery (story_insights is an app-level field).
       scopes: ['pages_read_user_content', 'pages_manage_metadata'],
     },
     {
@@ -173,6 +175,8 @@ export const PLATFORM_CATALOG: Readonly<
       id: 'stories',
       label: 'Stories',
       default: true,
+      // pages_manage_metadata: enables the Page->app webhook subscription that
+      // also activates IG story delivery (story_insights is an app-level field).
       scopes: ['instagram_manage_insights', 'pages_manage_metadata'],
     },
   ],

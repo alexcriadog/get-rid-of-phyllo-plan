@@ -2669,7 +2669,13 @@ export class AdminService {
     // what makes real-time events flow after a one-time connect. Subscribing
     // the Page also activates delivery for its linked IG business account.
     let webhookSubscribed = false;
-    if (input.platform === 'facebook' || input.platform === 'instagram') {
+    // Subscribe ONLY on the facebook seed. A Page connected with Instagram
+    // produces two seeds for the same page_id (facebook + instagram), and
+    // Meta's subscribed_apps REPLACES (not merges) the field set — a second
+    // call with the IG seed's narrower fields would drop mentions/ratings.
+    // buildFacebookSeeds always emits a facebook seed per Page, and
+    // subscribing the Page also enables delivery for its linked IG account.
+    if (input.platform === 'facebook') {
       const md = (input.metadata ?? {}) as Record<string, unknown>;
       const pageId = typeof md.page_id === 'string' ? md.page_id : null;
       const products = Array.isArray(md.products)
