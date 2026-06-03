@@ -139,14 +139,32 @@ app.get('/api/me', (req, res) => {
 
 // ─── Camaleonic proxy routes ────────────────────────────────────────────────
 
+// Per-connection product scope for the demo, keyed by platform. Each entry is
+// the subset of the workspace's enabled products to enrol for THAT connection
+// (a subset of the workspace allow-list; the API rejects anything beyond it).
+// Twitch here is scoped to `identity` only — connecting a Twitch account leaves
+// just the Profile product, nothing else. Platforms not listed inherit the full
+// workspace allow-list.
+const CONNECTION_PRODUCTS = {
+  twitch: ['identity'], // profile only
+};
+
 // Mint an SDK token scoped to the logged-in user. The browser receives the
-// short-lived JWT but never the long-lived API key.
+// short-lived JWT but never the long-lived API key. When the caller names the
+// platform it's about to connect, we attach a per-connection product scope so
+// the OAuth consent + enrolment are narrowed for that connection.
 app.post('/api/sdk-token', requireAuth, async (req, res) => {
+  const platform =
+    typeof req.body?.platform === 'string' && req.body.platform.length > 0
+      ? req.body.platform
+      : undefined;
+  const scopedProducts = platform ? CONNECTION_PRODUCTS[platform] : undefined;
   const { status, body } = await camaleonic('/v1/sdk-tokens', {
     method: 'POST',
     body: JSON.stringify({
       user_id: req.session.email,
       ttl: 1800,
+      ...(scopedProducts ? { products: { [platform]: scopedProducts } } : {}),
     }),
   });
   res.status(status).json(body);

@@ -105,8 +105,14 @@ function initSdk() {
 }
 
 async function openConnect(platform) {
-  // 1) Ask our backend to mint a fresh SDK token for this user.
-  const res = await fetch('/api/sdk-token', { method: 'POST' });
+  // 1) Ask our backend to mint a fresh SDK token for this user. Tell it which
+  //    platform we're about to connect so it can attach a per-connection
+  //    product scope (e.g. Twitch → profile only).
+  const res = await fetch('/api/sdk-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: platform ?? null }),
+  });
   if (res.status === 401) {
     // Session expired (e.g. server restarted, in-memory store wiped).
     // Drop the user back at the login screen so they can refresh it.
