@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Logger,
@@ -869,6 +870,21 @@ export class AdminSaasController {
   ): Promise<unknown> {
     const ws = await this.workspaces.findBySlug(slug);
     return this.webhooks.sendTest(ws.id, endpointId);
+  }
+
+  /**
+   * Delete a workspace's webhook endpoint (and, by cascade, its deliveries and
+   * pending events). Workspace-scoped via OutboundWebhooksService.remove, which
+   * is a no-op for unknown/cross-tenant ids so existence can't leak.
+   */
+  @Delete('workspaces/:slug/webhook-endpoints/:id')
+  async deleteEndpointFromAdmin(
+    @Param('slug') slug: string,
+    @Param('id') endpointId: string,
+  ): Promise<{ deleted: boolean }> {
+    const ws = await this.workspaces.findBySlug(slug);
+    await this.webhooks.remove(ws.id, endpointId);
+    return { deleted: true };
   }
 
   /**

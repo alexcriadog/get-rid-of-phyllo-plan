@@ -5,7 +5,12 @@ import Link from 'next/link';
 import { ArrowLeft, Copy, KeyRound, Plus, Trash2, Webhook } from 'lucide-react';
 import AdminLayout from '../../../components/AdminLayout';
 import { useLive } from '../../../lib/useLive';
-import { adminPatch, adminPost, CONNECTOR_API_URL } from '../../../lib/api';
+import {
+  adminPatch,
+  adminPost,
+  adminDelete,
+  CONNECTOR_API_URL,
+} from '../../../lib/api';
 import { fmtRelative } from '../../../lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -130,7 +135,11 @@ export default function WorkspaceDetail({ catalog }: PageProps) {
           <ApiKeysSection slug={slug} keys={keys.data ?? []} onChange={keys.refresh} />
         </TabsContent>
         <TabsContent value="webhooks">
-          <WebhooksSection slug={slug} endpoints={endpoints.data ?? []} />
+          <WebhooksSection
+            slug={slug}
+            endpoints={endpoints.data ?? []}
+            onChanged={endpoints.refresh}
+          />
         </TabsContent>
         <TabsContent value="cadence">
           <CadenceSection slug={slug} ws={ws.data} catalog={catalog} onSaved={ws.refresh} />
@@ -889,9 +898,11 @@ type EndpointHealth = {
 function WebhooksSection({
   slug,
   endpoints,
+  onChanged,
 }: {
   slug: string;
   endpoints: WebhookEndpoint[];
+  onChanged: () => void;
 }) {
   return (
     <Card className="lg:col-span-2">
@@ -907,7 +918,12 @@ function WebhooksSection({
         ) : (
           <div className="space-y-2">
             {endpoints.map((e) => (
-              <EndpointRow key={e.id} slug={slug} endpoint={e} />
+              <EndpointRow
+                key={e.id}
+                slug={slug}
+                endpoint={e}
+                onChanged={onChanged}
+              />
             ))}
           </div>
         )}
@@ -919,13 +935,36 @@ function WebhooksSection({
 function EndpointRow({
   slug,
   endpoint,
+  onChanged,
 }: {
   slug: string;
   endpoint: WebhookEndpoint;
+  onChanged: () => void;
 }) {
   const [health, setHealth] = useState<EndpointHealth | null>(null);
   const [sending, setSending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+
+  const onDelete = async () => {
+    if (
+      !confirm(
+        `Delete this webhook endpoint?\n\n${endpoint.url}\n\nFuture events won't be delivered. This also removes its delivery history.`,
+      )
+    )
+      return;
+    setDeleting(true);
+    setFeedback(null);
+    try {
+      await adminDelete(
+        `/admin/workspaces/${slug}/webhook-endpoints/${endpoint.id}`,
+      );
+      onChanged();
+    } catch (e) {
+      setFeedback(`delete failed: ${(e as Error).message}`);
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -989,9 +1028,25 @@ function EndpointRow({
           <Badge variant={endpoint.active ? 'ok' : 'default'}>
             {endpoint.active ? 'active' : 'inactive'}
           </Badge>
-          <Button size="sm" variant="ghost" disabled={sending} onClick={sendTest}>
-            {sending ? 'Sending…' : 'Send test'}
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={sending}
+              onClick={sendTest}
+            >
+              {sending ? 'Sending…' : 'Send test'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-danger hover:text-danger"
+              disabled={deleting}
+              onClick={onDelete}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </div>
           {feedback && (
             <div className="text-[10px] text-muted-foreground">{feedback}</div>
           )}
