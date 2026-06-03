@@ -24,9 +24,15 @@ Or use the CDN-hosted IIFE:
    Authorization: Bearer cmlk_live_xxx
    Content-Type: application/json
 
-   { "user_id": "your-end-user-id", "ttl": 1800 }
+   {
+     "user_id": "your-end-user-id",
+     "ttl": 1800,
+     "allowed_platforms": ["facebook", "instagram"],
+     "products": { "facebook": ["identity", "audience"], "instagram": ["identity"] }
+   }
    ```
-   The response carries an HS256 JWT (`sdk_token`).
+   The response carries an HS256 JWT (`sdk_token`). `allowed_platforms` and
+   `products` are optional — see [Per-connection product scope](#per-connection-product-scope).
 
 2. Pass the token to the SDK in the browser:
    ```ts
@@ -64,6 +70,31 @@ Or use the CDN-hosted IIFE:
 
 `open(platform?)` returns nothing; success / error / exit is reported via
 the callbacks. Callbacks fire **at most once** per `open()` call.
+
+## Per-connection product scope
+
+By default a connection enrols every product your workspace has enabled for the
+chosen platform. To scope an individual connection to a subset — e.g. a "basic"
+account that needs no Ads data — pass `products` when minting the token:
+
+```http
+POST /v1/sdk-tokens
+Authorization: Bearer cmlk_live_xxx
+
+{
+  "user_id": "end-user-42",
+  "products": { "facebook": ["identity", "audience"] }
+}
+```
+
+- Shape: `Record<platform, productId[]>`. `identity` is always included
+  automatically — `{ "facebook": [] }` connects a profile-only account.
+- The scope must be a **subset of your workspace's enabled products**; anything
+  outside the workspace allow-list is rejected at mint with `400`.
+- Only the platforms you list are narrowed. Platforms you omit keep the full
+  workspace allow-list, so scope every platform you want to restrict.
+- The scope is signed into the token — the end user cannot widen it. The OAuth
+  consent screen then requests only the scopes those products need.
 
 ## Security
 
