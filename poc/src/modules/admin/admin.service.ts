@@ -1061,6 +1061,20 @@ export class AdminService {
     }
     const shaped = await this.shapeAccount(account, now);
 
+    // Raw per-product sync jobs for the detail page's "Sync jobs" tab. shaped
+    // already exposes a `products` health summary; this adds the full row set
+    // (incl. last_attempt_at) the table renders.
+    const sync_jobs = account.syncJobs.map((j) => ({
+      id: j.id.toString(),
+      product: j.product,
+      status: j.status,
+      next_run_at: j.nextRunAt?.toISOString() ?? null,
+      last_success_at: j.lastSuccessAt?.toISOString() ?? null,
+      last_attempt_at: j.lastAttemptAt?.toISOString() ?? null,
+      failure_count: j.failureCount,
+      last_error: j.lastError,
+    }));
+
     // Webhook subscription state. The facebook seed persists metadata.webhook;
     // an Instagram account linked to that Page is covered by the Page's
     // subscription (surfaced as via_page).
@@ -1085,7 +1099,7 @@ export class AdminService {
       });
       if (covered) webhook = { subscribed: true, via_page: pid };
     }
-    return { ...shaped, webhook };
+    return { ...shaped, sync_jobs, webhook };
   }
 
   async updateSyncTier(
