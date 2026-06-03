@@ -66,6 +66,13 @@ type AccountDetail = {
     failure_count?: number;
     last_error?: string | null;
   }>;
+  webhook?: {
+    subscribed?: boolean;
+    via_page?: string;
+    fields?: string[];
+    subscribed_at?: string;
+    error?: string;
+  };
 };
 
 type ApiCall = {
@@ -169,6 +176,36 @@ export default function AccountDetailPage() {
                   {account.status ?? '—'}
                 </Badge>
                 <Badge variant="default">{account.sync_tier ?? '—'}</Badge>
+                {(account.platform === 'facebook' ||
+                  account.platform === 'instagram') &&
+                  (account.webhook?.subscribed ? (
+                    <Badge
+                      variant="ok"
+                      title={
+                        account.webhook.via_page
+                          ? `Webhooks delivered via Page ${account.webhook.via_page}`
+                          : `Subscribed fields: ${(account.webhook.fields ?? []).join(', ') || '—'}${
+                              account.webhook.subscribed_at
+                                ? ` · since ${new Date(account.webhook.subscribed_at).toLocaleString()}`
+                                : ''
+                            }`
+                      }
+                    >
+                      🔔 webhooks
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="opacity-70"
+                      title={
+                        account.webhook?.error
+                          ? `Last subscribe error: ${account.webhook.error}`
+                          : 'Not subscribed — reconnect from /admin/connect to enable webhooks'
+                      }
+                    >
+                      🔕 no webhook
+                    </Badge>
+                  ))}
                 {account.connected_at && (
                   <Badge variant="default">
                     connected {fmtRelative(account.connected_at)}

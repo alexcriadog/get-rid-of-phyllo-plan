@@ -160,8 +160,30 @@ export class WebhooksIngestController {
       select: { id: true },
     });
 
+    // The account resolved but has no sync job for this product — it isn't
+    // enrolled in it. This is normal on Instagram, whose webhook fields are
+    // app-level: we receive story_insights/comments/mentions for every
+    // connected IG account regardless of the products it enabled. There's
+    // nothing to sync, so record the resolution and skip. (Enqueuing a
+    // synthetic jobId here would also crash the worker, which does
+    // BigInt(jobId).)
+    if (!syncJob) {
+      await this.prisma.inboundWebhookLog.updateMany({
+        where: { platform: 'meta', eventId },
+        data: { accountResolved: true },
+      });
+      this.metrics.incr('webhook_skipped_no_product', {
+        platform: 'meta',
+        product,
+      });
+      this.logger.log(
+        `Meta webhook for account ${account.id.toString()} resolved but product '${product}' not enrolled; skipping sync`,
+      );
+      return;
+    }
+
     const payload: SyncJobPayload = {
-      jobId: syncJob?.id.toString() ?? `webhook-${account.id.toString()}-${product}`,
+      jobId: syncJob.id.toString(),
       accountId: account.id.toString(),
       product,
     };

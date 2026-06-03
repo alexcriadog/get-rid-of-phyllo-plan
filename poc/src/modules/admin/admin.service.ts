@@ -1054,7 +1054,33 @@ export class AdminService {
     if (!account) {
       throw new NotFoundException(`Account ${id.toString()} not found`);
     }
-    return this.shapeAccount(account, now);
+    const shaped = await this.shapeAccount(account, now);
+
+    // Webhook subscription state. The facebook seed persists metadata.webhook;
+    // an Instagram account linked to that Page is covered by the Page's
+    // subscription (surfaced as via_page).
+    const asObject = (v: unknown): Record<string, unknown> | null =>
+      v && typeof v === 'object' && !Array.isArray(v)
+        ? (v as Record<string, unknown>)
+        : null;
+    const md = asObject(account.metadata);
+    const own = asObject(md?.webhook);
+    const pid = typeof md?.page_id === 'string' ? md.page_id : null;
+    let webhook: Record<string, unknown> = { subscribed: false };
+    if (own) {
+      webhook = own;
+    } else if (pid && account.platform === 'instagram') {
+      const fbAccounts = await this.prisma.account.findMany({
+        where: { platform: 'facebook' },
+        select: { metadata: true },
+      });
+      const covered = fbAccounts.some((f) => {
+        const m = asObject(f.metadata);
+        return m?.page_id === pid && asObject(m?.webhook)?.subscribed === true;
+      });
+      if (covered) webhook = { subscribed: true, via_page: pid };
+    }
+    return { ...shaped, webhook };
   }
 
   async updateSyncTier(
