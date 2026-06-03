@@ -2706,6 +2706,48 @@ export class AdminService {
           },
         );
         webhookSubscribed = result.subscribed;
+
+        // Persist the outcome on the account so subscription state is queryable
+        // without grepping logs (which rotate) or the in-memory metric (which
+        // resets on restart). Best-effort — a failure here never blocks the
+        // connection. Stored under metadata.webhook; the linked IG account's
+        // delivery rides on this same Page subscription.
+        const nowIso = new Date().toISOString();
+        const webhookState: Record<string, unknown> = {
+          subscribed: result.subscribed,
+          page_id: pageId,
+          fields,
+          attempted_at: nowIso,
+        };
+        if (result.subscribed) webhookState.subscribed_at = nowIso;
+        if (result.error) webhookState.error = result.error;
+        try {
+          const current = await this.prisma.account.findUnique({
+            where: { id: BigInt(seeded.account_id) },
+            select: { metadata: true },
+          });
+          const baseMeta =
+            current?.metadata &&
+            typeof current.metadata === 'object' &&
+            !Array.isArray(current.metadata)
+              ? (current.metadata as Record<string, unknown>)
+              : {};
+          await this.prisma.account.update({
+            where: { id: BigInt(seeded.account_id) },
+            data: {
+              metadata: {
+                ...baseMeta,
+                webhook: webhookState,
+              } as Prisma.InputJsonValue,
+            },
+          });
+        } catch (err) {
+          this.logger.warn(
+            `Failed to persist webhook state for account ${seeded.account_id}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
       }
     }
 
