@@ -41,6 +41,8 @@ export interface SessionContext {
   environment?: 'live' | 'test';
   openerOrigin?: string;
   workspaceSlug?: string;
+  /** Per-connection product scope from the SDK token; clamps the seed enrol. */
+  connectionProducts?: Record<string, ReadonlyArray<string>>;
 }
 
 /** FB sessions are special — they need a Page picker before seeding. */
@@ -90,6 +92,8 @@ export interface OAuthContextSession {
   workspaceSlug: string;
   endUserId: string;
   allowedPlatforms?: ReadonlyArray<string>;
+  /** Per-connection product scope (SDK token `products` claim). */
+  connectionProducts?: Record<string, ReadonlyArray<string>>;
   /** Test-mode flag derived from the SDK token; threaded into the seed POST. */
   environment?: 'live' | 'test';
   /**
