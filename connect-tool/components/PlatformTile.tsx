@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 export type PlatformInfo = {
   key: 'facebook' | 'tiktok' | 'threads' | 'youtube' | 'twitch';
   label: string;
@@ -78,12 +76,18 @@ export function PlatformTile({
   if (!platform.enabled) {
     return <div style={{ cursor: 'not-allowed' }}>{inner}</div>;
   }
+  // Plain <a>, NOT next/link: the href is an OAuth-init API route that sets a
+  // CSRF `state` cookie and 302s to the provider. next/link probe-fetches the
+  // route during client navigation, executing /start twice and racing two
+  // Set-Cookie writes against the `state` carried to the provider → "state
+  // verification failed" at the callback. A plain anchor does exactly one
+  // top-level navigation, so cookie and state always agree.
   return (
-    <Link
+    <a
       href={`/api/oauth/start/${platform.key}${query ? `?${query}` : ''}`}
       style={{ textDecoration: 'none' }}
     >
       {inner}
-    </Link>
+    </a>
   );
 }
