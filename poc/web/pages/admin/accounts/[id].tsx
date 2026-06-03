@@ -33,6 +33,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { orderProducts, productIdsOf } from '@/lib/products';
 
 type ProductHealth = {
   product?: string;
@@ -85,8 +86,6 @@ type ApiCall = {
   account_handle?: string | null;
   product?: string | null;
 };
-
-const PRODUCTS = ['identity', 'audience', 'engagement_new', 'stories'];
 
 export default function AccountDetailPage() {
   const router = useRouter();
@@ -269,7 +268,7 @@ export default function AccountDetailPage() {
 
 
           <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {PRODUCTS.map((p) => (
+            {orderProducts(productIdsOf(account.products)).map((p) => (
               <ProductStatusCard
                 key={p}
                 product={p}

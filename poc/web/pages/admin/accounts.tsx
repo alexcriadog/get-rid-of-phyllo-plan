@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { orderProducts } from '@/lib/products';
 
 type ProductHealth = {
   product?: string;
@@ -334,23 +335,13 @@ function AccountCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-1.5">
-        {['identity', 'audience', 'engagement_new', 'stories'].map((p) => (
-          <ProductPill
-            key={p}
-            product={p}
-            health={products.get(p)}
-            paused={paused || needsReauth}
-          />
-        ))}
-      </div>
-      {/* CA-only Meta extras — only shown when the FB account has them
-          seeded so we don't dilute the card for IG / TikTok / etc. */}
-      {(['mentions', 'comments', 'ratings', 'ads'] as const).some((p) =>
-        products.has(p),
-      ) && (
+      {/* Show this account's ACTUAL enrolled products (varies per account, and
+          now per connection via the SDK token's products scope) rather than a
+          fixed list — so a basic identity-only account doesn't render phantom
+          "missing" pills, and ads / comments / engagement_deep show when present. */}
+      {orderProducts(products.keys()).length > 0 && (
         <div className="grid grid-cols-4 gap-1.5">
-          {['mentions', 'comments', 'ratings', 'ads'].map((p) => (
+          {orderProducts(products.keys()).map((p) => (
             <ProductPill
               key={p}
               product={p}
