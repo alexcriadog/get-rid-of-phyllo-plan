@@ -44,6 +44,13 @@ type AdminAccount = {
   workspace_slug?: string | null;
   workspace_name?: string | null;
   products?: ProductHealth[] | Record<string, ProductHealth>;
+  webhook?: {
+    subscribed?: boolean;
+    via_page?: string;
+    fields?: string[];
+    subscribed_at?: string;
+    error?: string;
+  };
 };
 
 type ApiCall = {
@@ -292,6 +299,37 @@ function AccountCard({
               ↺ NEEDS REAUTH
             </Badge>
           )}
+          {(account.platform === 'facebook' ||
+            account.platform === 'instagram') &&
+            (account.webhook?.subscribed ? (
+              <Badge
+                variant="ok"
+                className="gap-1 px-2 py-0.5 text-[10px] tracking-wider"
+                title={
+                  account.webhook.via_page
+                    ? `Webhooks delivered via Page ${account.webhook.via_page}`
+                    : `Subscribed fields: ${(account.webhook.fields ?? []).join(', ') || '—'}${
+                        account.webhook.subscribed_at
+                          ? ` · since ${new Date(account.webhook.subscribed_at).toLocaleString()}`
+                          : ''
+                      }`
+                }
+              >
+                🔔 WEBHOOKS
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="gap-1 px-2 py-0.5 text-[10px] tracking-wider opacity-70"
+                title={
+                  account.webhook?.error
+                    ? `Last subscribe error: ${account.webhook.error}`
+                    : 'Not subscribed — reconnect from /admin/connect to enable webhooks'
+                }
+              >
+                🔕 NO WEBHOOK
+              </Badge>
+            ))}
           <Badge variant={paused ? 'danger' : 'ok'}>{account.sync_tier ?? '—'}</Badge>
         </div>
       </div>

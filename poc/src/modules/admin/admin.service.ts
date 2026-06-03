@@ -1005,9 +1005,35 @@ export class AdminService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const items = await Promise.all(
+    const shaped = await Promise.all(
       accounts.map((a) => this.shapeAccount(a, now)),
     );
+
+    // Webhook subscription state (Meta). The facebook seed for a Page persists
+    // metadata.webhook; an Instagram account linked to that same Page is
+    // covered by the Page's subscription, so we surface it as `via_page`.
+    const asObject = (v: unknown): Record<string, unknown> | null =>
+      v && typeof v === 'object' && !Array.isArray(v)
+        ? (v as Record<string, unknown>)
+        : null;
+    const subscribedPages = new Map<string, Record<string, unknown>>();
+    for (const a of accounts) {
+      const md = asObject(a.metadata);
+      const wh = asObject(md?.webhook);
+      const pid = typeof md?.page_id === 'string' ? md.page_id : null;
+      if (wh?.subscribed === true && pid) subscribedPages.set(pid, wh);
+    }
+    const items = shaped.map((item, i) => {
+      const md = asObject(accounts[i].metadata);
+      const own = asObject(md?.webhook);
+      const pid = typeof md?.page_id === 'string' ? md.page_id : null;
+      const webhook: Record<string, unknown> = own
+        ? own
+        : pid && subscribedPages.has(pid)
+          ? { subscribed: true, via_page: pid }
+          : { subscribed: false };
+      return { ...item, webhook };
+    });
     return { items };
   }
 
