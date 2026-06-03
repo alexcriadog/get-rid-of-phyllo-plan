@@ -39,7 +39,7 @@ describe('pageFieldsForProducts', () => {
       'ratings',
     ]);
     expect(fields.sort()).toEqual(
-      ['feed', 'videos', 'live_videos', 'mentions', 'ratings'].sort(),
+      ['feed', 'videos', 'live_videos', 'mention', 'ratings'].sort(),
     );
   });
 

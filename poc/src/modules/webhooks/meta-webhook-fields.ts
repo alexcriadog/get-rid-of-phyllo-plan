@@ -24,6 +24,8 @@ export const FIELD_TO_PRODUCT: Readonly<Record<string, string>> = {
   story_insights: 'stories',
   stories: 'stories',
   ratings: 'ratings',
+  // Page object sends `mention` (singular); Instagram sends `mentions` (plural).
+  mention: 'engagement_new',
 };
 
 // Product -> Page webhook fields. Only products with Page-object coverage
@@ -34,7 +36,9 @@ const PRODUCT_TO_PAGE_FIELDS: Readonly<
   Record<string, ReadonlyArray<string>>
 > = {
   engagement_new: ['feed', 'videos', 'live_videos'],
-  mentions: ['mentions'],
+  // Page object field is `mention` (singular). `mentions` (plural) is the
+  // Instagram field and is rejected by /{page-id}/subscribed_apps (#100).
+  mentions: ['mention'],
   comments: ['feed'],
   ratings: ['ratings'],
 };
