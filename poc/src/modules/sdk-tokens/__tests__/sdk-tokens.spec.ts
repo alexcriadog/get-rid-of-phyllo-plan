@@ -67,3 +67,53 @@ describe('SdkTokensService — Sec-4 origins claim', () => {
     expect(claims.sub).toBe('user-123');
   });
 });
+
+describe('SdkTokensService — per-connection products claim', () => {
+  function makeRichService(): SdkTokensService {
+    const view: WorkspaceView = {
+      id: 'wkspc_demo',
+      slug: 'demo',
+      name: 'Demo',
+      branding: null,
+      products: {
+        facebook: ['identity', 'audience', 'engagement_new', 'ads'],
+        instagram: ['identity', 'audience'],
+      },
+      webhookCadence: null,
+      allowedOrigins: undefined,
+      planTier: 'standard',
+    };
+    const workspaces = {
+      findById: jest.fn().mockResolvedValue(view),
+      getSecret: jest.fn().mockResolvedValue(SECRET),
+    } as unknown as WorkspacesService;
+    return new SdkTokensService(workspaces);
+  }
+
+  it('embeds a validated products scope as a signed claim', async () => {
+    const svc = makeRichService();
+    const { token } = await svc.mint({
+      ...baseInput,
+      connectionProducts: { facebook: ['audience'] },
+    });
+    const claims = await svc.verify(token);
+    expect(claims.products).toEqual({ facebook: ['identity', 'audience'] });
+  });
+
+  it('omits the products claim when none is requested', async () => {
+    const svc = makeRichService();
+    const { token } = await svc.mint(baseInput);
+    const claims = await svc.verify(token);
+    expect(claims.products).toBeUndefined();
+  });
+
+  it('rejects a scope that exceeds the workspace ceiling', async () => {
+    const svc = makeRichService();
+    await expect(
+      svc.mint({
+        ...baseInput,
+        connectionProducts: { instagram: ['ads'] }, // ads not in IG ceiling
+      }),
+    ).rejects.toThrow();
+  });
+});

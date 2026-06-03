@@ -10,6 +10,7 @@ import {
   fetchWorkspaceProducts,
   displayProducts,
   defaultSelectedProducts,
+  intersectConnectionProducts,
 } from '../../../lib/workspace-config';
 import { FacebookPagesClient } from './client';
 
@@ -58,8 +59,12 @@ export default async function FacebookPagesPage({
   if (!catalog) {
     redirect('/?error=' + encodeURIComponent('Catalog temporarily unavailable'));
   }
-  const lockedFb = displayProducts(cfg, 'facebook');   // string[] | null
-  const lockedIg = displayProducts(cfg, 'instagram');  // string[] | null
+  const effectiveCfg = intersectConnectionProducts(
+    cfg,
+    session?.ctx?.connectionProducts,
+  );
+  const lockedFb = displayProducts(effectiveCfg, 'facebook');   // string[] | null
+  const lockedIg = displayProducts(effectiveCfg, 'instagram');  // string[] | null
 
   return (
     <FacebookPagesClient

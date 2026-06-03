@@ -24,6 +24,7 @@ import {
   computeOAuthScopes,
   fetchProductsCatalog,
   fetchWorkspaceProducts,
+  intersectConnectionProducts,
   platformReachableAtOAuthStart,
   type ProductsConfig,
 } from '../../../../lib/workspace-config';
@@ -200,6 +201,7 @@ export async function GET(
     const token = sp.get('token');
     let contextSessionId: string | null = null;
     let productsConfig: ProductsConfig = null;
+    let connectionProducts: Record<string, ReadonlyArray<string>> | undefined;
     if (ws && token) {
       try {
         const claims = await verifySdkToken(token);
@@ -219,6 +221,7 @@ export async function GET(
         // platformReachableAtOAuthStart handles the IG↔FB merger (FB OAuth
         // covers both). null products config means unrestricted (default).
         productsConfig = await fetchWorkspaceProducts(ws);
+        connectionProducts = claims.products;
         if (!platformReachableAtOAuthStart(productsConfig, platform)) {
           throw new Error(
             `This platform isn't available for workspace "${ws}". Contact your administrator if you need it enabled.`,
@@ -243,6 +246,7 @@ export async function GET(
           workspaceSlug: ws,
           endUserId: claims.sub,
           allowedPlatforms: claims.platforms,
+          connectionProducts: claims.products,
           environment: claims.env,
           openerOrigin: origin,
           embedded,
@@ -261,7 +265,14 @@ export async function GET(
     if (!catalog) {
       return errorRedirect(baseUrl, 'Products catalog temporarily unavailable');
     }
-    const scopes = computeOAuthScopes(catalog, productsConfig, platform);
+    // Narrow to the per-connection scope (if the SDK token carried one) before
+    // computing OAuth scopes — a "basic" connection then only asks the provider
+    // for the scopes its scoped products need.
+    const effectiveConfig = intersectConnectionProducts(
+      productsConfig,
+      connectionProducts,
+    );
+    const scopes = computeOAuthScopes(catalog, effectiveConfig, platform);
 
     let authorizeUrl: string;
     try {
@@ -344,6 +355,7 @@ export async function GET(
           environment: ctx.environment,
           openerOrigin: ctx.openerOrigin,
           workspaceSlug: ctx.workspaceSlug,
+          connectionProducts: ctx.connectionProducts,
         });
       }
 

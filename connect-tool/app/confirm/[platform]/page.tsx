@@ -11,6 +11,7 @@ import {
   fetchWorkspaceProducts,
   displayProducts,
   defaultSelectedProducts,
+  intersectConnectionProducts,
 } from '../../../lib/workspace-config';
 import { ConfirmClient } from './client';
 
@@ -64,7 +65,13 @@ export default async function ConfirmPage({
 
   const wsSlug = session?.ctx?.workspaceSlug ?? null;
   const cfg = wsSlug ? await fetchWorkspaceProducts(wsSlug) : null;
-  const lockedProducts = displayProducts(cfg, platform); // string[] | null
+  // Narrow to this connection's signed product scope (if any) so the picker
+  // shows exactly what will be enrolled, not the full workspace ceiling.
+  const effectiveCfg = intersectConnectionProducts(
+    cfg,
+    session?.ctx?.connectionProducts,
+  );
+  const lockedProducts = displayProducts(effectiveCfg, platform); // string[] | null
 
   return (
     <ConfirmClient

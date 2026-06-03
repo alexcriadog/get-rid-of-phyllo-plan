@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
+import { buildConnectionProductScope } from './connection-products';
 
 const ALG = 'HS256';
 const TYP = 'JWT';
@@ -38,6 +39,13 @@ export interface MintSdkTokenInput {
   endUserId: string;
   ttlSeconds?: number;
   allowedPlatforms?: ReadonlyArray<string>;
+  /**
+   * Optional per-connection product scope (Record<platform, string[]>), set by
+   * the client at mint time. Validated ⊆ the workspace allow-list and embedded
+   * as the signed `products` claim. Absent → connection inherits the full
+   * workspace allow-list (legacy behaviour).
+   */
+  connectionProducts?: Record<string, string[]>;
   /** Sandbox flag — derived from the issuing API key prefix. */
   environment?: 'live' | 'test';
 }
@@ -51,6 +59,13 @@ export interface SdkTokenClaims {
   sub: string;
   /** Optional whitelist of platforms the popup may offer. */
   platforms?: ReadonlyArray<string>;
+  /**
+   * Per-connection product scope. Subset of the workspace allow-list, validated
+   * at mint. connect-tool merges it over workspace.products to narrow OAuth
+   * scopes and the products enrolled for THIS connection. Absent → full
+   * workspace allow-list.
+   */
+  products?: Record<string, ReadonlyArray<string>>;
   /**
    * Sec-4: optional per-workspace origin allow-list (from
    * workspace.allowedOrigins). When present, connect-tool only launches OAuth
@@ -134,6 +149,16 @@ export class SdkTokensService {
         );
       }
     }
+    // Per-connection product scope (optional). Validate ⊆ workspace ceiling so
+    // the signed claim can never widen past what the workspace allows.
+    const connectionProducts =
+      input.connectionProducts &&
+      Object.keys(input.connectionProducts).length > 0
+        ? buildConnectionProductScope(
+            input.connectionProducts,
+            ws.products as Record<string, string[]>,
+          )
+        : undefined;
     const secret = await this.workspaces.getSecret(input.workspaceId);
     const now = Math.floor(Date.now() / 1000);
     // Sec-4: carry the workspace's origin allow-list as a signed claim. Only
@@ -147,6 +172,7 @@ export class SdkTokensService {
       ...(expandedPlatforms && expandedPlatforms.length > 0
         ? { platforms: expandedPlatforms }
         : {}),
+      ...(connectionProducts ? { products: connectionProducts } : {}),
       ...(origins && origins.length > 0 ? { origins } : {}),
       ...(input.environment === 'test' ? { env: 'test' } : {}),
       iss: ISS,

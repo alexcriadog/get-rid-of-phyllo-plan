@@ -21,6 +21,12 @@ const MintBodySchema = z
     user_id: z.string().min(1).max(256),
     ttl: z.number().int().min(60).max(1800).optional(),
     allowed_platforms: z.array(z.string().min(1)).max(6).optional(),
+    // Per-connection product scope, Record<platform, productId[]>. Keys/values
+    // are validated semantically against the workspace allow-list in the
+    // service (buildConnectionProductScope); the schema only enforces shape.
+    products: z
+      .record(z.string().min(1), z.array(z.string().min(1)))
+      .optional(),
   })
   .strict();
 
@@ -54,6 +60,7 @@ export class SdkTokensController {
       endUserId: parsed.data.user_id,
       ttlSeconds: parsed.data.ttl,
       allowedPlatforms: parsed.data.allowed_platforms,
+      connectionProducts: parsed.data.products,
       // Test keys mint test tokens, live keys mint live tokens. There's no
       // way for a client to upgrade their environment from the SDK token.
       environment: req.workspace?.environment,

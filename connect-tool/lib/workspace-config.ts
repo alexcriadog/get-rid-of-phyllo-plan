@@ -50,6 +50,67 @@ export function displayProducts(config: ProductsConfig, platform: string): strin
 }
 
 /**
+ * Merge a per-connection product scope (from the signed SDK token's `products`
+ * claim) OVER the workspace config, narrowing ONLY the platforms the scope
+ * lists. Platforms the scope omits keep the workspace allow-list unchanged.
+ *
+ * The scope was already validated ⊆ the workspace ceiling at mint time, but the
+ * workspace may have been tightened since, so we intersect defensively here too
+ * (a product dropped from the workspace after mint is removed from the effective
+ * scope). identity is always kept first.
+ *
+ * - scope absent/empty → return `workspaceConfig` unchanged (same reference).
+ * - workspaceConfig null (legacy unrestricted) → the scope becomes the effective
+ *   config for the listed platforms (already ⊆ catalog by mint).
+ *
+ * The result is a normal `ProductsConfig`, so every existing consumer
+ * (computeOAuthScopes, displayProducts, platformReachableAtOAuthStart) works
+ * on it unchanged.
+ */
+export function intersectConnectionProducts(
+  workspaceConfig: ProductsConfig,
+  connectionProducts: Record<string, ReadonlyArray<string>> | undefined,
+): ProductsConfig {
+  if (!connectionProducts || Object.keys(connectionProducts).length === 0) {
+    return workspaceConfig;
+  }
+  const base: Record<string, string[]> = { ...(workspaceConfig ?? {}) };
+  for (const [platform, requested] of Object.entries(connectionProducts)) {
+    const ceiling = workspaceConfig?.[platform];
+    const allowSet = ceiling ? new Set(ceiling) : null;
+    const picked: string[] = [];
+    for (const p of requested) {
+      if (p === 'identity') continue;
+      if (allowSet && !allowSet.has(p)) continue; // workspace tightened since mint
+      if (!picked.includes(p)) picked.push(p);
+    }
+    base[platform] = ['identity', ...picked];
+  }
+  return base;
+}
+
+/**
+ * Clamp a product list to a per-connection scope. Used by the seed handlers so
+ * a tampered productIds POST can never enrol a product the signed connection
+ * scope didn't grant. identity is always preserved.
+ *
+ * - scope undefined → products returned unchanged (no per-connection scope).
+ * - else → products ∩ scope, identity-first.
+ */
+export function clampProductsToScope(
+  products: ReadonlyArray<string>,
+  scope: ReadonlyArray<string> | undefined,
+): string[] {
+  if (!scope) return [...products];
+  const allow = new Set(scope);
+  const trimmed = products.filter((p) => allow.has(p));
+  if (!trimmed.includes('identity') && allow.has('identity')) {
+    trimmed.unshift('identity');
+  }
+  return trimmed;
+}
+
+/**
  * Is `oauthPlatform` (the platform key in `/api/oauth/start/:platform`)
  * reachable for this workspace? Note that `facebook` is the OAuth surface
  * for *both* facebook and instagram (IG uses FB OAuth — see

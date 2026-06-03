@@ -21,6 +21,12 @@ export interface SdkTokenClaims {
   sub: string;
   platforms?: ReadonlyArray<string>;
   /**
+   * Per-connection product scope (Record<platform, productId[]>), signed into
+   * the SDK token by the client at mint time. Merged over workspace.products to
+   * narrow OAuth scopes + enrolled products. Absent → full workspace allow-list.
+   */
+  products?: Record<string, ReadonlyArray<string>>;
+  /**
    * Sec-4: per-workspace origin allow-list. When present, the popup's
    * `?origin` must be a member; only a listed origin is ever used as a
    * postMessage target. Absent → no origin restriction (legacy behaviour).
