@@ -19,7 +19,11 @@ type SystemHealth = {
   mysql: StoreHealth;
   mongo: StoreHealth;
   redis: StoreHealth;
-  worker: { last_attempt_at: string | null; idle_seconds: number | null };
+  worker: {
+    last_attempt_at: string | null;
+    idle_seconds: number | null;
+    overdue_active_jobs?: number;
+  };
   summary: 'ok' | 'warn' | 'danger';
 };
 
@@ -100,6 +104,19 @@ export default function SystemHealthPage() {
                 </div>
                 {h?.worker.idle_seconds != null && (
                   <div className="text-xs text-muted-foreground">idle {h.worker.idle_seconds}s</div>
+                )}
+                {h?.worker.overdue_active_jobs != null && (
+                  <div
+                    className={
+                      h.worker.overdue_active_jobs > 0
+                        ? 'text-xs text-danger'
+                        : 'text-xs text-muted-foreground'
+                    }
+                  >
+                    {h.worker.overdue_active_jobs > 0
+                      ? `${h.worker.overdue_active_jobs} active job(s) overdue — worker/scheduler not draining`
+                      : 'no active backlog'}
+                  </div>
                 )}
               </div>
             </CardContent>

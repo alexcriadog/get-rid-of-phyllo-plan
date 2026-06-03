@@ -40,6 +40,11 @@ const THREADS_GRAPH_BASE = 'https://graph.threads.net/v1.0';
 const YOUTUBE_DATA_BASE = 'https://www.googleapis.com/youtube/v3';
 const DISCOVER_TIMEOUT_MS = 15_000;
 const SUBSCRIBE_TIMEOUT_MS = 10_000;
+// system-health worker signal: a sync job for an ACTIVE account that is due
+// (idle + overdue) or stuck (queued) longer than this means the scheduler or
+// worker isn't draining real work. Comfortably exceeds the 30s scheduler tick
+// so the brief overdue window between tick and enqueue never trips a warning.
+const STALE_JOB_GRACE_SECONDS = 600;
 
 const SYNC_QUEUE_NAME: QueueName = 'sync';
 const EVENTS_QUEUE_NAME: QueueName = 'events';
@@ -1788,7 +1793,11 @@ export class AdminService {
     mysql: { ok: boolean; latency_ms: number | null; error?: string };
     mongo: { ok: boolean; latency_ms: number | null; error?: string };
     redis: { ok: boolean; latency_ms: number | null; error?: string };
-    worker: { last_attempt_at: string | null; idle_seconds: number | null };
+    worker: {
+      last_attempt_at: string | null;
+      idle_seconds: number | null;
+      overdue_active_jobs: number;
+    };
     summary: 'ok' | 'warn' | 'danger';
   }> {
     const mysql = await this.pingMysql();
@@ -1796,8 +1805,23 @@ export class AdminService {
     const redis = await this.pingRedis();
     const worker = await this.workerHeartbeat();
 
-    const idle = worker.idle_seconds;
-    const workerOk = idle != null && idle < 600;
+    // Worker health is judged by real backlog, NOT raw idle time: an idle
+    // worker is normal when nothing is due (sync cadences are far longer than
+    // any fixed idle threshold). We warn only when an ACTIVE account (not
+    // paused/disconnected/needs_reauth) has a job the system should be running
+    // but isn't — either due+idle (scheduler not enqueuing) or stuck in queued
+    // (worker not draining) past the grace window.
+    const staleThreshold = new Date(Date.now() - STALE_JOB_GRACE_SECONDS * 1000);
+    const overdueActiveJobs = await this.prisma.syncJob.count({
+      where: {
+        account: { syncTier: { not: 'paused' }, status: 'ready' },
+        OR: [
+          { status: 'idle', nextRunAt: { lte: staleThreshold } },
+          { status: 'queued', updatedAt: { lte: staleThreshold } },
+        ],
+      },
+    });
+    const workerOk = overdueActiveJobs === 0;
     const allOk = mysql.ok && mongo.ok && redis.ok && workerOk;
     const allDown = !mysql.ok && !mongo.ok && !redis.ok;
 
@@ -1805,7 +1829,7 @@ export class AdminService {
       mysql,
       mongo,
       redis,
-      worker,
+      worker: { ...worker, overdue_active_jobs: overdueActiveJobs },
       summary: allOk ? 'ok' : allDown ? 'danger' : 'warn',
     };
   }
