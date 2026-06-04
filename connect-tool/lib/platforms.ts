@@ -34,6 +34,13 @@ const TIKTOK_AUTHORIZE = 'https://www.tiktok.com/v2/auth/authorize';
 const TIKTOK_TOKEN = 'https://open.tiktokapis.com/v2/oauth/token/';
 const TIKTOK_USER_INFO = 'https://open.tiktokapis.com/v2/user/info/';
 const META_AUTHORIZE = 'https://www.facebook.com/v22.0/dialog/oauth';
+// Instagram API with Instagram Login ("Business Login"). Professional
+// accounts connect with IG credentials — no Facebook account/Page needed.
+// Separate product config inside the same Meta app, with its OWN app id.
+const IG_DIRECT_AUTHORIZE = 'https://www.instagram.com/oauth/authorize';
+const IG_DIRECT_TOKEN = 'https://api.instagram.com/oauth/access_token';
+const IG_DIRECT_GRAPH = 'https://graph.instagram.com';
+const IG_DIRECT_GRAPH_V = 'https://graph.instagram.com/v22.0';
 // Meta moved the Threads authorize host to www. in late 2025; the bare
 // host now redirects but some App settings still reject it as a mismatch.
 const THREADS_AUTHORIZE = 'https://www.threads.net/oauth/authorize';
@@ -63,6 +70,7 @@ const THREADS_LL_TOKEN = 'https://graph.threads.net/access_token';
 export type PlatformKey =
   | 'facebook'
   | 'instagram'
+  | 'instagram_direct'
   | 'tiktok'
   | 'threads'
   | 'youtube'
@@ -515,6 +523,161 @@ const instagram: PlatformDef = {
   },
 };
 
+// Token payload for the IG Business Login exchange — may arrive at the
+// response root or nested under data[0] depending on app configuration.
+type IgTokenPayload = {
+  access_token?: string;
+  user_id?: number | string;
+  permissions?: string | string[];
+};
+
+// ─── Instagram direct (Instagram API with Instagram Login) ──────────────
+// Internal OAuth surface only — the SDK/UI keep exposing 'instagram'. The
+// seed this flow produces is platform 'instagram' + metadata.oauth_flow
+// 'ig_direct', which tells the POC to route Graph calls to
+// graph.instagram.com and to auto-refresh the token (ig_refresh_token).
+const instagramDirect: PlatformDef = {
+  key: 'instagram_direct',
+  buildAuthorizeUrl(redirectUri, scopes) {
+    const appId = requireEnv('INSTAGRAM_APP_ID');
+    const params = new URLSearchParams({
+      client_id: appId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      // IG wants comma-separated scopes.
+      scope: [...scopes].join(','),
+      state: cryptoRandomState(),
+    });
+    return `${IG_DIRECT_AUTHORIZE}?${params.toString()}`;
+  },
+  async handleCallback(code, redirectUri) {
+    const appId = requireEnv('INSTAGRAM_APP_ID');
+    const appSecret = requireEnv('INSTAGRAM_APP_SECRET');
+
+    // 1. Code → short-lived token. Business Login may nest the payload
+    //    under data[0]; older shapes return it at the root. Accept both.
+    const body = new URLSearchParams({
+      client_id: appId,
+      client_secret: appSecret,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+      code,
+    });
+    const slRes = await axios.post<IgTokenPayload & { data?: IgTokenPayload[] }>(
+      IG_DIRECT_TOKEN,
+      body.toString(),
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 15_000,
+        validateStatus: () => true,
+        // Bypass any HTTPS_PROXY env var (OrbStack injects one that doesn't
+        // CONNECT-tunnel HTTPS properly) — same hardening as the Twitch def.
+        proxy: false,
+      },
+    );
+    const sl = slRes.data?.data?.[0] ?? slRes.data;
+    if (slRes.status < 200 || slRes.status >= 300 || !sl?.access_token) {
+      const bodyStr =
+        slRes.data && typeof slRes.data === 'object'
+          ? JSON.stringify(slRes.data)
+          : String(slRes.data);
+      throw new Error(
+        `Instagram token exchange failed (HTTP ${slRes.status}): ${bodyStr}`,
+      );
+    }
+
+    // 2. Short-lived → long-lived (60d). Unlike FB-login Meta tokens this
+    //    one is then refreshable forever via ig_refresh_token (POC cron).
+    const llRes = await axios.get<{
+      access_token: string;
+      expires_in?: number;
+      error?: { message?: string };
+    }>(`${IG_DIRECT_GRAPH}/access_token`, {
+      params: {
+        grant_type: 'ig_exchange_token',
+        client_secret: appSecret,
+        access_token: sl.access_token,
+      },
+      timeout: 15_000,
+      validateStatus: () => true,
+      proxy: false,
+    });
+    if (llRes.status < 200 || llRes.status >= 300 || !llRes.data.access_token) {
+      const errMsg = llRes.data?.error?.message ?? `HTTP ${llRes.status}`;
+      throw new Error(`Instagram long-lived exchange failed: ${errMsg}`);
+    }
+    const accessToken = llRes.data.access_token;
+    const expiresAt = llRes.data.expires_in
+      ? new Date(Date.now() + llRes.data.expires_in * 1000).toISOString()
+      : undefined;
+
+    // 3. Discovery — one call, no Page picker. `user_id` is the IG
+    //    professional account id (Graph node id); `id` is app-scoped.
+    const meRes = await axios.get<{
+      id?: string;
+      user_id?: number | string;
+      username?: string;
+      name?: string;
+      profile_picture_url?: string;
+      error?: { message?: string };
+    }>(`${IG_DIRECT_GRAPH_V}/me`, {
+      params: {
+        fields: 'id,user_id,username,name,profile_picture_url',
+        access_token: accessToken,
+      },
+      timeout: 15_000,
+      validateStatus: () => true,
+      proxy: false,
+    });
+    if (meRes.status < 200 || meRes.status >= 300) {
+      const errMsg = meRes.data?.error?.message ?? `HTTP ${meRes.status}`;
+      throw new Error(`Instagram /me discovery failed: ${errMsg}`);
+    }
+    const me = meRes.data;
+    const canonicalId = me.user_id != null ? String(me.user_id) : me.id;
+    if (!canonicalId) {
+      throw new Error('Instagram /me returned no user id');
+    }
+
+    const seedBody: SeedBody = {
+      platform: 'instagram',
+      access_token: accessToken,
+      expires_at: expiresAt,
+      canonical_user_id: canonicalId,
+      handle: me.username,
+      metadata: {
+        oauth_flow: 'ig_direct',
+        ig_business_account_id: canonicalId,
+        ig_app_scoped_id: me.id ?? null,
+        granted_permissions:
+          typeof sl.permissions === 'string'
+            ? sl.permissions.split(',')
+            : sl.permissions,
+      },
+    };
+    const sessionId = await putSession({
+      kind: 'simple',
+      platform: 'instagram',
+      seedBody,
+      preview: {
+        handle: me.username,
+        name: me.name,
+        extras: { ig_user_id: canonicalId, flow: 'instagram_direct' },
+      },
+    });
+    return {
+      kind: 'confirm',
+      platform: 'instagram',
+      sessionId,
+      preview: {
+        handle: me.username,
+        name: me.name,
+        extras: { ig_user_id: canonicalId, flow: 'instagram_direct' },
+      },
+    };
+  },
+};
+
 // ─── Twitch ────────────────────────────────────────────────────────────
 
 const twitch: PlatformDef = {
@@ -667,6 +830,7 @@ const twitch: PlatformDef = {
 export const PLATFORMS: Record<PlatformKey, PlatformDef> = {
   facebook,
   instagram,
+  instagram_direct: instagramDirect,
   tiktok,
   threads,
   youtube,

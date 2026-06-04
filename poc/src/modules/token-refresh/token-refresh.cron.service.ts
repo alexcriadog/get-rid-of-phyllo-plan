@@ -13,12 +13,10 @@
 //   - threads: 60-day long-lived token, refreshable only WHILE still valid.
 //     We refresh with a 7-day lead (THREADS_LEAD_MS) so a failed attempt has
 //     days of hourly retries before the token actually dies.
-//   - facebook / instagram (Meta): tokens are NOT refreshable — the end user
-//     must re-authorise via OAuth. So we don't call Graph; instead, once a
-//     Meta token has actually expired we flip the account to needs_reauth and
-//     fire the client-facing `token.expired` webhook so they re-route the
-//     user through the connect flow. (We act only once expired, never early,
-//     so we don't cut a still-valid token's sync window short.)
+//   - facebook / instagram via FB-login (Meta): NOT refreshable — once
+//     expired we flip the account to needs_reauth and fire token.expired.
+//   - instagram via IG-direct (metadata.oauth_flow='ig_direct'): 60-day
+//     long-lived token refreshable like Threads — 7-day lead, hourly retries.
 //
 // Copies the proven cron shape from WebhooksDigestService: api-process gate +
 // runWithLock distributed lock + UTC @Cron.
@@ -35,6 +33,8 @@ import { TikTokTokenRefreshService } from '@modules/platforms/shared/tiktok-api/
 import { TwitchTokenRefreshService } from '@modules/platforms/shared/twitch-api/twitch-token-refresh.service';
 import { YoutubeTokenRefreshService } from '@modules/platforms/shared/youtube-api/youtube-token-refresh.service';
 import { ThreadsTokenRefreshService } from '@modules/platforms/shared/threads-api/threads-token-refresh.service';
+import { InstagramDirectTokenRefreshService } from '@modules/platforms/shared/instagram-api/instagram-direct-token-refresh.service';
+import { isIgDirect } from '@modules/platforms/shared/meta-graph/ig-direct';
 import { MetricsService } from '@shared/metrics/metrics.service';
 
 /** Refresh short-lived access tokens this far ahead of expiry. */
@@ -83,6 +83,7 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
     private readonly twitch: TwitchTokenRefreshService,
     private readonly youtube: YoutubeTokenRefreshService,
     private readonly threads: ThreadsTokenRefreshService,
+    private readonly igDirect: InstagramDirectTokenRefreshService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -127,7 +128,7 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
         expiresAt: true,
         refreshTokenCiphertext: true,
         accessTokenCiphertext: true,
-        account: { select: { platform: true } },
+        account: { select: { platform: true, metadata: true } },
       },
       orderBy: { expiresAt: 'asc' },
       take: BATCH_SIZE,
@@ -142,8 +143,31 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
       const msToExpiry = expiresAt ? expiresAt.getTime() - now.getTime() : Infinity;
       const expired = msToExpiry <= 0;
 
+      // IG-direct accounts are platform 'instagram' but behave like Threads:
+      // long-lived token, refreshable while alive, 7-day lead. Classified
+      // BEFORE the META branch — only metadata distinguishes the two flows.
+      const igDirectRow =
+        platform === 'instagram' &&
+        isIgDirect(row.account.metadata as Record<string, unknown> | null);
+      // Metric label: keep failure/refresh series consistent — IG-direct
+      // events must not land in the FB-login 'instagram' bucket.
+      const metricPlatform = igDirectRow ? 'instagram_direct' : platform;
+
       try {
-        if (REFRESHABLE.has(platform)) {
+        if (igDirectRow) {
+          if (msToExpiry > THREADS_LEAD_MS) {
+            result.skipped += 1; // not due yet — 7-day lead on a 60-day token
+            continue;
+          }
+          await this.igDirect.refresh(
+            accountId,
+            this.aes.decrypt(Buffer.from(row.accessTokenCiphertext)),
+          );
+          result.refreshed += 1;
+          this.metrics.incr('token_refresh_cron_refreshed', {
+            platform: metricPlatform,
+          });
+        } else if (REFRESHABLE.has(platform)) {
           const lead = platform === 'threads' ? THREADS_LEAD_MS : SHORT_LEAD_MS;
           if (msToExpiry > lead) {
             result.skipped += 1; // not due yet for this platform's window
@@ -174,7 +198,7 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
       } catch (err) {
         result.failed += 1;
         const msg = err instanceof Error ? err.message : String(err);
-        this.metrics.incr('token_refresh_cron_failed', { platform });
+        this.metrics.incr('token_refresh_cron_failed', { platform: metricPlatform });
         this.logger.warn(
           `Token refresh failed for account ${accountId.toString()} (${platform}): ${msg}`,
         );

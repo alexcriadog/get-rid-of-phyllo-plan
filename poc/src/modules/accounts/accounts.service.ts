@@ -14,6 +14,7 @@ import { OutboundWebhooksService } from '@modules/outbound-webhooks/outbound-web
 import { PRODUCTS_BY_PLATFORM, type Platform } from './products.catalog';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
 import { enforceWorkspaceProducts } from './seed-products-enforcement';
+import { isIgDirect } from '@modules/platforms/shared/meta-graph/ig-direct';
 
 export type { Platform };
 
@@ -130,8 +131,13 @@ export class AccountsService {
     //
     // We also remember the user-level token: ads_read needs USER scope, so
     // FB needs both. Stored side-by-side; resolved per-product downstream.
+    // IG-direct seeds carry a graph.instagram.com user token — there is no
+    // Page token to normalize to and /me/accounts would reject the token.
+    // The seed's access token is already the final long-lived credential.
+    const igDirect = input.platform === 'instagram' && isIgDirect(input.metadata);
     const isMeta =
-      input.platform === 'facebook' || input.platform === 'instagram';
+      !igDirect &&
+      (input.platform === 'facebook' || input.platform === 'instagram');
     const tokens = isMeta
       ? await this.normalizeMetaToken(input)
       : { pageToken: input.accessToken, userToken: null };

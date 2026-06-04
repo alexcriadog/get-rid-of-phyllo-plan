@@ -1,10 +1,14 @@
 # Instagram Direct OAuth — explainer y decisión pendiente
 
-> **Estado**: pendiente de aprobación. **No hay código en producción
-> que use este flow.** Este doc existe para que decidamos si lo
-> implementamos en v1, en una fase posterior, o nunca. Toca
-> escalabilidad y operacional, por eso vale la pena leerlo entero
-> antes de dar luz verde.
+> **Estado**: IMPLEMENTADO tras decisión 2026-06-04 (rollout Opción C:
+> feature flag `IG_DIRECT_ENABLED`, opt-in, sin default). Plan de
+> implementación: `docs/superpowers/plans/2026-06-04-instagram-direct-oauth.md`.
+> Pendiente antes de activar el flag: config del producto Instagram en el
+> Meta App Dashboard + validación sandbox (paridad de canonical-ID entre
+> flows, disponibilidad de audience insights). Follow-up conocido: la
+> telemetría BUC (x-app-usage) de IG-direct comparte bucket Redis con el
+> app de FB — segregar por app-key antes de volumen de producción.
+> Lo de abajo se mantiene como análisis de contexto/decisión.
 
 ---
 

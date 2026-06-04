@@ -4,6 +4,7 @@ import { TikTokApiModule } from '@modules/platforms/shared/tiktok-api/tiktok-api
 import { TwitchApiModule } from '@modules/platforms/shared/twitch-api/twitch-api.module';
 import { YoutubeApiModule } from '@modules/platforms/shared/youtube-api/youtube-api.module';
 import { ThreadsApiModule } from '@modules/platforms/shared/threads-api/threads-api.module';
+import { InstagramApiModule } from '@modules/platforms/shared/instagram-api/instagram-api.module';
 import { TokenRefreshCronService } from './token-refresh.cron.service';
 
 /**
@@ -20,6 +21,7 @@ import { TokenRefreshCronService } from './token-refresh.cron.service';
     TwitchApiModule,
     YoutubeApiModule,
     ThreadsApiModule,
+    InstagramApiModule,
   ],
   providers: [TokenRefreshCronService],
   exports: [TokenRefreshCronService],

@@ -123,6 +123,9 @@ export function platformReachableAtOAuthStart(
   oauthPlatform: string,
 ): boolean {
   if (config == null) return true;
+  if (oauthPlatform === 'instagram_direct') {
+    return Object.prototype.hasOwnProperty.call(config, 'instagram');
+  }
   if (oauthPlatform === 'facebook') {
     return (
       Object.prototype.hasOwnProperty.call(config, 'facebook') ||
@@ -270,6 +273,32 @@ export function fullScopesForPlatform(
   return [...set];
 }
 
+// Scope-name mapping for the IG-direct OAuth surface ("Instagram API with
+// Instagram Login"). The catalog's `instagram` entries carry FB-Login scope
+// names; the direct flow uses the `instagram_business_*` equivalents.
+// Page-scoped permissions have no Page in the direct flow and are dropped.
+const IG_DIRECT_SCOPE_MAP: Record<string, string | null> = {
+  instagram_basic: 'instagram_business_basic',
+  instagram_manage_insights: 'instagram_business_manage_insights',
+  instagram_manage_comments: 'instagram_business_manage_comments',
+  pages_manage_metadata: null,
+  pages_show_list: null,
+  pages_read_engagement: null,
+};
+
+export function toIgDirectScopes(fbScopes: ReadonlyArray<string>): string[] {
+  const out = new Set<string>();
+  for (const s of fbScopes) {
+    const mapped = Object.prototype.hasOwnProperty.call(IG_DIRECT_SCOPE_MAP, s)
+      ? IG_DIRECT_SCOPE_MAP[s]
+      : s.startsWith('pages_')
+        ? null // any Page-scoped permission is meaningless without a Page
+        : s;
+    if (mapped) out.add(mapped);
+  }
+  return [...out];
+}
+
 /**
  * Pick the OAuth scope set to request for this (catalog, workspace, platform).
  *
@@ -279,12 +308,25 @@ export function fullScopesForPlatform(
  * - workspace.products = {...} → minimum set covering the enabled products.
  * - Facebook OAuth covers Instagram too — union scopes from both buckets so
  *   a workspace that only enables `instagram` still gets IG scopes.
+ * - instagram_direct → maps the `instagram` product bucket through
+ *   toIgDirectScopes, returning instagram_business_* scope names for the
+ *   IG-direct consent screen.
  */
 export function computeOAuthScopes(
   catalog: ProductsCatalog,
   config: ProductsConfig,
   platform: string,
 ): string[] {
+  // IG-direct: same `instagram` product bucket as FB-login, different scope
+  // names on the consent screen. Workspace config stays keyed by platform
+  // ('instagram'), never by flow.
+  if (platform === 'instagram_direct') {
+    const fbNamed =
+      config === null
+        ? fullScopesForPlatform(catalog, 'instagram')
+        : scopesForProducts(catalog, 'instagram', config.instagram ?? []);
+    return toIgDirectScopes(fbNamed);
+  }
   if (config === null) {
     if (platform === 'facebook') {
       return [
