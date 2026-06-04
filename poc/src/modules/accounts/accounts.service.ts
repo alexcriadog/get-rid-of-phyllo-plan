@@ -159,9 +159,16 @@ export class AccountsService {
     const now = new Date();
     // Prisma doesn't accept `undefined` for nullable JSON columns when you
     // want a SQL NULL; use the explicit JsonNull sentinel.
+    // Persist the ENFORCED product set (not the raw request) so
+    // account.metadata.products always mirrors the actual enrolment — the
+    // deploy-time backfill (prisma/seed.ts) treats it as the account's
+    // connection scope and must never widen past it.
     const metadataValue: Prisma.InputJsonValue | typeof Prisma.JsonNull =
       input.metadata && Object.keys(input.metadata).length > 0
-        ? (input.metadata as Prisma.InputJsonValue)
+        ? ({
+            ...input.metadata,
+            products: enforcedProducts,
+          } as Prisma.InputJsonValue)
         : Prisma.JsonNull;
 
     return this.prisma.$transaction(async (tx) => {
@@ -272,6 +279,23 @@ export class AccountsService {
           },
         });
         jobIds.push(job.id.toString());
+      }
+
+      // A (re-)seed is authoritative for the connection's product set: prune
+      // jobs outside the enforced scope so a narrower re-connect (e.g. a
+      // basic identity-only token) actually downgrades the account instead of
+      // leaving stale enrolments syncing forever. enforcedProducts always
+      // contains at least `identity`, so this can never empty the account.
+      const pruned = await tx.syncJob.deleteMany({
+        where: {
+          accountId: account.id,
+          product: { notIn: [...enforcedProducts] },
+        },
+      });
+      if (pruned.count > 0) {
+        this.logger.log(
+          `Pruned ${pruned.count} sync_job(s) outside the connection scope for account ${account.id}`,
+        );
       }
 
       this.logger.log(

@@ -20,6 +20,7 @@ import { PrismaClient } from '@prisma/client';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveBackfillProducts } from '../src/modules/accounts/backfill-products';
 
 // Load .env manually (no external dep); ignore if missing.
 function loadDotenv(): void {
@@ -308,19 +309,41 @@ const PRODUCTS_BY_PLATFORM_FOR_BACKFILL: Record<string, string[]> = {
 
 /**
  * Backfill SyncJob rows for accounts that pre-date a product addition.
- * Idempotent — uses prisma.syncJob.upsert against the (accountId, product)
- * composite unique. Safe to run on every deploy.
+ * Idempotent — keyed on the (accountId, product) composite unique. Safe to
+ * run on every deploy.
+ *
+ * Bounded by resolveBackfillProducts: only products inside the workspace
+ * allow-list AND the account's persisted connection scope
+ * (`account.metadata.products`) are ensured. Without this bound the backfill
+ * silently resurrected products that an admin or a narrower re-connect had
+ * pruned — e.g. a Twitch account scoped to identity-only regained
+ * engagement_new on the next deploy.
  */
 async function backfillSyncJobs(): Promise<{ created: number; existing: number }> {
   const now = new Date();
   let created = 0;
   let existing = 0;
+  const workspaces = await prisma.workspace.findMany({
+    select: { id: true, products: true },
+  });
+  const wsProducts = new Map<string, Record<string, string[]>>(
+    workspaces.map((w) => [w.id, (w.products ?? {}) as Record<string, string[]>]),
+  );
   const accounts = await prisma.account.findMany({
-    select: { id: true, platform: true },
+    select: { id: true, platform: true, workspaceId: true, metadata: true },
   });
   for (const acc of accounts) {
-    const products = PRODUCTS_BY_PLATFORM_FOR_BACKFILL[acc.platform];
-    if (!products) continue;
+    const catalog = PRODUCTS_BY_PLATFORM_FOR_BACKFILL[acc.platform];
+    if (!catalog) continue;
+    const allowed = wsProducts.get(acc.workspaceId)?.[acc.platform];
+    const metaRaw =
+      acc.metadata && typeof acc.metadata === 'object' && !Array.isArray(acc.metadata)
+        ? (acc.metadata as Record<string, unknown>)['products']
+        : undefined;
+    const metaProducts = Array.isArray(metaRaw)
+      ? (metaRaw as unknown[]).filter((p): p is string => typeof p === 'string')
+      : undefined;
+    const products = resolveBackfillProducts(catalog, allowed, metaProducts);
     for (const product of products) {
       const exists = await prisma.syncJob.findUnique({
         where: { accountId_product: { accountId: acc.id, product } },
