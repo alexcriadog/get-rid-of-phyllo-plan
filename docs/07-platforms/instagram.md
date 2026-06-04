@@ -6,17 +6,17 @@
 
 Instagram is the highest-volume platform for the connector. Two distinct OAuth flows are supported:
 
-- **Business via Facebook Page** (primary, default) — standard Meta Business Login; Page access token normalised via `/me/accounts`; Page `subscribed_apps` call on connect; token refreshed at T-14 days.
+- **Business via Facebook Page** (primary, default) — standard Meta Business Login; Page access token normalised via `/me/accounts`; Page `subscribed_apps` call on connect; token NOT refreshable — account flips to `needs_reauth` once expired (`token-refresh.cron.service.ts`).
 - **IG Direct / Instagram Business Login** (feature-flagged opt-in, shipped 2026-06-04) — connect-tool OAuth surface `instagram_direct` behind `IG_DIRECT_ENABLED=1`; seeds `platform: 'instagram'` + `metadata.oauth_flow: 'ig_direct'`; Graph host `graph.instagram.com/v22.0` (per-call `graphBaseUrl` override); 60-day token auto-refreshed by hourly cron (`ig_refresh_token`, 7-day lead); no Page `subscribed_apps` call (IG-object webhooks are app-level); scopes are the `instagram_business_*` family mapped from the same `instagram` product catalog.
 
-> **2026-05-04 invariants:** the only access-token type persisted for IG is the **Page access token** (or, equivalently, an IG_User token sourced from the linked Page). `AccountsService.seedAccount()` normalises every incoming token via `/me/accounts` before encryption — see [ADR 0015](../adr/0015-token-type-normalization.md). Rate limiting follows Meta's `X-Business-Use-Case-Usage` per `(App, IG Business Account)` rather than a synthetic local cap — see [ADR 0014](../adr/0014-meta-rate-limit-mirror.md). The `engagement_new` job re-fetches insights for the last 90 days of posts on every run (`refresh-cadence.md` §0).
+> **2026-05-04 invariants** *(amended 2026-06-04: IG-direct accounts are exempt — they persist a `graph.instagram.com` user token and skip `/me/accounts` normalisation)*: the only access-token type persisted for FB-login IG is the **Page access token** (or, equivalently, an IG_User token sourced from the linked Page). `AccountsService.seedAccount()` normalises every incoming FB-login token via `/me/accounts` before encryption — see [ADR 0015](../adr/0015-token-type-normalization.md). Rate limiting follows Meta's `X-Business-Use-Case-Usage` per `(App, IG Business Account)` rather than a synthetic local cap — see [ADR 0014](../adr/0014-meta-rate-limit-mirror.md). The `engagement_new` job re-fetches insights for the last 90 days of posts on every run (`refresh-cadence.md` §0).
 
 ---
 
 ## Account eligibility
 
 - **Business via FB Page:** account must be Instagram Business or Creator AND linked to a Facebook Page the user administers.
-- **IG Direct:** Instagram account linked directly (no FB Page required). Used for accounts the user manages without owning the FB Page. Code path already exists today (`is_ig_direct`, `getInstagramDirectAccountId`).
+- **IG Direct:** Instagram professional account (Business or Creator) connected directly with IG credentials — no FB Page or FB account required. Feature-flagged (`IG_DIRECT_ENABLED`); accounts carry `metadata.oauth_flow = 'ig_direct'`.
 - **Personal accounts are not supported.** The UI must surface this before OAuth starts (F-08).
 
 ---
@@ -40,11 +40,11 @@ All scopes require **Meta App Review** — lead time 2-4 weeks per cycle. Advanc
 
 ### IG Direct
 
-Scopes requested (Instagram Basic Display API or Graph API direct IG flow):
-- `instagram_basic`
-- `instagram_manage_insights` (if audience/engagement needed)
+Scopes requested (`instagram_business_*` family — mapped from the same `instagram` product catalog by `toIgDirectScopes` in `connect-tool/lib/workspace-config.ts`; Page-scoped permissions are dropped):
+- `instagram_business_basic`
+- `instagram_business_manage_insights` (if audience/engagement needed)
 
-Fewer scopes; simpler consent screen. Data availability is narrower — some business insights not exposed via this flow.
+Fewer scopes; simpler consent screen. Data availability is narrower — hashtag search, tagged/mentioned media, ads insights and branded content only exist on the FB graph (see `docs/instagram-direct-oauth.md` §3).
 
 ---
 
@@ -59,8 +59,8 @@ After OAuth, we must resolve the **canonical platform user ID** because the ID r
 4. Retries: 2s, 5s, 10s (Graph API consistency sometimes lags).
 
 ### IG Direct
-1. Call `GET /me?fields=id,username` with IG token.
-2. `canonical_user_id = id`.
+1. Call `GET graph.instagram.com/v22.0/me?fields=id,user_id,username,name,profile_picture_url` with the IG token.
+2. `canonical_user_id = user_id` (the IG professional account / Graph node id), falling back to `id` (app-scoped). Sandbox validation must confirm `user_id` matches the FB-graph `instagram_business_account.id` so the `(workspace, platform, canonical_user_id)` unique constraint dedupes cross-flow connects.
 3. Retries same as above.
 
 Failure → `pending_resolution_failed` status, surfaced as error in callback redirect.
