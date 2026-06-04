@@ -523,6 +523,14 @@ const instagram: PlatformDef = {
   },
 };
 
+// Token payload for the IG Business Login exchange — may arrive at the
+// response root or nested under data[0] depending on app configuration.
+type IgTokenPayload = {
+  access_token?: string;
+  user_id?: number | string;
+  permissions?: string | string[];
+};
+
 // ─── Instagram direct (Instagram API with Instagram Login) ──────────────
 // Internal OAuth surface only — the SDK/UI keep exposing 'instagram'. The
 // seed this flow produces is platform 'instagram' + metadata.oauth_flow
@@ -548,11 +556,6 @@ const instagramDirect: PlatformDef = {
 
     // 1. Code → short-lived token. Business Login may nest the payload
     //    under data[0]; older shapes return it at the root. Accept both.
-    type IgTokenPayload = {
-      access_token?: string;
-      user_id?: number | string;
-      permissions?: string | string[];
-    };
     const body = new URLSearchParams({
       client_id: appId,
       client_secret: appSecret,
@@ -566,26 +569,43 @@ const instagramDirect: PlatformDef = {
       {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         timeout: 15_000,
+        validateStatus: () => true,
+        // Bypass any HTTPS_PROXY env var (OrbStack injects one that doesn't
+        // CONNECT-tunnel HTTPS properly) — same hardening as the Twitch def.
+        proxy: false,
       },
     );
     const sl = slRes.data?.data?.[0] ?? slRes.data;
-    if (!sl?.access_token) {
-      throw new Error('Instagram token exchange returned no access_token');
+    if (slRes.status < 200 || slRes.status >= 300 || !sl?.access_token) {
+      const bodyStr =
+        slRes.data && typeof slRes.data === 'object'
+          ? JSON.stringify(slRes.data)
+          : String(slRes.data);
+      throw new Error(
+        `Instagram token exchange failed (HTTP ${slRes.status}): ${bodyStr}`,
+      );
     }
 
     // 2. Short-lived → long-lived (60d). Unlike FB-login Meta tokens this
     //    one is then refreshable forever via ig_refresh_token (POC cron).
-    const llRes = await axios.get<{ access_token: string; expires_in?: number }>(
-      `${IG_DIRECT_GRAPH}/access_token`,
-      {
-        params: {
-          grant_type: 'ig_exchange_token',
-          client_secret: appSecret,
-          access_token: sl.access_token,
-        },
-        timeout: 15_000,
+    const llRes = await axios.get<{
+      access_token: string;
+      expires_in?: number;
+      error?: { message?: string };
+    }>(`${IG_DIRECT_GRAPH}/access_token`, {
+      params: {
+        grant_type: 'ig_exchange_token',
+        client_secret: appSecret,
+        access_token: sl.access_token,
       },
-    );
+      timeout: 15_000,
+      validateStatus: () => true,
+      proxy: false,
+    });
+    if (llRes.status < 200 || llRes.status >= 300 || !llRes.data.access_token) {
+      const errMsg = llRes.data?.error?.message ?? `HTTP ${llRes.status}`;
+      throw new Error(`Instagram long-lived exchange failed: ${errMsg}`);
+    }
     const accessToken = llRes.data.access_token;
     const expiresAt = llRes.data.expires_in
       ? new Date(Date.now() + llRes.data.expires_in * 1000).toISOString()
@@ -599,13 +619,20 @@ const instagramDirect: PlatformDef = {
       username?: string;
       name?: string;
       profile_picture_url?: string;
+      error?: { message?: string };
     }>(`${IG_DIRECT_GRAPH_V}/me`, {
       params: {
         fields: 'id,user_id,username,name,profile_picture_url',
         access_token: accessToken,
       },
       timeout: 15_000,
+      validateStatus: () => true,
+      proxy: false,
     });
+    if (meRes.status < 200 || meRes.status >= 300) {
+      const errMsg = meRes.data?.error?.message ?? `HTTP ${meRes.status}`;
+      throw new Error(`Instagram /me discovery failed: ${errMsg}`);
+    }
     const me = meRes.data;
     const canonicalId = me.user_id != null ? String(me.user_id) : me.id;
     if (!canonicalId) {
@@ -621,7 +648,7 @@ const instagramDirect: PlatformDef = {
       metadata: {
         oauth_flow: 'ig_direct',
         ig_business_account_id: canonicalId,
-        ig_app_scoped_id: me.id,
+        ig_app_scoped_id: me.id ?? null,
         granted_permissions:
           typeof sl.permissions === 'string'
             ? sl.permissions.split(',')
