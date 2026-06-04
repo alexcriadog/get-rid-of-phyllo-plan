@@ -153,7 +153,11 @@ Response 200: { id, status, disconnected_at }
 | `GET /v1/accounts/:id/ads` | Ad insights — Facebook only. `?live=`. |
 
 A product endpoint only returns data if the account is **enrolled** in that
-product (workspace allow-list ∩ per-connection scope at connect time).
+product (workspace allow-list ∩ per-connection scope at connect time) — else
+`404 { "error": "product_not_enrolled", "product": "<id>" }`, for both snapshot
+and `?live=true` reads. A snapshot that hasn't synced yet returns
+`404 { "error": "not_synced_yet", "product": "<id>" }`. Re-connecting with a
+narrower scope prunes the out-of-scope enrolments (re-seed is authoritative).
 
 `identity` response (`NormalizedIdentity`):
 
