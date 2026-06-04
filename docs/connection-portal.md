@@ -1,7 +1,7 @@
 # Connection Portal
 
 **Status:** Stable reference
-**Last updated:** 2026-05-04
+**Last updated:** 2026-06-04
 **Answers question:** Q5 — Where does the Connect UI live? Separate project? Monorepo?
 
 A "connection portal" is whatever the creator interacts with to connect their platform account. Today Phyllo's Connect SDK was an embedded React widget in `frontend-app`. The replacement must serve the same purpose without becoming a new standalone deployable or forcing a monorepo on a 3-person team.
@@ -22,6 +22,48 @@ The invariant lives in `AccountsService.seedAccount()` (`poc/src/modules/account
 4. Anything else → throw `BadRequestException` with the upstream Meta error. No silent persistence.
 
 For Threads the analogous invariant is the long-lived exchange in `seedConnection` (admin.service.ts): `ThreadsTokenRefreshService.exchangeShortLived()` is called before persistence so what we store is always a 60d token with `expires_at` populated. The refresh service then proactively refreshes when there are <7 days left.
+
+---
+
+## 0.5. Per-connection product scope invariant (since 2026-06-03)
+
+A client can scope an **individual connection** to a subset of its workspace's
+enabled products by passing `products` (`Record<platform, productId[]>`) when
+minting the SDK token (`POST /v1/sdk-tokens`). Example: a "basic" account that
+must not collect Ads data is minted with `products: { facebook: ["identity",
+"audience"] }`.
+
+The invariant: **an account's enrolled `sync_jobs` ⊆ (token product scope ∩
+workspace allow-list)**, enforced at three independent layers:
+
+1. **Mint** — `buildConnectionProductScope()`
+   (`poc/src/modules/sdk-tokens/connection-products.ts`) rejects any product
+   outside the workspace allow-list with a 400, injects `identity`, and signs
+   the result into the JWT as the `products` claim. The end user cannot widen
+   it.
+2. **connect-tool** — `intersectConnectionProducts()`
+   (`connect-tool/lib/workspace-config.ts`) merges the claim over
+   `workspace.products`; the effective config drives the OAuth scope set
+   (`computeOAuthScopes`, so the consent screen only asks for the scoped
+   products' scopes) and the confirm/page-picker display. The seed handlers
+   clamp the final enrolment with `clampProductsToScope()`.
+3. **Seed** — POC `seedAccount()` independently re-enforces the workspace
+   ceiling via `enforceWorkspaceProducts()` (unchanged, pre-existing).
+
+A token without the `products` claim behaves exactly as before — the full
+workspace allow-list. Platforms the claim omits keep the workspace default;
+only listed platforms are narrowed.
+
+Caveat for demos: on Twitch the `identity` product is labelled
+"Channel + followers + subs" and already carries all of Twitch's scopes, while
+`engagement_new` ("VODs + clips") adds none — so the OAuth consent looks
+identical with or without the scope; the difference is the enrolled products.
+Facebook/YouTube show the scope reduction clearly (`ads_read` / analytics
+scopes drop).
+
+References: implementation plan
+`docs/superpowers/plans/2026-06-03-per-connection-product-scope.md`; client
+docs in `connect-tool/sdk/README.md` ("Per-connection product scope").
 
 ---
 

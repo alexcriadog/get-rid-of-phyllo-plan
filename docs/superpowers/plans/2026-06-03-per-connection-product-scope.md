@@ -1,5 +1,13 @@
 # Per-Connection Product Scope Implementation Plan
 
+> **STATUS: EXECUTED & DEPLOYED TO PROD 2026-06-03.** All 10 tasks completed
+> (POC 13/13 + connect-tool 67/67 tests green, builds clean) and verified live:
+> scoped vs full tokens produce reduced OAuth scopes on YouTube/Facebook
+> (`ads_read` and analytics scopes drop). Follow-ups shipped same day: admin
+> accounts list/detail now show each account's actual enrolled products
+> (`poc/web/lib/products.ts`) + `getAccountDetailed` serialises `sync_jobs`;
+> `social_media_dashboard` demos the scope (Twitch → identity only).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let an integrating client (e.g. "Camaleonic Analytics") choose, per individual account connection, which subset of its workspace's enabled products to activate — so a "basic" connection requests fewer OAuth scopes and enrols fewer sync jobs than the workspace ceiling allows.

@@ -40,7 +40,7 @@ Browser ──► Express (server.js) ──► Camaleonic API
 | POST   | `/api/login`                  | Log in |
 | POST   | `/api/logout`                 | Drop session |
 | GET    | `/api/me`                     | Current user + workspace |
-| POST   | `/api/sdk-token`              | Mint SDK JWT bound to current user |
+| POST   | `/api/sdk-token`              | Mint SDK JWT bound to current user; body `{ platform }` attaches the per-connection product scope (see below) |
 | GET    | `/api/accounts`               | List `end_user_id == me.email` |
 | GET    | `/api/accounts/:id/identity`  | Normalized profile |
 | DELETE | `/api/accounts/:id`           | Disconnect |
@@ -56,6 +56,29 @@ from the URL.
 - `public/app.js` — frontend controller, loads `/connect-sdk.js` from
   Camaleonic and calls `CamaleonicConnect.init().open()`.
 - `public/style.css` — dark theme.
+
+## Per-connection product scope (demo)
+
+`server.js` keeps a `CONNECTION_PRODUCTS` map (platform → product ids). When the
+frontend opens a connection it tells the backend which platform
+(`POST /api/sdk-token { platform }`), and the backend mints the token with
+`products: { [platform]: [...] }` — signed, so the end user can't widen it.
+The demo ships with:
+
+```js
+const CONNECTION_PRODUCTS = {
+  twitch: ['identity'], // profile only — no "VODs + clips"
+};
+```
+
+Platforms not in the map inherit the full workspace allow-list. Watch the
+server log: each mint prints `[sdk-token] platform=… products=…`.
+
+Note: on Twitch the `identity` product is labelled "Channel + followers + subs"
+and already carries all of Twitch's OAuth scopes, so the consent screen looks
+the same either way — the scope's effect is which products get enrolled.
+Facebook/YouTube show the scope reduction in the consent screen itself
+(`ads_read` / analytics scopes drop).
 
 ## Limitations (demo, not production)
 
