@@ -31,11 +31,19 @@ import {
 
 const VALID_PLATFORMS = new Set<PlatformKey>([
   'facebook',
+  'instagram_direct',
   'tiktok',
   'threads',
   'youtube',
   'twitch',
 ]);
+
+// IG-direct is rolled out opt-in (docs/instagram-direct-oauth.md §8 "Opción
+// C"). Until the flag is on, the surface 404s exactly like an unknown
+// platform.
+function igDirectEnabled(): boolean {
+  return process.env.IG_DIRECT_ENABLED === '1';
+}
 
 // In-flight callback dedupe. Chrome's "Preload pages for faster browsing"
 // (and some extensions) can fire the callback URL TWICE with the same
@@ -108,6 +116,11 @@ function redirectUriFor(platform: PlatformKey, baseUrl: string): string {
       return env('THREADS_REDIRECT_URI') ?? `${baseUrl}/api/oauth/callback/threads`;
     case 'twitch':
       return env('TWITCH_REDIRECT_URI') ?? `${baseUrl}/api/oauth/callback/twitch`;
+    case 'instagram_direct':
+      return (
+        env('INSTAGRAM_REDIRECT_URI') ??
+        `${baseUrl}/api/oauth/callback/instagram_direct`
+      );
     default:
       return `${baseUrl}/api/oauth/callback/${platform}`;
   }
@@ -184,6 +197,9 @@ export async function GET(
   if (!VALID_PLATFORMS.has(platform)) {
     return new NextResponse(`Unknown platform: ${rawPlatform}`, { status: 404 });
   }
+  if (platform === 'instagram_direct' && !igDirectEnabled()) {
+    return new NextResponse(`Unknown platform: ${rawPlatform}`, { status: 404 });
+  }
   const redirectUri = redirectUriFor(platform, baseUrl);
 
   if (action === 'start') {
@@ -210,9 +226,12 @@ export async function GET(
             `SDK token workspace mismatch (token=${claims.ws_slug}, query=${ws})`,
           );
         }
-        if (claims.platforms && !claims.platforms.includes(platform)) {
+        // The SDK token speaks product platforms ('instagram'); map internal
+        // OAuth surfaces back before checking the claim.
+        const claimPlatform = platform === 'instagram_direct' ? 'instagram' : platform;
+        if (claims.platforms && !claims.platforms.includes(claimPlatform)) {
           throw new Error(
-            `Platform ${platform} not allowed by SDK token (allowed=${claims.platforms.join(',')})`,
+            `Platform ${claimPlatform} not allowed by SDK token (allowed=${claims.platforms.join(',')})`,
           );
         }
         // Gate #3: workspace.products allow-list. If the workspace
