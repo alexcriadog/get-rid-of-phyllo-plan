@@ -1,14 +1,32 @@
 # Instagram Direct OAuth — explainer y decisión pendiente
 
-> **Estado**: IMPLEMENTADO tras decisión 2026-06-04 (rollout Opción C:
-> feature flag `IG_DIRECT_ENABLED`, opt-in, sin default). Plan de
-> implementación: `docs/superpowers/plans/2026-06-04-instagram-direct-oauth.md`.
-> Pendiente antes de activar el flag: config del producto Instagram en el
-> Meta App Dashboard + validación sandbox (paridad de canonical-ID entre
-> flows, disponibilidad de audience insights). Follow-up conocido: la
-> telemetría BUC (x-app-usage) de IG-direct comparte bucket Redis con el
-> app de FB — segregar por app-key antes de volumen de producción.
+> **Estado**: IMPLEMENTADO Y VALIDADO EN PRODUCCIÓN 2026-06-04 (rollout
+> Opción C: feature flag `IG_DIRECT_ENABLED`, activo en prod). Plan:
+> `docs/superpowers/plans/2026-06-04-instagram-direct-oauth.md`.
+> Follow-up conocido: la telemetría BUC (x-app-usage) de IG-direct comparte
+> bucket Redis con el app de FB — segregar por app-key antes de volumen de
+> producción. `oauthToken.scopes` queda `[]` en seeds ig_direct
+> (granted_permissions vive en account.metadata).
 > Lo de abajo se mantiene como análisis de contexto/decisión.
+
+## Validación producción 2026-06-04
+
+Cuenta de prueba: `camaleonicanalytics` (workspace `demo`), conectada vía
+"Connect with Instagram directly" desde la sample app (localhost:4000 →
+connect-tool prod).
+
+| Check | Resultado |
+|---|---|
+| Consent screen IG con scopes `instagram_business_basic, instagram_business_manage_insights` | ✅ |
+| **Paridad canonical-ID**: `/me` `user_id` (IG-direct) == `instagram_business_account.id` (FB-graph) → upsert sobre la fila existente (account 2, `17841450633103215`), cero duplicados | ✅ |
+| Seed con `metadata.oauth_flow='ig_direct'` (el upsert reemplaza metadata: pierde `page_id`, gana `oauth_flow` — esperado; `page_id` solo alimentaba hints de rate-limit) | ✅ |
+| Sync E2E contra `graph.instagram.com/v22.0` — identity/audience/engagement/stories; demografía devuelve "Not enough users" (cuenta pequeña, soft-fail esperado), sin errores de token/host | ✅ |
+| Refresh manual `/v1/accounts/2/refresh` → identity `fetched_at` fresco | ✅ |
+| Cron refresh (`ig_refresh_token`) | ⏳ se ejercitará solo cuando el token entre en la ventana T-7d (~día 53); lógica espejo de Threads ya probada en prod |
+
+Nota operacional: reconectar por IG-direct una cuenta que estaba conectada
+vía FB-login **convierte la fila a IG-direct** (token de usuario IG,
+refrescable, sin Page). Es el comportamiento de diseño del upsert.
 
 ---
 
