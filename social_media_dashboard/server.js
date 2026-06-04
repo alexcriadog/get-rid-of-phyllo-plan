@@ -159,6 +159,11 @@ app.post('/api/sdk-token', requireAuth, async (req, res) => {
       ? req.body.platform
       : undefined;
   const scopedProducts = platform ? CONNECTION_PRODUCTS[platform] : undefined;
+  console.log(
+    `[sdk-token] platform=${platform ?? '(none)'} products=${
+      scopedProducts ? JSON.stringify({ [platform]: scopedProducts }) : '(none)'
+    }`,
+  );
   const { status, body } = await camaleonic('/v1/sdk-tokens', {
     method: 'POST',
     body: JSON.stringify({
