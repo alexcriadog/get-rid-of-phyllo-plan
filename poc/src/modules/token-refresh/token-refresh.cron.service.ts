@@ -157,16 +157,16 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
         if (igDirectRow) {
           if (msToExpiry > THREADS_LEAD_MS) {
             result.skipped += 1; // not due yet — 7-day lead on a 60-day token
-          } else {
-            await this.igDirect.refresh(
-              accountId,
-              this.aes.decrypt(Buffer.from(row.accessTokenCiphertext)),
-            );
-            result.refreshed += 1;
-            this.metrics.incr('token_refresh_cron_refreshed', {
-              platform: metricPlatform,
-            });
+            continue;
           }
+          await this.igDirect.refresh(
+            accountId,
+            this.aes.decrypt(Buffer.from(row.accessTokenCiphertext)),
+          );
+          result.refreshed += 1;
+          this.metrics.incr('token_refresh_cron_refreshed', {
+            platform: metricPlatform,
+          });
         } else if (REFRESHABLE.has(platform)) {
           const lead = platform === 'threads' ? THREADS_LEAD_MS : SHORT_LEAD_MS;
           if (msToExpiry > lead) {
