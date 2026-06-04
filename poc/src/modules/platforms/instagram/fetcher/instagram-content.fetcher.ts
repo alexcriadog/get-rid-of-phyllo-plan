@@ -28,6 +28,51 @@ import {
   insightMetricsForMedia,
   mapInsightsData,
 } from '../mapper/instagram-insights.mapper';
+import { isIgDirect } from '../../shared/meta-graph/ig-direct';
+
+// /media fields available on BOTH Graph surfaces.
+const MEDIA_FIELDS_COMMON = [
+  'id',
+  'caption',
+  'media_type',
+  'media_url',
+  'permalink',
+  'timestamp',
+  'thumbnail_url',
+  'like_count',
+  'comments_count',
+  'is_shared_to_feed',
+  'is_comment_enabled',
+  'alt_text',
+  'media_product_type',
+  'shortcode',
+  'owner{id,username}',
+  'children{id,media_type,media_url,thumbnail_url,permalink}',
+].join(',');
+// FB-graph extras (Phase B.2, free on the same /media call there). The
+// IG-Login surface silently returns NOTHING for these today (verified in
+// prod raw archive 2026-06-04) and Meta has form for flipping
+// silently-ignored fields into hard code-100 rejections (the is_published
+// identity incident) — so IG-direct accounts don't request them at all.
+const MEDIA_FIELDS_FB_ONLY = [
+  'collaborators{id,username}',
+  'shares_count',
+  'reposts_count',
+  'saved_count',
+  'total_like_count',
+  'total_comments_count',
+  'total_views_count',
+  'boost_ads_list',
+  'boost_eligibility_info',
+  'legacy_instagram_media_id',
+].join(',');
+
+/** /media field list depending on the account's OAuth flow. */
+export function mediaFieldsFor(metadata?: Record<string, unknown>): string {
+  return isIgDirect(metadata)
+    ? MEDIA_FIELDS_COMMON
+    : `${MEDIA_FIELDS_COMMON},${MEDIA_FIELDS_FB_ONLY}`;
+}
 
 @Injectable()
 export class InstagramContentFetcher {
@@ -51,49 +96,18 @@ export class InstagramContentFetcher {
 
     // Rich field set for Graph v22 — every one rides on the same /media call
     // (zero extra cost). `children{…}` returns carousel subitems inline.
+    // Field list is flow-aware (see mediaFieldsFor above): the Phase B.2
+    // probe-confirmed extras only exist on the FB-graph surface.
     // Impressions-class metrics aren't here: those require the per-media
     // /insights endpoint (1 extra call per post) and are intentionally
     // opt-in. See fetchContentInsights() for that path.
-    //
-    // Phase B.2 additions (probe-confirmed, see docs/ig-probe-results.md):
-    //   shares_count, reposts_count, saved_count, total_like_count,
-    //   total_comments_count, total_views_count, boost_ads_list,
-    //   boost_eligibility_info, legacy_instagram_media_id.
-    // Probe-rejected on our scope set, kept out:
+    // Probe-rejected on our scope set, kept out of BOTH lists:
     //   view_count (#36104 BD-only), copyright_check_information
     //   (video-only — re-probe later), branded_content_partner (#100
     //   retired by Meta), shopping_product_tag_eligibility (#10).
     let nextEndpoint = `/${canonicalId}/media`;
     let nextParams: Record<string, string | number | undefined> = {
-      fields: [
-        'id',
-        'caption',
-        'media_type',
-        'media_url',
-        'permalink',
-        'timestamp',
-        'thumbnail_url',
-        'like_count',
-        'comments_count',
-        'is_shared_to_feed',
-        'is_comment_enabled',
-        'alt_text',
-        'media_product_type',
-        'shortcode',
-        'owner{id,username}',
-        'collaborators{id,username}',
-        'children{id,media_type,media_url,thumbnail_url,permalink}',
-        // Phase B.2 — free on the same /media call.
-        'shares_count',
-        'reposts_count',
-        'saved_count',
-        'total_like_count',
-        'total_comments_count',
-        'total_views_count',
-        'boost_ads_list',
-        'boost_eligibility_info',
-        'legacy_instagram_media_id',
-      ].join(','),
+      fields: mediaFieldsFor(metadata),
       limit: Math.min(limit, DEFAULT_PAGE_SIZE),
     };
 

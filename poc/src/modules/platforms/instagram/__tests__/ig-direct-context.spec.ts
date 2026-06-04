@@ -1,4 +1,5 @@
 import { buildInstagramContext } from '../instagram.context';
+import { mediaFieldsFor } from '../fetcher/instagram-content.fetcher';
 import { profileFieldsFor } from '../fetcher/instagram-profile.fetcher';
 import {
   IG_DIRECT_GRAPH_BASE,
@@ -53,5 +54,38 @@ describe('profileFieldsFor', () => {
     expect(fields).toContain('is_published');
     expect(fields).toContain('has_profile_pic');
     expect(fields).toContain('legacy_instagram_user_id');
+  });
+});
+
+describe('mediaFieldsFor', () => {
+  // Same regression class as profileFieldsFor: graph.instagram.com returns
+  // nothing for the FB-graph extras today (verified in prod raw archive
+  // 2026-06-04) and may start rejecting them outright, killing the whole
+  // hard-failure /media call.
+  it('drops FB-graph-only media fields for IG-direct accounts', () => {
+    const fields = mediaFieldsFor({ oauth_flow: 'ig_direct' });
+    for (const f of [
+      'collaborators',
+      'shares_count',
+      'reposts_count',
+      'saved_count',
+      'total_like_count',
+      'total_comments_count',
+      'total_views_count',
+      'boost_ads_list',
+      'boost_eligibility_info',
+      'legacy_instagram_media_id',
+    ]) {
+      expect(fields).not.toContain(f);
+    }
+    expect(fields).toContain('media_url');
+    expect(fields).toContain('children{id,media_type,media_url,thumbnail_url,permalink}');
+  });
+
+  it('keeps the Phase B.2 extras for FB-login accounts', () => {
+    const fields = mediaFieldsFor({ page_id: '123' });
+    expect(fields).toContain('boost_eligibility_info');
+    expect(fields).toContain('total_views_count');
+    expect(fields).toContain('collaborators{id,username}');
   });
 });
