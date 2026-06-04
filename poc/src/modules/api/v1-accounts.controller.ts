@@ -150,11 +150,11 @@ export class V1AccountsController {
     @Param('id') rawId: string,
   ): Promise<{ platform: string; data: unknown; synced_at?: string | null }> {
     if (wantsLive(req)) {
-      const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+      const { adapter, account, token, metadata } = await this.resolve(req, rawId, 'page', 'audience');
       const audience = await adapter.fetchAudience(token, account.canonicalUserId, metadata);
       return { platform: account.platform, data: audience };
     }
-    const account = await this.resolveAccount(req, rawId);
+    const account = await this.resolveAccount(req, rawId, 'audience');
     const snap = await this.snapshots.readSnapshot('audience_snapshots', account.id);
     if (!snap) throw new NotFoundException({ error: 'not_synced_yet', product: 'audience' });
     return { platform: account.platform, data: snap.data, synced_at: snap.syncedAt };
@@ -169,7 +169,7 @@ export class V1AccountsController {
   ): Promise<{ platform: string; synced_at?: string | null } & Paginated<unknown>> {
     const limit = parseLimit(limitRaw, 50, 1, 200);
     if (wantsLive(req)) {
-      const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+      const { adapter, account, token, metadata } = await this.resolve(req, rawId, 'page', 'engagement_new');
       const sinceDate = since ? new Date(since) : undefined;
       if (sinceDate && Number.isNaN(sinceDate.getTime())) {
         throw new BadRequestException(`Invalid since timestamp: ${since}`);
@@ -182,7 +182,7 @@ export class V1AccountsController {
       );
       return { platform: account.platform, ...envelopeStatic<unknown>(items) };
     }
-    const account = await this.resolveAccount(req, rawId);
+    const account = await this.resolveAccount(req, rawId, 'engagement_new');
     const { items, syncedAt } = await this.snapshots.readList('posts', account.id, { limit });
     return { platform: account.platform, synced_at: syncedAt, ...envelopeStatic<unknown>(items) };
   }
@@ -200,7 +200,7 @@ export class V1AccountsController {
       throw new BadRequestException(`Invalid since timestamp: ${since}`);
     }
     if (wantsLive(req)) {
-      const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+      const { adapter, account, token, metadata } = await this.resolve(req, rawId, 'page', 'engagement_new');
       const items = await adapter.fetchContents(
         token,
         account.canonicalUserId,
@@ -211,7 +211,7 @@ export class V1AccountsController {
       const list = (view as { items?: unknown[] }).items ?? [];
       return { ...view, ...envelopeStatic<unknown>(list) };
     }
-    const account = await this.resolveAccount(req, rawId);
+    const account = await this.resolveAccount(req, rawId, 'engagement_new');
     const { items, syncedAt } = await this.snapshots.readList('posts', account.id, { limit });
     const view = toEngagementView(account.platform, items as ContentData[], sinceDate);
     const list = (view as { items?: unknown[] }).items ?? [];
@@ -229,7 +229,7 @@ export class V1AccountsController {
     average_rating: number | null;
     captured_at: string | null;
   } & Paginated<unknown>> {
-    const { account } = await this.resolve(req, rawId);
+    const { account } = await this.resolve(req, rawId, 'page', 'ratings');
     if (account.platform !== 'facebook') {
       throw new BadRequestException(
         `ratings not supported for ${account.platform}`,
@@ -265,7 +265,7 @@ export class V1AccountsController {
     @Param('id') rawId: string,
   ): Promise<{ platform: string; data: unknown; synced_at?: string | null }> {
     if (wantsLive(req)) {
-      const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+      const { adapter, account, token, metadata } = await this.resolve(req, rawId, 'page', 'engagement_deep');
       if (!adapter.fetchEngagementDeep) {
         throw new BadRequestException(
           `engagement-deep not supported for ${account.platform}`,
@@ -274,7 +274,7 @@ export class V1AccountsController {
       const snap = await adapter.fetchEngagementDeep(token, account.canonicalUserId, metadata);
       return { platform: account.platform, data: snap };
     }
-    const account = await this.resolveAccount(req, rawId);
+    const account = await this.resolveAccount(req, rawId, 'engagement_deep');
     const snap = await this.snapshots.readSnapshot('engagement_deep_snapshots', account.id);
     if (!snap) throw new NotFoundException({ error: 'not_synced_yet', product: 'engagement_deep' });
     return { platform: account.platform, data: snap.data, synced_at: snap.syncedAt };
@@ -287,7 +287,7 @@ export class V1AccountsController {
     @Query('limit') limitRaw: string | undefined,
   ): Promise<{ platform: string; synced_at?: string | null } & Paginated<unknown>> {
     if (wantsLive(req)) {
-      const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+      const { adapter, account, token, metadata } = await this.resolve(req, rawId, 'page', 'stories');
       if (!adapter.fetchStories) {
         throw new BadRequestException(
           `stories not supported for ${account.platform}`,
@@ -296,7 +296,7 @@ export class V1AccountsController {
       const stories = await adapter.fetchStories(token, account.canonicalUserId, metadata);
       return { platform: account.platform, ...envelopeStatic<unknown>(stories) };
     }
-    const account = await this.resolveAccount(req, rawId);
+    const account = await this.resolveAccount(req, rawId, 'stories');
     const limit = parseLimit(limitRaw, 50, 1, 200);
     // Stories share the `posts` collection with engagement_new/mentions;
     // filter by the stored contentType discriminator.
@@ -319,7 +319,7 @@ export class V1AccountsController {
     @Param('id') rawId: string,
     @Query('limit') limitRaw: string | undefined,
   ): Promise<{ platform: string } & Paginated<unknown>> {
-    const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+    const { adapter, account, token, metadata } = await this.resolve(req, rawId, 'page', 'mentions');
     if (!adapter.fetchMentions) {
       throw new BadRequestException(
         `mentions not supported for ${account.platform}`,
@@ -343,7 +343,7 @@ export class V1AccountsController {
   ): Promise<{ platform: string; synced_at?: string | null } & Paginated<unknown>> {
     const limit = parseLimit(limitRaw, 50, 1, 200);
     if (wantsLive(req)) {
-      const { adapter, account, token, metadata } = await this.resolve(req, rawId);
+      const { adapter, account, token, metadata } = await this.resolve(req, rawId, 'page', 'comments');
       if (!adapter.fetchComments) {
         throw new BadRequestException(
           `comments not supported for ${account.platform}`,
@@ -357,7 +357,7 @@ export class V1AccountsController {
       );
       return { platform: account.platform, ...envelopeStatic<unknown>(items) };
     }
-    const account = await this.resolveAccount(req, rawId);
+    const account = await this.resolveAccount(req, rawId, 'comments');
     const { items, syncedAt } = await this.snapshots.readList('comments', account.id, { limit });
     return { platform: account.platform, synced_at: syncedAt, ...envelopeStatic<unknown>(items) };
   }
@@ -368,7 +368,7 @@ export class V1AccountsController {
     @Param('id') rawId: string,
   ): Promise<{ platform: string; data: unknown; synced_at?: string | null }> {
     if (wantsLive(req)) {
-      const { adapter, account, token, metadata } = await this.resolve(req, rawId, 'ads');
+      const { adapter, account, token, metadata } = await this.resolve(req, rawId, 'ads', 'ads');
       if (!adapter.fetchAds) {
         throw new BadRequestException(
           `ads not supported for ${account.platform}`,
@@ -377,7 +377,7 @@ export class V1AccountsController {
       const snap = await adapter.fetchAds(token, account.canonicalUserId, metadata);
       return { platform: account.platform, data: snap };
     }
-    const account = await this.resolveAccount(req, rawId);
+    const account = await this.resolveAccount(req, rawId, 'ads');
     const snap = await this.snapshots.readSnapshot('ads_campaigns', account.id);
     if (!snap) throw new NotFoundException({ error: 'not_synced_yet', product: 'ads' });
     return { platform: account.platform, data: snap.data, synced_at: snap.syncedAt };
@@ -393,6 +393,7 @@ export class V1AccountsController {
     req: RequestWithWorkspace,
     rawId: string,
     tokenAudience: 'page' | 'ads' = 'page',
+    requireProduct?: string,
   ): Promise<{
     workspaceId: string;
     account: { id: bigint; platform: string; canonicalUserId: string; metadata: unknown };
@@ -406,6 +407,7 @@ export class V1AccountsController {
     if (!account || account.workspaceId !== workspaceId) {
       throw new NotFoundException(`Account ${rawId} not found`);
     }
+    if (requireProduct) await this.assertEnrolled(account.id, requireProduct);
     const adapter = this.adapters[account.platform];
     if (!adapter) {
       throw new BadRequestException(`Unsupported platform: ${account.platform}`);
@@ -428,6 +430,7 @@ export class V1AccountsController {
   private async resolveAccount(
     req: RequestWithWorkspace,
     rawId: string,
+    requireProduct?: string,
   ): Promise<{ id: bigint; platform: string; canonicalUserId: string }> {
     const workspaceId = this.requireWorkspace(req);
     const id = parseBigInt(rawId);
@@ -435,11 +438,31 @@ export class V1AccountsController {
     if (!account || account.workspaceId !== workspaceId) {
       throw new NotFoundException(`Account ${rawId} not found`);
     }
+    if (requireProduct) await this.assertEnrolled(account.id, requireProduct);
     return {
       id: account.id,
       platform: account.platform,
       canonicalUserId: account.canonicalUserId,
     };
+  }
+
+  /**
+   * 404 unless the account is enrolled in `product` (a sync_jobs row exists).
+   * Enrolment is set at connect time — workspace allow-list ∩ the SDK token's
+   * per-connection scope — and a re-connect prunes out-of-scope jobs. Without
+   * this gate, data persisted by an OLDER, broader connection would still be
+   * served for accounts whose current scope no longer includes the product
+   * (and ?live=true would even fetch it fresh). identity is exempt: it is
+   * enrolled on every account by construction.
+   */
+  private async assertEnrolled(accountId: bigint, product: string): Promise<void> {
+    const job = await this.prisma.syncJob.findUnique({
+      where: { accountId_product: { accountId, product } },
+      select: { id: true },
+    });
+    if (!job) {
+      throw new NotFoundException({ error: 'product_not_enrolled', product });
+    }
   }
 
   private requireWorkspace(req: RequestWithWorkspace): string {
