@@ -28,6 +28,19 @@ Nota operacional: reconectar por IG-direct una cuenta que estaba conectada
 vía FB-login **convierte la fila a IG-direct** (token de usuario IG,
 refrescable, sin Page). Es el comportamiento de diseño del upsert.
 
+### Incidente post-validación (mismo día, resuelto)
+
+El fetcher de identity pedía 3 campos probe-confirmed que solo existen en el
+FB-graph (`is_published`, `has_profile_pic`, `legacy_instagram_user_id`).
+`graph.instagram.com` los rechaza con `IGApiException code 100` y un campo
+malo invalida toda la llamada → 5 fallos → circuit breaker → auto-pausa de
+la cuenta. Los otros 3 productos nunca fallaron. Fix `307c536`: field list
+por flow (`profileFieldsFor`), con test de regresión; cuenta despausada vía
+`POST /admin/accounts/2/unpause` y re-sincronizada en verde.
+**Lección para futuros fetchers IG**: cualquier campo añadido por probe
+contra el FB-graph debe validarse también contra la superficie IG-Login o
+condicionarse por `oauth_flow`.
+
 ---
 
 ## TL;DR
