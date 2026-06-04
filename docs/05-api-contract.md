@@ -1,332 +1,350 @@
-# 05 · Internal API Contract
+# 05 · API Contract (public `/v1`)
 
-**Status:** Living — source of truth is `openapi.yaml` in the connector repo
-**Last updated:** 2026-04-23
+**Status:** Living — describes the API as implemented in `poc/src`
+**Last updated:** 2026-06-04
 
-Reference for the **internal REST API** the connector exposes to `backend-api`. Shape aims to slot behind `backend-api`'s existing OAuth ports (`OAuthIdentityAPI`, `OAuthAccountAPI`, `OAuthProfileAPI`, `OAuthProfileAudienceAPI`, `OAuthContentAPI`) with minimal adapter glue — the connector is a base-URL + auth change, not a data-model rewrite.
-
-Types and Zod schemas for every request/response are published in `@camaleonic/connector-contract` — import these in backend-api rather than hand-coding DTOs.
+Reference for the **public REST API** the connector exposes to client workspaces
+(API-key holders). This replaces the 2026-04 design-era contract: the
+`Service-Token` + `POST /v1/connect/initiate` + `@camaleonic/connector-contract`
+plan was superseded by **per-workspace API keys + SDK tokens + the hosted
+connect-tool** (see [`connection-portal.md`](connection-portal.md) §0.5 and
+[ADR-0013](adr/0013-connection-portal-placement.md)). Where this doc and the
+code disagree, the code wins — controllers live under `poc/src/modules/api`,
+`poc/src/modules/sdk-tokens` and `poc/src/modules/outbound-webhooks`.
 
 ---
 
 ## Conventions
 
-- **Base URL:** `https://connector.<env>.internal/v1` — private, not public-reachable except the OAuth-callback path.
-- **Content type:** `application/json`. Request bodies and responses are JSON.
-- **Dates:** ISO-8601 with UTC (`2026-04-23T15:32:10.123Z`).
-- **IDs:** connector IDs as prefixed ULIDs/opaque strings (`acc_<ulid>`, `evt_<ulid>`, `j_<ulid>`). Do not depend on monotonic ordering.
-- **Enums:** lowercase snake_case (`instagram`, `engagement_new`, `needs_reauth`).
-- **Pagination:** cursor-based. `next_cursor` in response; repeat with `?cursor=<token>`. Page size default 50, max 200.
-- **Idempotency (writes):** `Idempotency-Key` header (UUIDv7/ULID) optional but recommended; connector dedupes for 24h.
+- **Base URL:** `https://smconnector.camaleonicanalytics.com` (Caddy routes
+  `/v1/*` to the API service).
+- **Content type:** `application/json` for request bodies and responses.
+- **Dates:** ISO-8601 UTC (`2026-06-04T15:32:10.123Z`).
+- **IDs:** numeric strings (BigInt serialised as string, e.g. `"13"`).
+- **Field casing:** snake_case in all JSON payloads.
+- **Pagination:** cursor-based envelope on list endpoints:
+  ```json
+  { "data": [ … ], "meta": { "count": 12, "has_more": true, "next_cursor": "…" } }
+  ```
+  Repeat the call with `?cursor=<next_cursor>`.
+- **Caching:** read endpoints are cached server-side per workspace+route+query
+  (`V1CacheInterceptor`); add `?live=true` where supported to force a fresh
+  platform fetch.
 
 ---
 
 ## Authentication
 
-- **`Authorization: Service-Token <token>`** — long-lived service token from Secrets Manager (`/connector/<env>/service-tokens/<caller>`). Only `backend-api` has a token today.
-- Rotation: multiple tokens valid simultaneously during rotation window (same pattern as HMAC multi-secret).
-- Missing/invalid → `401 Unauthorized`.
+- **`Authorization: Bearer cmlk_(live|test)_<random>`** — per-workspace API
+  key, issued from the admin workspace page. Stored as SHA-256 hash; shown once
+  at issuance.
+- The key resolves to a workspace: every `/v1` call is **scoped to that
+  workspace's accounts** and metered against its plan tier.
+- `cmlk_test_*` keys mint **test** SDK tokens — accounts seeded through them
+  are flagged `is_test` and receive no webhooks.
+- Missing/invalid/revoked key → `401`.
 
-OAuth callback (`/oauth/callback/:platform`) is public and has its own verification (state nonce match).
+There is no `Service-Token` and no `@camaleonic/connector-contract` package —
+both were design-era concepts that never shipped.
 
 ---
 
-## Connect endpoints
+## Connect flow
 
-### `POST /v1/connect/initiate`
-Start an OAuth flow.
+Account connection is **not** a server-to-server API call. The client's backend
+mints a short-lived SDK token; the browser hands it to the Connect SDK
+(`connect-sdk.js`), which drives the hosted connect-tool (OAuth popup + product
+confirmation). Full journey in [`connection-portal.md`](connection-portal.md);
+integrator docs in `connect-tool/sdk/README.md`.
+
+### `POST /v1/sdk-tokens`
+
+Mint an HS256 JWT bound to one end user, consumed by the Connect SDK.
 
 ```
 Request:
   {
-    platform: 'instagram' | 'facebook' | 'youtube' | 'twitch' | 'tiktok',
-    user_id: '<backend-api user id>',       // opaque; connector stores as string
-    organization_id: '<backend-api org id>',
-    return_url: 'https://app.camaleonic.com/integrations/result'  // whitelist-validated
+    user_id: "your-end-user-id",            // required, ≤256 chars; lands on accounts as end_user_id
+    ttl: 1800,                              // optional seconds, 60–1800 (default 300)
+    allowed_platforms: ["facebook", "instagram"],   // optional allow-list, ≤6;
+                                            // "instagram" implicitly allows "facebook" (IG uses FB OAuth)
+    products: {                             // optional per-connection product scope (since 2026-06-03)
+      "facebook": ["identity", "audience"]  // Record<platform, productId[]>
+    }
   }
 
 Response 200:
-  {
-    authorize_url: 'https://graph.facebook.com/oauth/authorize?...',
-    state: '<nonce>',
-    expires_at: '2026-04-23T16:10:00Z'
-  }
+  { "sdk_token": "<jwt>", "expires_at": "2026-06-04T16:10:00.000Z" }
 
 Errors:
-  400 invalid_platform
-  400 return_url_not_allowed
-  503 platform_app_disabled
+  400 — unknown platform; platform not offered by the workspace;
+        product not enabled for that platform in the workspace
+        (e.g. "Product \"ads\" is not enabled for platform \"facebook\" in this workspace")
 ```
 
-### `GET /oauth/callback/:platform` (PUBLIC — browser redirect)
-Platform OAuth redirect target. Not called directly by backend-api.
+`products` semantics (the per-connection product scope):
 
-```
-Query: ?code=<platform_code>&state=<nonce>
-
-Redirects:
-  302 <return_url>?result=success&account_id=<id>
-  302 <return_url>?result=declined
-  302 <return_url>?result=state_invalid
-  302 <return_url>?result=canonical_id_failed
-  302 <return_url>?result=token_exchange_failed
-```
-
-Detail in [`connection-portal.md`](connection-portal.md) §6-7.
+- Must be a **subset of the workspace allow-list** (`workspace.products`) —
+  validated at mint, signed into the JWT, so the end user cannot widen it.
+- `identity` is always injected; `{ "facebook": [] }` = profile-only.
+- Platforms not listed inherit the full workspace allow-list.
+- Effect: the OAuth consent screen requests only the scoped products' scopes,
+  and only those products are enrolled as `sync_jobs`. Enforcement is
+  three-layered (mint ⊆ ceiling → connect-tool clamp → seed re-check); see
+  [`connection-portal.md`](connection-portal.md) §0.5.
 
 ---
 
 ## Account endpoints
 
+All guarded by the API key and scoped to its workspace.
+
 ### `GET /v1/accounts`
-List connected accounts.
 
 ```
 Query:
-  ?platform=instagram        // optional filter
-  ?organization_id=<id>       // optional filter
-  ?status=ready|pending|...   // optional
-  ?cursor=<token>             // pagination
+  ?platform=instagram        // optional
+  ?end_user_id=<id>          // optional — the user_id the SDK token was minted with
+  ?limit=100                 // optional, 1–500 (default 100)
+  ?cursor=<token>            // pagination
 
-Response 200:
+Response 200: { data: AccountSummary[], meta: { count, has_more, next_cursor } }
+
+AccountSummary:
   {
-    items: [
-      {
-        id: 'acc_<ulid>',
-        platform: 'instagram',
-        canonical_user_id: '17841...',
-        handle: '@creator',
-        status: 'ready',
-        sync_tier: 'standard',
-        owning_organization_id: 'org_<id>',
-        connected_at: '2026-04-10T12:00:00Z'
-      }, …
-    ],
-    next_cursor: '<token>' | null
+    id: "13",
+    platform: "twitch",
+    canonical_user_id: "501116841",
+    handle: "alex_cg_11" | null,
+    display_name: "Alex_CG_11" | null,
+    status: "ready",
+    end_user_id: "user@email.com" | null,
+    is_test: false,
+    connected_at: "<ISO>",
+    disconnected_at: "<ISO>" | null
   }
 ```
 
 ### `GET /v1/accounts/:id`
-Detail for one account.
 
-```
-Response 200:
-  {
-    id, platform, canonical_user_id, handle, display_name,
-    status, sync_tier,
-    owning_organization_id, visible_organization_ids: [...],
-    connected_at, disconnected_at,
-    token: { expires_at, scopes: [...], last_refreshed_at },
-    sync_health: {
-      identity:   { last_success_at, next_run_at, consecutive_failures },
-      audience:   { ... },
-      engagement_new: { ... },
-      engagement_metrics_recent: { ... },
-      engagement_metrics_old: { ... },
-      stories:    { ... }   // if supported by platform
-    }
-  }
-```
-
-Errors: `404 account_not_found`.
+Single `AccountSummary`. `404` if not found / other workspace.
 
 ### `DELETE /v1/accounts/:id`
-Disconnect an account for the calling organization.
+
+Disconnect: revokes the stored token and stops syncing.
 
 ```
-Query:
-  ?organization_id=<id>       // which org is disconnecting (required — org may still have others)
-  ?purge=true                 // optional: hard-delete all data (GDPR). Default: soft-disconnect.
-  ?gdpr=true                  // optional: purge + cascade S3 raw responses + audit entry
-
-Response 200:
-  {
-    account_id,
-    disconnected_at,
-    remaining_organizations: N,
-    purge_status: 'soft' | 'hard' | 'gdpr_complete'
-  }
+Response 200: { id, status, disconnected_at }
 ```
 
-Emits `account.disconnected` with `organization_id` identifying which org dropped off.
+### Data products (per account)
 
-### `GET /v1/accounts/:id/profile`
-Normalized identity snapshot. Pulls from `identity_snapshots` table.
+| Route | Notes |
+|---|---|
+| `GET /v1/accounts/:id/identity` | Normalized profile (see below). `?live=true` forces platform fetch. |
+| `GET /v1/accounts/:id/audience` | `{ platform, data, synced_at }` — platform-specific demographics. |
+| `GET /v1/accounts/:id/content` | Posts. `?limit=` 1–200 (default 50), `?since=<ISO>`, `?live=`. Paginated envelope + `platform`, `synced_at`. |
+| `GET /v1/accounts/:id/engagement` | Aggregated metrics (see below). `?limit=` 1–100 (default 25), `?since=`, `?live=`. |
+| `GET /v1/accounts/:id/engagement-deep` | Platform-specific deep analytics. `?live=`. |
+| `GET /v1/accounts/:id/stories` | Stories. `?limit=` 1–200, `?live=`. |
+| `GET /v1/accounts/:id/mentions` | Tagged/UGC posts. `?limit=` 1–200. **Always live.** |
+| `GET /v1/accounts/:id/comments` | Comments. `?limit=` 1–200, `?live=`. |
+| `GET /v1/accounts/:id/ratings` | Page reviews — Facebook only. `?limit=` 1–100. |
+| `GET /v1/accounts/:id/ads` | Ad insights — Facebook only. `?live=`. |
 
-```
-Response 200:
-  {
-    account_id,
-    handle, display_name, biography, avatar_url, profile_url,
-    followers_count, following_count, posts_count,
-    verified, account_type,
-    fetched_at
-  }
-```
+A product endpoint only returns data if the account is **enrolled** in that
+product (workspace allow-list ∩ per-connection scope at connect time).
 
-### `GET /v1/accounts/:id/audience`
-Audience snapshot. Pulls from `audience_snapshots` table.
+`identity` response (`NormalizedIdentity`):
 
-```
-Response 200:
-  {
-    account_id,
-    gender_distribution: { male: 0.52, female: 0.46, other: 0.01, unknown: 0.01 },
-    age_distribution:    { "13-17": 0.05, "18-24": 0.32, … },
-    country_distribution: { "US": 0.42, "MX": 0.18, … },
-    city_distribution:   { "New York, US": 0.12, … } | null,
-    interests: [ { name: "Fitness", affinity_score: 0.78 }, … ] | null,
-    supported_fields: ['gender','age','country','city','interests'],
-    fetched_at
-  }
-```
-
-`supported_fields` is the matrix cut from `platform_field_support` — backend-api uses it to distinguish "unsupported" from "empty".
-
-### `GET /v1/accounts/:id/contents`
-Paginated content list. Pulls from `posts` table.
-
-```
-Query:
-  ?from=2026-01-01T00:00:00Z  // optional, default 90d ago
-  ?to=<ISO>                    // optional, default now
-  ?content_type=post|reel|…    // optional
-  ?cursor=<token>
-
-Response 200:
-  {
-    items: [
-      {
-        id: 'post_<ulid>',
-        account_id,
-        platform_content_id: '17920…',
-        content_type: 'reel',
-        caption: 'Hello world',
-        permalink: 'https://instagram.com/...',
-        media_urls: [{ url, type, width, height, duration_s }],
-        metrics: { likes: 1234, comments: 56, views: 7890, ... },
-        published_at,
-        fetched_at,
-        last_updated_at
-      }, …
-    ],
-    next_cursor
-  }
+```json
+{
+  "platform": "instagram",
+  "platform_user_id": "17841…",
+  "username": "creator",
+  "full_name": "…", "biography": "…",
+  "profile_image_url": "…", "profile_url": "…",
+  "followers_count": 1234, "following_count": 56, "posts_count": 78,
+  "is_verified": false, "account_type": "BUSINESS",
+  "extra": { }, "fetched_at": "<ISO>", "synced_at": "<ISO>"
+}
 ```
 
-### `GET /v1/accounts/:id/contents/:contentId`
-Single content record with full details + raw-response pointer (for debug).
+`engagement` response (`NormalizedEngagement`):
+
+```json
+{
+  "platform": "instagram",
+  "window": { "since": "<ISO or null>", "until": "<ISO>", "sample_size": 25 },
+  "totals": { "likes": 0, "comments": 0, "shares": 0, "saves": 0, "views": 0, "reach": 0 },
+  "averages_per_post": { "likes": 0, "comments": 0, "shares": 0, "views": 0 },
+  "engagement_rate": 0.034
+}
+```
 
 ---
 
 ## Refresh
 
 ### `POST /v1/accounts/:id/refresh`
-On-demand refresh. See [`manual-refresh.md`](manual-refresh.md) §2 for full spec.
+
+On-demand sync. Detail in [`manual-refresh.md`](manual-refresh.md).
 
 ```
-Request body: { products?: [...], reason?: string }
-Response 202: { account_id, jobs: [...], throttled: [...], rate_limited: [...] }
+Request:  { products?: ["identity", …], reason?: "<≤256 chars>" }
+Response 202:
+  { account_id, reason, jobs: [{ product, job_id }], throttled: [...], rate_limited: [] }
 ```
+
+`throttled` lists products skipped because a recent refresh holds the
+per-product throttle lock.
 
 ---
 
-## Admin
+## Outbound webhooks
 
-All admin endpoints require Service-Token with `admin:true` claim (JWT-like, validated against a separate secret set). Full spec in [`refresh-cadence.md`](refresh-cadence.md) §6.
+Clients register HTTPS endpoints and receive signed event deliveries.
 
-- `PATCH /v1/admin/accounts/:id/sync-tier`
-- `POST /v1/admin/accounts/:id/cadence-overrides`
-- `DELETE /v1/admin/accounts/:id/cadence-overrides/:product`
-- `PATCH /v1/admin/cadences/:platform/:product`
-- `GET /v1/admin/accounts/:id/cadence` — read effective cadence
-- `POST /v1/admin/sync-jobs/:id/reenqueue` — force a sync
-- `POST /v1/admin/accounts/:id/pause` / `unpause` (convenience wrappers around sync_tier)
-- `GET /v1/admin/counts` — counts of accounts per platform, status, tier, freshness bucket (F-95)
-- `POST /v1/admin/webhook-subscriptions` — create a new event subscription
-- `GET /v1/admin/webhook-subscriptions/:id/deliveries` — recent deliveries for debugging
-- `POST /v1/admin/webhook-subscriptions/:id/rotate-secret`
-- `POST /v1/admin/dev/webhook-test` — dev-only, replays a synthetic webhook into a handler (equivalent to today's `/oauth/webhook-test`)
+### Endpoint management
+
+| Method | Path | Notes |
+|---|---|---|
+| `POST` | `/v1/webhook-endpoints` | Body `{ url, events[1–20], description? }`. **201**; response includes `secret` (`whsec_…`) — shown only here. |
+| `GET` | `/v1/webhook-endpoints` | `{ data: RegisteredEndpoint[] }` (no secrets). |
+| `PATCH` | `/v1/webhook-endpoints/:id` | Any of `url`, `events`, `description`, `active` (≥1 field). |
+| `POST` | `/v1/webhook-endpoints/:id/rotate-secret` | `{ id, secret, rotated_at }`. |
+| `POST` | `/v1/webhook-endpoints/:id/test` | **202** `{ delivery_id, status: "queued" }` — sends `webhook.test`. |
+| `GET` | `/v1/webhook-endpoints/:id/deliveries` | Paginated delivery history (`?limit=` 1–200, `?cursor=`). |
+| `GET` | `/v1/webhook-endpoints/:id/deliveries/:deliveryId` | Single delivery. |
+| `DELETE` | `/v1/webhook-endpoints/:id` | **204**. |
+
+`GET /v1/webhook-deliveries` — unified delivery list across endpoints
+(`?status=pending|delivered|failed|abandoned`, `?endpoint_id=`, `?event=`,
+`?limit=`).
+
+### Event types
+
+```
+account.connected · account.disconnected · account.refreshed
+token.refresh_failed · token.expired · webhook.test
+data.identity.updated · data.audience.updated · data.engagement_new.updated
+data.engagement_deep.updated · data.stories.updated · data.mentions.updated
+data.comments.updated · data.ratings.updated · data.ads.updated
+```
+
+### Delivery signing
+
+Every delivery carries:
+
+```
+Content-Type: application/json
+X-Camaleonic-Event: <event type>
+X-Camaleonic-Delivery: <delivery id>
+X-Camaleonic-Signature: t=<unix seconds>,v1=<hex>
+```
+
+Verification: `v1 = HMAC-SHA256(secret, "<t>.<raw body>")`. Reject if the
+signature mismatches or `t` is older than your tolerance window.
+
+Retry schedule on non-2xx: **1m, 5m, 30m, 2h, 12h, 24h** (6 attempts), then
+`abandoned`.
 
 ---
 
-## Webhook inbound (PUBLIC)
+## Inbound webhooks (platform → connector, PUBLIC)
 
-### `POST /webhooks/ingest/:platform`
-Platforms push to this. Not called by backend-api.
+Only the Meta family is implemented today:
+
+- `GET /webhooks/ingest/meta` — Meta subscription challenge
+  (`hub.mode=subscribe`, `hub.verify_token` vs `META_WEBHOOK_VERIFY_TOKEN`,
+  echoes `hub.challenge`).
+- `POST /webhooks/ingest/meta` — change notifications. Verified via
+  `X-Hub-Signature-256: sha256=<HMAC-SHA256(META_APP_SECRET, raw body)>`.
+  Always answers `200`; valid events enqueue HIGH-priority sync jobs and land
+  in `inbound_webhook_log`.
+
+Pages are auto-subscribed at connect time (Meta webhook auto-subscribe,
+2026-06-03). See [`webhooks.md`](webhooks.md).
+
+---
+
+## Rate limiting
+
+Per-workspace, per-minute, enforced on all `/v1/*` routes:
+
+| Plan tier | Requests/min |
+|---|---|
+| `standard` | 120 |
+| `pro` | 600 |
+| `enterprise` | 6000 |
+
+Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
+`X-RateLimit-Reset` (unix seconds). On excess:
 
 ```
-Path: :platform in { meta, youtube, twitch, tiktok }
-Headers: per-platform signature (see ingestion-modes.md §5)
-Body: platform-specific payload
-
-Response:
-  200 OK          — signature valid, event enqueued (or deduped)
-  401 Unauthorized — signature invalid
-  410 Gone         — subscription for this resource no longer valid
+429 { "message": "Rate limit exceeded", "limit": 120, "retry_after_seconds": N, "statusCode": 429 }
 ```
 
-All heavy work offloaded to workers. Handler returns within sub-second.
+plus a `Retry-After` header. Daily usage counters are kept 90 days for the
+admin usage view.
+
+---
+
+## Errors — common shapes
+
+Platform-originated failures (global `PlatformErrorFilter`):
+
+```
+401 { "error": "token_revoked",         "message": "…", "platform": "…", "canonical_user_id": "…", "statusCode": 401 }
+503 { "error": "upstream_rate_limited", "message": "…", "platform": "…", "retry_after_seconds": N, "statusCode": 503 }   // + Retry-After
+502 { "error": "upstream_error",        "message": "…", "platform": "…", "endpoint": "…", "upstream_body": {…}|null, "statusCode": 502 }
+```
+
+Validation / framework errors use the NestJS shape:
+
+```
+400 { "message": "Invalid sdk-token payload", "issues": [ …zod issues… ], "statusCode": 400 }
+404 { "message": "…", "error": "Not Found", "statusCode": 404 }
+```
+
+`token_revoked` means the end user must reconnect (the account flips to
+`needs_reauth`).
 
 ---
 
 ## Health & metrics
 
-- `GET /healthz` — liveness. 200 with `{ status: 'ok', version: 'sha-abcdef' }`. No auth.
-- `GET /readyz` — readiness (DB, Redis, Secrets Manager reachable). No auth. Used by ALB.
-- `GET /metrics` — Prometheus scrape endpoint. Restricted to Prometheus scraper IP.
+`/healthz` (+ `/health`) and Prometheus `/metrics` are served on a **private
+ops port** (`OPS_PORT`, default 9464) reachable only inside the compose
+network — they are not part of the public contract. There is no public
+`/readyz`.
 
 ---
 
-## Errors — common shape
+## Not part of the public contract
 
-```
-{
-  error: {
-    code: 'invalid_platform' | 'account_not_found' | 'rate_limited' | ...,
-    message: 'Human-readable message (do not expose to end-users verbatim).',
-    request_id: '<correlation id>'
-  }
-}
-```
-
-Common HTTP mappings:
-- `400` validation / bad input
-- `401` auth missing / invalid
-- `403` auth valid but action not allowed
-- `404` resource not found
-- `409` conflict (throttled, paused, state violation)
-- `410` gone (OAuth state reused, subscription revoked)
-- `429` rate-limited by **connector** itself (anti-abuse; distinct from platform rate limits)
-- `502` platform upstream failed
-- `503` connector degraded (DB/Redis down)
+- **`/internal/*`** — connect-tool ↔ POC plumbing (`/internal/sdk-tokens/verify`,
+  `/internal/workspaces/:slug/branding`, `/internal/products-catalog`).
+  Blocked at the edge (Caddy 403) + shared-secret auth.
+- **`/admin/*`** — operator console API (accounts, sync-jobs, queues,
+  workspaces, API keys, seeding). Protected by Caddy basic-auth; shapes change
+  freely with the admin UI.
 
 ---
 
 ## Versioning
 
-- Path-prefixed: `/v1`, `/v2`, …
-- Additive changes (new fields, new endpoints) without version bump.
-- **Breaking changes** require new version; old version supported for **6 months** minimum.
-- Version skew between `@camaleonic/connector-contract` and running connector: connector accepts requests from any package version that matches the current or immediately-previous major; returns response shape aligned to the requested `/vN` path.
-
----
-
-## Shared contract package
-
-Everything in this doc is mirrored in `@camaleonic/connector-contract`:
-- `src/api/*.ts` — request/response TypeScript types
-- `src/schemas/*.ts` — Zod schemas for runtime validation
-- `src/enums.ts` — shared enum values
-
-Backend-api should `import { RefreshRequest, AccountDetail } from '@camaleonic/connector-contract'` rather than defining local copies. See [`connection-portal.md`](connection-portal.md) §4.
+- Path-prefixed (`/v1`). Additive changes (new fields/endpoints) land without a
+  version bump — clients must tolerate unknown fields.
+- Breaking changes require `/v2` with a deprecation window for `/v1`.
 
 ---
 
 ## Related docs
 
-- [`connection-portal.md`](connection-portal.md) — Connect flow
+- [`connection-portal.md`](connection-portal.md) — connect flow + per-connection product scope invariant (§0.5)
+- `connect-tool/sdk/README.md` — Connect SDK integration (mint, `products`, callbacks)
 - [`manual-refresh.md`](manual-refresh.md) — refresh endpoint detail
-- [`refresh-cadence.md`](refresh-cadence.md) — admin endpoints detail
-- [`06-event-catalog.md`](06-event-catalog.md) — what we emit
-- [`08-operations/security.md`](08-operations/security.md) — service-token rotation
+- [`webhooks.md`](webhooks.md) — inbound Meta webhooks
+- [`06-event-catalog.md`](06-event-catalog.md) — event payloads
+- [`08-operations/security.md`](08-operations/security.md) — key handling, token encryption
