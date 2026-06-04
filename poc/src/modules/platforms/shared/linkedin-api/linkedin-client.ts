@@ -224,9 +224,11 @@ export class BoundLinkedInClient {
   ): Promise<LinkedInCollection<LinkedInPost>> {
     const start = args.start ?? 0;
     const count = args.count ?? 50;
+    // sortBy=CREATED (newest first) so a `since`-filtered differential sync
+    // can break at the first too-old post instead of paging through edits.
     return this.get(
       `/rest/posts?author=${encodeUrn(args.orgUrn)}&q=author` +
-        `&count=${count}&start=${start}&sortBy=LAST_MODIFIED`,
+        `&count=${count}&start=${start}&sortBy=CREATED`,
       args,
       true,
       'FINDER',

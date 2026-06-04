@@ -88,7 +88,10 @@ export class LinkedInContentFetcher {
       const elements = res.elements ?? [];
       for (const post of elements) {
         const publishedMs = post.publishedAt ?? post.createdAt ?? 0;
-        if (sinceMs && publishedMs && publishedMs < sinceMs) continue;
+        // Results are sortBy=CREATED descending — once a post predates
+        // `since`, everything after it does too. Break instead of paging on,
+        // saving calls against the 100/member/day quota.
+        if (sinceMs && publishedMs && publishedMs < sinceMs) return out;
         out.push(post);
         if (out.length >= limit) return out;
       }
