@@ -61,6 +61,11 @@ export interface ProfileData {
     tier3?: number;
     gifts?: number;
   } | null;
+  /**
+   * LinkedIn 1st-degree connections (bidirectional, distinct from followers).
+   * Other platforms leave this null.
+   */
+  connectionsCount?: number | null;
   fetchedAt: Date;
 }
 

@@ -20,7 +20,8 @@ export type Platform =
   | 'tiktok'
   | 'threads'
   | 'youtube'
-  | 'twitch';
+  | 'twitch'
+  | 'linkedin';
 
 export type ProductId =
   | 'identity'
@@ -40,6 +41,7 @@ export const PLATFORM_IDS = [
   'threads',
   'youtube',
   'twitch',
+  'linkedin',
 ] as const satisfies ReadonlyArray<Platform>;
 
 export const PRODUCT_IDS = [
@@ -308,6 +310,39 @@ export const PLATFORM_CATALOG: Readonly<
       // Helix VOD/clip endpoints are public read; no extra scope beyond
       // identity's user:read:email.
       scopes: [],
+    },
+  ],
+  linkedin: [
+    {
+      id: 'identity',
+      label: 'Profile',
+      hint: 'Member profile, connections + follower count; org page metadata',
+      required: true,
+      default: true,
+      // r_basicprofile → /v2/me; r_1st_connections_size → /v2/connections;
+      // rw_organization_admin → organizationAcls discovery + /rest/organizations
+      // (org accounts are seeded from the same OAuth, so identity must carry it).
+      scopes: ['r_basicprofile', 'r_1st_connections_size', 'rw_organization_admin'],
+    },
+    {
+      id: 'audience',
+      label: 'Followers + analytics',
+      hint: 'Member follower series + aggregate post analytics; org follower gains',
+      default: true,
+      // r_member_profileAnalytics → memberFollowersCount; r_member_postAnalytics
+      // → memberCreatorPostAnalytics; r_organization_followers → org follower stats.
+      scopes: [
+        'r_member_profileAnalytics',
+        'r_member_postAnalytics',
+        'r_organization_followers',
+      ],
+    },
+    {
+      id: 'engagement_new',
+      label: 'Org posts + metrics',
+      hint: 'Organization posts with share statistics. Member posts are not exposed by LinkedIn (r_member_social is a closed permission).',
+      default: true,
+      scopes: ['r_organization_social'],
     },
   ],
 };
