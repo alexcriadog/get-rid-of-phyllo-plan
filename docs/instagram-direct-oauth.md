@@ -8,6 +8,9 @@
 > producción. `oauthToken.scopes` queda `[]` en seeds ig_direct
 > (granted_permissions vive en account.metadata).
 > Lo de abajo se mantiene como análisis de contexto/decisión.
+> **2026-06-04**: la matriz de capacidades de §3 está parcialmente DESACTUALIZADA
+> (mentions/tags y DMs ya existen en IG-Login). Estudio completo y actualizado de
+> ambas superficies + encaje arquitectónico: `instagram-flows-capability-study.md`.
 
 ## Validación producción 2026-06-04
 
