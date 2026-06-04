@@ -149,6 +149,9 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
       const igDirectRow =
         platform === 'instagram' &&
         isIgDirect(row.account.metadata as Record<string, unknown> | null);
+      // Metric label: keep failure/refresh series consistent — IG-direct
+      // events must not land in the FB-login 'instagram' bucket.
+      const metricPlatform = igDirectRow ? 'instagram_direct' : platform;
 
       try {
         if (igDirectRow) {
@@ -161,7 +164,7 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
             );
             result.refreshed += 1;
             this.metrics.incr('token_refresh_cron_refreshed', {
-              platform: 'instagram_direct',
+              platform: metricPlatform,
             });
           }
         } else if (REFRESHABLE.has(platform)) {
@@ -195,7 +198,7 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
       } catch (err) {
         result.failed += 1;
         const msg = err instanceof Error ? err.message : String(err);
-        this.metrics.incr('token_refresh_cron_failed', { platform });
+        this.metrics.incr('token_refresh_cron_failed', { platform: metricPlatform });
         this.logger.warn(
           `Token refresh failed for account ${accountId.toString()} (${platform}): ${msg}`,
         );
