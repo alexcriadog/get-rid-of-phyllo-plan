@@ -47,6 +47,10 @@ export const BRAND: Record<PlatformKey, Brand> = {
     label: 'Twitch', provider: 'Twitch', bg: '#9146FF',
     glyph: f('M5 3.5 3.7 7v11h3.6v2.5L9.8 18h3.4l4.1-4V3.5H5zm11 9.7L13.5 16h-3.4l-2.1 2.1V16H5.7V5.3H16v7.9zm-3.4-5.6v4.1h1.4V7.6h-1.4zm-3.7 0v4.1h1.4V7.6H8.9z'),
   },
+  linkedin: {
+    label: 'LinkedIn', provider: 'LinkedIn', bg: '#0A66C2',
+    glyph: f('M6.94 5a2 2 0 1 1-4-.002 2 2 0 0 1 4 .002zM7 8.48H3V21h4V8.48zm6.32 0H9.34V21h3.94v-6.57c0-3.66 4.77-4 4.77 0V21H22v-7.93c0-6.17-7.06-5.94-8.72-2.91l.04-1.68z'),
+  },
 };
 
 export function PlatformIcon({ platform, large }: { platform: PlatformKey; large?: boolean }) {

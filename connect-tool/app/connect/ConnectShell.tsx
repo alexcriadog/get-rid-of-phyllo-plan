@@ -5,7 +5,7 @@ import type { Connection } from '../../lib/connections';
 import { initialStep, nextAfterConsent, isPlatformKey, type PlatformKey, type Step } from './shell-machine';
 import { PlatformIcon, BRAND } from './PlatformIcon';
 
-const ORDER: PlatformKey[] = ['instagram', 'facebook', 'youtube', 'tiktok', 'twitch', 'threads'];
+const ORDER: PlatformKey[] = ['instagram', 'facebook', 'youtube', 'tiktok', 'twitch', 'threads', 'linkedin'];
 
 // Instagram connects via Facebook OAuth (see lib/platforms.ts).
 const startPlatform = (p: PlatformKey): PlatformKey => (p === 'instagram' ? 'facebook' : p);
@@ -252,6 +252,12 @@ function guidance(p: PlatformKey): { title: string; body: string } {
     return {
       title: 'Connect with Facebook',
       body: 'Select the Page(s) you want to connect and grant all requested permissions on the next screen.',
+    };
+  }
+  if (p === 'linkedin') {
+    return {
+      title: 'Connect with LinkedIn',
+      body: 'You’ll be asked to approve read access to your LinkedIn profile and analytics. Company Pages you administer are connected automatically.',
     };
   }
   return {
