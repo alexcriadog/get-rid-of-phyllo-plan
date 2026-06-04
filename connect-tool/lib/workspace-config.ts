@@ -291,7 +291,9 @@ export function toIgDirectScopes(fbScopes: ReadonlyArray<string>): string[] {
   for (const s of fbScopes) {
     const mapped = Object.prototype.hasOwnProperty.call(IG_DIRECT_SCOPE_MAP, s)
       ? IG_DIRECT_SCOPE_MAP[s]
-      : s;
+      : s.startsWith('pages_')
+        ? null // any Page-scoped permission is meaningless without a Page
+        : s;
     if (mapped) out.add(mapped);
   }
   return [...out];
@@ -306,6 +308,9 @@ export function toIgDirectScopes(fbScopes: ReadonlyArray<string>): string[] {
  * - workspace.products = {...} → minimum set covering the enabled products.
  * - Facebook OAuth covers Instagram too — union scopes from both buckets so
  *   a workspace that only enables `instagram` still gets IG scopes.
+ * - instagram_direct → maps the `instagram` product bucket through
+ *   toIgDirectScopes, returning instagram_business_* scope names for the
+ *   IG-direct consent screen.
  */
 export function computeOAuthScopes(
   catalog: ProductsCatalog,

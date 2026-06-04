@@ -1,3 +1,6 @@
+// IG-direct scope-surface tests for workspace-config.ts. Kept separate from
+// workspace-config.test.ts so the whole instagram_direct contract (mapping +
+// scope computation + reachability) reads as one unit.
 import { describe, expect, test } from 'vitest';
 import {
   computeOAuthScopes,
@@ -37,6 +40,18 @@ describe('toIgDirectScopes', () => {
     expect(
       toIgDirectScopes(['instagram_manage_insights', 'instagram_manage_insights']),
     ).toEqual(['instagram_business_manage_insights']);
+  });
+
+  test('passes through unknown non-Page scopes (future instagram_business_* entries)', () => {
+    expect(toIgDirectScopes(['instagram_business_content_publish'])).toEqual([
+      'instagram_business_content_publish',
+    ]);
+  });
+
+  test('drops unknown pages_* scopes not in the map', () => {
+    expect(toIgDirectScopes(['pages_read_user_content', 'instagram_basic'])).toEqual([
+      'instagram_business_basic',
+    ]);
   });
 });
 
