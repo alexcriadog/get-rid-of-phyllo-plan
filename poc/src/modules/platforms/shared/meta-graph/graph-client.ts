@@ -157,7 +157,13 @@ export class BoundGraphClient {
 
     let response: AxiosResponse;
     try {
-      response = await this.http.get(opts.endpoint, { params });
+      response = await this.http.get(opts.endpoint, {
+        params,
+        // IG-direct tokens live on a different Graph host (see ig-direct.ts).
+        ...(opts.context.graphBaseUrl
+          ? { baseURL: opts.context.graphBaseUrl }
+          : {}),
+      });
     } catch (err: unknown) {
       const durationMs = Date.now() - started;
       const axErr = err as AxiosError;

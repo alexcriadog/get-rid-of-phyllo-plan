@@ -33,6 +33,12 @@ export interface PlatformAdapterContext {
    * the BUC mirror checks before admitting the call.
    */
   igAccountId?: string;
+  /**
+   * Per-call Graph base URL override. Set for IG-direct accounts
+   * (metadata.oauth_flow === 'ig_direct') whose tokens only work against
+   * graph.instagram.com. Absent → the client's default (graph.facebook.com).
+   */
+  graphBaseUrl?: string;
 }
 
 /**
