@@ -36,6 +36,7 @@ const VALID_PLATFORMS = new Set<PlatformKey>([
   'threads',
   'youtube',
   'twitch',
+  'linkedin',
 ]);
 
 // IG-direct is rolled out opt-in (docs/instagram-direct-oauth.md §8 "Opción
@@ -116,6 +117,10 @@ function redirectUriFor(platform: PlatformKey, baseUrl: string): string {
       return env('THREADS_REDIRECT_URI') ?? `${baseUrl}/api/oauth/callback/threads`;
     case 'twitch':
       return env('TWITCH_REDIRECT_URI') ?? `${baseUrl}/api/oauth/callback/twitch`;
+    case 'linkedin':
+      return (
+        env('LINKEDIN_REDIRECT_URI') ?? `${baseUrl}/api/oauth/callback/linkedin`
+      );
     case 'instagram_direct':
       return (
         env('INSTAGRAM_REDIRECT_URI') ??
