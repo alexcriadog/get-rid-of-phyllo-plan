@@ -115,6 +115,7 @@ export default async function ConnectPage({
       tokenError={error}
       offeredPlatforms={offered}
       platformUnavailable={platformUnavailable}
+      igDirectEnabled={process.env.IG_DIRECT_ENABLED === '1'}
     />
   );
 }

@@ -43,6 +43,9 @@ interface Props {
   /** Gate #2: true if `fixedPlatform` was passed but the workspace doesn't
    *  offer it. Render an "unavailable" state instead of consent → connect. */
   platformUnavailable: boolean;
+  /** IG-direct (Instagram Business Login) rollout flag — shows the
+   *  "connect without a Facebook Page" secondary action. */
+  igDirectEnabled: boolean;
 }
 
 export function ConnectShell(props: Props) {
@@ -94,8 +97,8 @@ export function ConnectShell(props: Props) {
     window.parent?.postMessage({ type: 'camaleonic.connect.exit' }, props.origin || window.location.origin);
   }
 
-  function login(p: PlatformKey) {
-    const sp = startPlatform(p);
+  function login(p: PlatformKey, direct = false) {
+    const sp: string = direct && p === 'instagram' ? 'instagram_direct' : startPlatform(p);
     const qs = new URLSearchParams({ ws: props.ws, token: props.token, origin: props.origin, embed: '1' });
     const popup = window.open(`/api/oauth/start/${sp}?${qs.toString()}`, 'camaleonic-oauth', 'popup=yes,width=560,height=720');
     if (!popup) {
@@ -223,6 +226,13 @@ export function ConnectShell(props: Props) {
                 {connecting ? 'Waiting for login…' : `Continue with ${BRAND[platform].provider}`}
               </button>
             </div>
+            {platform === 'instagram' && props.igDirectEnabled && (
+              <div className="cml-link-row">
+                <button className="cml-ghost" disabled={connecting} onClick={() => login(platform, true)}>
+                  No Facebook Page? Connect with Instagram directly
+                </button>
+              </div>
+            )}
             <div className="cml-link-row"><button className="cml-ghost" onClick={() => setStep('connections')}>← Back</button></div>
           </div>
         ) : null}
