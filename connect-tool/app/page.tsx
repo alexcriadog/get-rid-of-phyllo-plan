@@ -115,6 +115,19 @@ function buildPlatforms(): PlatformInfo[] {
           ? 'TWITCH_CLIENT_SECRET'
           : undefined,
     },
+    {
+      key: 'linkedin',
+      label: 'LinkedIn',
+      subtitle: 'Member analytics + company pages',
+      accent: 'linkedin',
+      enabled:
+        !!process.env.LINKEDIN_CLIENT_ID && !!process.env.LINKEDIN_CLIENT_SECRET,
+      missing: !process.env.LINKEDIN_CLIENT_ID
+        ? 'LINKEDIN_CLIENT_ID'
+        : !process.env.LINKEDIN_CLIENT_SECRET
+          ? 'LINKEDIN_CLIENT_SECRET'
+          : undefined,
+    },
   ];
 }
 

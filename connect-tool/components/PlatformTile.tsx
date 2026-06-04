@@ -1,8 +1,8 @@
 export type PlatformInfo = {
-  key: 'facebook' | 'tiktok' | 'threads' | 'youtube' | 'twitch';
+  key: 'facebook' | 'tiktok' | 'threads' | 'youtube' | 'twitch' | 'linkedin';
   label: string;
   subtitle: string;
-  accent: 'blue' | 'red' | 'cyan' | 'mint' | 'purple';
+  accent: 'blue' | 'red' | 'cyan' | 'mint' | 'purple' | 'linkedin';
   enabled: boolean;
   /** Name of the missing env var, when enabled === false. */
   missing?: string;
@@ -15,6 +15,8 @@ const ACCENT_HEX: Record<PlatformInfo['accent'], string> = {
   mint: '#3cffd0',
   // Twitch brand purple.
   purple: '#9146ff',
+  // LinkedIn brand blue.
+  linkedin: '#0A66C2',
 };
 
 export function PlatformTile({

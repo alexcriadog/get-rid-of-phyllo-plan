@@ -30,6 +30,11 @@ const TWITCH_HELIX = 'https://api.twitch.tv/helix';
 //      endpoints (/v2/user/info/, /v2/video/list/, etc.).
 // We use the user-flow here so creator accounts work; the POC adapter
 // already targets the v2 user-scoped endpoints.
+const LINKEDIN_AUTHORIZE = 'https://www.linkedin.com/oauth/v2/authorization';
+const LINKEDIN_TOKEN = 'https://www.linkedin.com/oauth/v2/accessToken';
+const LINKEDIN_API = 'https://api.linkedin.com';
+// Versioned-REST header value; supported ≥1y per LinkedIn's sunset policy.
+const LINKEDIN_VERSION = '202605';
 const TIKTOK_AUTHORIZE = 'https://www.tiktok.com/v2/auth/authorize';
 const TIKTOK_TOKEN = 'https://open.tiktokapis.com/v2/oauth/token/';
 const TIKTOK_USER_INFO = 'https://open.tiktokapis.com/v2/user/info/';
@@ -74,7 +79,8 @@ export type PlatformKey =
   | 'tiktok'
   | 'threads'
   | 'youtube'
-  | 'twitch';
+  | 'twitch'
+  | 'linkedin';
 
 export type CallbackResult =
   | {
@@ -827,6 +833,186 @@ const twitch: PlatformDef = {
   },
 };
 
+// ─── LinkedIn ──────────────────────────────────────────────────────────
+// One OAuth produces 1 member seed + N organization seeds (Pages the
+// member administers, via organizationAcls). Same token everywhere; the
+// POC adapter branches on metadata.kind.
+//
+// refresh_token only appears when LinkedIn enabled programmatic refresh
+// for the app (MDP partners) — captured when present; the POC cron flags
+// needs_reauth at expiry otherwise.
+
+const linkedin: PlatformDef = {
+  key: 'linkedin',
+  buildAuthorizeUrl(redirectUri, scopes) {
+    const clientId = requireEnv('LINKEDIN_CLIENT_ID');
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      // LinkedIn wants space-separated scopes.
+      scope: [...scopes].join(' '),
+      state: cryptoRandomState(),
+    });
+    return `${LINKEDIN_AUTHORIZE}?${params.toString()}`;
+  },
+  async handleCallback(code, redirectUri) {
+    const clientId = requireEnv('LINKEDIN_CLIENT_ID');
+    const clientSecret = requireEnv('LINKEDIN_CLIENT_SECRET');
+
+    // 1. Code → access token (60d) + optional refresh token (365d).
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+    });
+    const tokenRes = await axios.post<{
+      access_token?: string;
+      expires_in?: number;
+      refresh_token?: string;
+      refresh_token_expires_in?: number;
+      scope?: string;
+      error?: string;
+      error_description?: string;
+    }>(LINKEDIN_TOKEN, body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 15_000,
+      validateStatus: () => true,
+      // Bypass any HTTPS_PROXY env var (OrbStack) — same hardening as Twitch.
+      proxy: false,
+    });
+    const t = tokenRes.data;
+    if (tokenRes.status < 200 || tokenRes.status >= 300 || !t.access_token) {
+      const msg = t.error_description || t.error || `HTTP ${tokenRes.status}`;
+      throw new Error(`LinkedIn exchange failed: ${msg}`);
+    }
+    const accessToken = t.access_token;
+    const expiresAt = t.expires_in
+      ? new Date(Date.now() + t.expires_in * 1000).toISOString()
+      : undefined;
+    const scopes = t.scope ? t.scope.split(/[ ,]/).filter(Boolean) : undefined;
+
+    // 2. Member identity (/v2 surface — NO LinkedIn-Version header).
+    const meRes = await axios.get<{
+      id?: string;
+      localizedFirstName?: string;
+      localizedLastName?: string;
+      localizedHeadline?: string;
+      vanityName?: string;
+    }>(`${LINKEDIN_API}/v2/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 15_000,
+      validateStatus: () => true,
+      proxy: false,
+    });
+    if (meRes.status < 200 || meRes.status >= 300 || !meRes.data.id) {
+      throw new Error(
+        `LinkedIn /v2/me failed (HTTP ${meRes.status}): ${JSON.stringify(meRes.data)}`,
+      );
+    }
+    const me = meRes.data;
+    const personId = me.id as string;
+    const personUrn = `urn:li:person:${personId}`;
+    const displayName = [me.localizedFirstName, me.localizedLastName]
+      .filter(Boolean)
+      .join(' ');
+
+    // 3. Organizations the member administers (best-effort — a member with
+    //    no org roles, or a workspace without org scopes, still connects).
+    type Acl = { organization?: string; role?: string; state?: string };
+    let orgs: Array<{ id: string; urn: string; name: string }> = [];
+    try {
+      const restHeaders = {
+        Authorization: `Bearer ${accessToken}`,
+        'LinkedIn-Version': LINKEDIN_VERSION,
+        'X-Restli-Protocol-Version': '2.0.0',
+      };
+      const aclRes = await axios.get<{ elements?: Acl[] }>(
+        `${LINKEDIN_API}/rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&count=50`,
+        { headers: restHeaders, timeout: 15_000, proxy: false },
+      );
+      const acls = aclRes.data.elements ?? [];
+      orgs = await Promise.all(
+        acls
+          .map((a) => a.organization)
+          .filter((urn): urn is string => typeof urn === 'string')
+          .map(async (urn) => {
+            const id = urn.split(':').pop() as string;
+            let name = `Organization ${id}`;
+            try {
+              const orgRes = await axios.get<{ localizedName?: string }>(
+                `${LINKEDIN_API}/rest/organizations/${id}`,
+                { headers: restHeaders, timeout: 10_000, proxy: false },
+              );
+              if (orgRes.data.localizedName) name = orgRes.data.localizedName;
+            } catch {
+              // Best-effort name lookup.
+            }
+            return { id, urn, name };
+          }),
+      );
+    } catch {
+      // Best-effort — org scopes may be absent for this workspace.
+    }
+
+    const common = {
+      access_token: accessToken,
+      refresh_token: t.refresh_token,
+      expires_at: expiresAt,
+    };
+    const seedBody: SeedBody = {
+      platform: 'linkedin',
+      ...common,
+      canonical_user_id: personId,
+      handle: me.vanityName ?? displayName,
+      metadata: {
+        kind: 'member',
+        person_urn: personUrn,
+        vanity_name: me.vanityName ?? null,
+        scopes,
+        refresh_token_expires_at: t.refresh_token_expires_in
+          ? new Date(
+              Date.now() + t.refresh_token_expires_in * 1000,
+            ).toISOString()
+          : undefined,
+      },
+    };
+    const extraSeedBodies: SeedBody[] = orgs.map((org) => ({
+      platform: 'linkedin',
+      ...common,
+      canonical_user_id: org.id,
+      handle: org.name,
+      metadata: {
+        kind: 'organization',
+        organization_urn: org.urn,
+        person_urn: personUrn,
+        role: 'ADMINISTRATOR',
+      },
+    }));
+
+    const preview = {
+      handle: me.vanityName ?? displayName,
+      name: displayName || undefined,
+      extras: {
+        person_id: personId,
+        organizations: orgs.map((o) => o.name),
+        refreshable: !!t.refresh_token,
+        scopes,
+      },
+    };
+    const sessionId = await putSession({
+      kind: 'simple',
+      platform: 'linkedin',
+      seedBody,
+      extraSeedBodies: extraSeedBodies.length > 0 ? extraSeedBodies : undefined,
+      preview,
+    });
+    return { kind: 'confirm', platform: 'linkedin', sessionId, preview };
+  },
+};
+
 export const PLATFORMS: Record<PlatformKey, PlatformDef> = {
   facebook,
   instagram,
@@ -835,6 +1021,7 @@ export const PLATFORMS: Record<PlatformKey, PlatformDef> = {
   threads,
   youtube,
   twitch,
+  linkedin,
 };
 
 /**

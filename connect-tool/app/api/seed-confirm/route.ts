@@ -92,6 +92,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     const seeded = await postToPocSeed(seedBody);
+    // LinkedIn: organization accounts ride the same confirmation. Failures
+    // are collected, not fatal — the member account is already seeded.
+    const extraResults: Array<{ account_id: string; handle?: string }> = [];
+    const extraErrors: string[] = [];
+    for (const extra of session.extraSeedBodies ?? []) {
+      try {
+        const r = await postToPocSeed({
+          ...extra,
+          metadata: { ...(extra.metadata ?? {}), products },
+          ...(context
+            ? {
+                workspace_id: context.workspaceId,
+                end_user_id: context.endUserId,
+                ...(context.environment === 'test' ? { is_test: true } : {}),
+              }
+            : {}),
+        });
+        extraResults.push({ account_id: r.account_id, handle: extra.handle });
+      } catch (err) {
+        extraErrors.push(
+          `${extra.handle ?? extra.canonical_user_id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
     await dropSession(parsed.data.sessionId);
     const response = NextResponse.json({
       account_id: seeded.account_id,
@@ -100,6 +126,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       platform: session.platform,
       preview: session.preview,
       opener_origin: context?.openerOrigin ?? null,
+      ...(extraResults.length > 0 ? { extra_accounts: extraResults } : {}),
+      ...(extraErrors.length > 0 ? { extra_errors: extraErrors } : {}),
     });
     if (contextSessionId) {
       await dropSession(contextSessionId);

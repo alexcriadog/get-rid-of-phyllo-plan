@@ -5,6 +5,7 @@ import { TwitchApiModule } from '@modules/platforms/shared/twitch-api/twitch-api
 import { YoutubeApiModule } from '@modules/platforms/shared/youtube-api/youtube-api.module';
 import { ThreadsApiModule } from '@modules/platforms/shared/threads-api/threads-api.module';
 import { InstagramApiModule } from '@modules/platforms/shared/instagram-api/instagram-api.module';
+import { LinkedInApiModule } from '@modules/platforms/shared/linkedin-api/linkedin-api.module';
 import { TokenRefreshCronService } from './token-refresh.cron.service';
 
 /**
@@ -22,6 +23,7 @@ import { TokenRefreshCronService } from './token-refresh.cron.service';
     YoutubeApiModule,
     ThreadsApiModule,
     InstagramApiModule,
+    LinkedInApiModule,
   ],
   providers: [TokenRefreshCronService],
   exports: [TokenRefreshCronService],

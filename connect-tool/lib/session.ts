@@ -64,8 +64,13 @@ export interface FbSession {
  */
 export interface SimpleSession {
   kind: 'simple';
-  platform: 'tiktok' | 'threads' | 'youtube' | 'instagram' | 'twitch';
+  platform: 'tiktok' | 'threads' | 'youtube' | 'instagram' | 'twitch' | 'linkedin';
   seedBody: SeedBody;
+  /**
+   * LinkedIn: organization accounts discovered via organizationAcls,
+   * seeded alongside the member account with the same product selection.
+   */
+  extraSeedBodies?: SeedBody[];
   preview: {
     handle?: string;
     name?: string;

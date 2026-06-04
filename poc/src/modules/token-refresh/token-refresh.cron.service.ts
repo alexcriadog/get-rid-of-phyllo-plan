@@ -34,6 +34,7 @@ import { TwitchTokenRefreshService } from '@modules/platforms/shared/twitch-api/
 import { YoutubeTokenRefreshService } from '@modules/platforms/shared/youtube-api/youtube-token-refresh.service';
 import { ThreadsTokenRefreshService } from '@modules/platforms/shared/threads-api/threads-token-refresh.service';
 import { InstagramDirectTokenRefreshService } from '@modules/platforms/shared/instagram-api/instagram-direct-token-refresh.service';
+import { LinkedInTokenRefreshService } from '@modules/platforms/shared/linkedin-api/linkedin-token-refresh.service';
 import { isIgDirect } from '@modules/platforms/shared/meta-graph/ig-direct';
 import { MetricsService } from '@shared/metrics/metrics.service';
 
@@ -50,6 +51,11 @@ const LOCK_TTL_MS = 10 * 60_000;
 
 const REFRESHABLE = new Set(['tiktok', 'twitch', 'youtube', 'threads']);
 const META = new Set(['facebook', 'instagram']);
+// LinkedIn: 60-day access token. refresh_token (365d) only exists when
+// LinkedIn enabled programmatic refresh for the app — rows that have one
+// refresh with the 7-day lead; rows without behave like Meta (needs_reauth
+// once expired).
+const LINKEDIN = new Set(['linkedin']);
 
 interface RefreshRunResult {
   scanned: number;
@@ -84,6 +90,7 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
     private readonly youtube: YoutubeTokenRefreshService,
     private readonly threads: ThreadsTokenRefreshService,
     private readonly igDirect: InstagramDirectTokenRefreshService,
+    private readonly linkedin: LinkedInTokenRefreshService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -177,6 +184,28 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
           if (did) {
             result.refreshed += 1;
             this.metrics.incr('token_refresh_cron_refreshed', { platform });
+          } else {
+            result.skipped += 1;
+          }
+        } else if (LINKEDIN.has(platform)) {
+          if (row.refreshTokenCiphertext) {
+            if (msToExpiry > THREADS_LEAD_MS) {
+              result.skipped += 1; // 7-day lead on a 60-day token
+              continue;
+            }
+            await this.linkedin.refresh(
+              accountId,
+              this.aes.decrypt(Buffer.from(row.refreshTokenCiphertext)),
+            );
+            result.refreshed += 1;
+            this.metrics.incr('token_refresh_cron_refreshed', { platform });
+          } else if (expired) {
+            await this.flagNeedsReauth(
+              accountId,
+              'linkedin token expired and app has no programmatic refresh — re-authentication required',
+            );
+            result.reauthFlagged += 1;
+            this.metrics.incr('token_refresh_cron_reauth', { platform });
           } else {
             result.skipped += 1;
           }

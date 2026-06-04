@@ -10,7 +10,8 @@ export interface SeedBody {
     | 'tiktok'
     | 'threads'
     | 'youtube'
-    | 'twitch';
+    | 'twitch'
+    | 'linkedin';
   access_token: string;
   canonical_user_id: string;
   handle?: string;

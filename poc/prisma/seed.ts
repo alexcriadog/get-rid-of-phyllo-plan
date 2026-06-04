@@ -131,6 +131,13 @@ const CADENCE_DEFAULTS: CadenceRow[] = [
   // content every 4h.
   { platform: 'twitch', product: 'identity', defaultIntervalSeconds: 21600 },
   { platform: 'twitch', product: 'engagement_new', defaultIntervalSeconds: 14400 },
+  // LinkedIn — dev tier is ~500 calls/app/day + 100/member/day (midnight UTC
+  // reset), so cadences are deliberately slow. identity ≈3 calls, audience
+  // ≈11 calls (one metric per memberCreatorPostAnalytics call), org
+  // engagement ≈3 calls per sync.
+  { platform: 'linkedin', product: 'identity', defaultIntervalSeconds: 21600 },
+  { platform: 'linkedin', product: 'audience', defaultIntervalSeconds: 86400 },
+  { platform: 'linkedin', product: 'engagement_new', defaultIntervalSeconds: 21600 },
 ];
 
 async function seedCadences(): Promise<number> {
