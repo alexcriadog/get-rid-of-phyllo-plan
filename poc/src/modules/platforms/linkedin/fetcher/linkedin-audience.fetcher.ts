@@ -8,7 +8,12 @@
 //   org-level share statistics (lifetime aggregate + daily series) + page
 //   statistics (lifetime facets + daily series).
 //
-// Every call is best-effort — partial snapshots beat failed syncs.
+// Every call is best-effort — partial snapshots beat failed syncs. BUT if
+// EVERY sub-call failed (typical when the Redis rate bucket is empty), the
+// fetcher rethrows the last error instead of returning an empty snapshot:
+// the worker then backs off and the previous (good) Mongo snapshot survives.
+// Learned in prod 2026-06-05 — an all-denied sync upserted an empty audience
+// snapshot over the populated one and blanked the dashboard.
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
@@ -85,30 +90,36 @@ export class LinkedInAudienceFetcher {
   ): Promise<AudienceData> {
     const end = new Date();
     const start = new Date(end.getTime() - ANALYTICS_PERIOD_DAYS * 86_400_000);
+    let okCalls = 0;
+    let lastErr: unknown = null;
 
     const lifetimeFollowers = await this.client
       .getMemberFollowersCount(callCtx)
       .then((r) => {
+        okCalls += 1;
         const v = r.elements?.[0]?.memberFollowersCount;
         return typeof v === 'number' ? v : null;
       })
       .catch((err) => {
+        lastErr = err;
         this.warn('memberFollowersCount(me)', canonicalId, err);
         return null;
       });
 
     const followersDaily = await this.client
       .getMemberFollowersDaily({ ...callCtx, start, end })
-      .then((r) =>
-        (r.elements ?? [])
+      .then((r) => {
+        okCalls += 1;
+        return (r.elements ?? [])
           .filter((e) => typeof e.memberFollowersCount === 'number')
           .map((e) => ({
             date: dateOf(e.dateRange),
             value: e.memberFollowersCount as number,
           }))
-          .filter((p) => p.date !== ''),
-      )
+          .filter((p) => p.date !== '');
+      })
       .catch((err) => {
+        lastErr = err;
         this.warn('memberFollowersCount(dateRange)', canonicalId, err);
         return [] as SimpleSeriesPoint[];
       });
@@ -123,8 +134,12 @@ export class LinkedInAudienceFetcher {
           start,
           end,
         })
-        .then((r) => sumCounts(r.elements))
+        .then((r) => {
+          okCalls += 1;
+          return sumCounts(r.elements);
+        })
         .catch((err) => {
+          lastErr = err;
           this.warn(`postAnalytics(${metric},TOTAL)`, canonicalId, err);
           return null;
         });
@@ -141,20 +156,27 @@ export class LinkedInAudienceFetcher {
           start,
           end,
         })
-        .then((r) =>
-          (r.elements ?? [])
+        .then((r) => {
+          okCalls += 1;
+          return (r.elements ?? [])
             .filter((e) => typeof e.count === 'number')
             .map((e) => ({
               date: dateOf(e.dateRange),
               value: e.count as number,
             }))
-            .filter((p) => p.date !== ''),
-        )
+            .filter((p) => p.date !== '');
+        })
         .catch((err) => {
+          lastErr = err;
           this.warn(`postAnalytics(${metric},DAILY)`, canonicalId, err);
           return [] as SimpleSeriesPoint[];
         });
       daily[metric] = series;
+    }
+
+    if (okCalls === 0 && lastErr) {
+      // Nothing succeeded — back off rather than blank the stored snapshot.
+      throw lastErr;
     }
 
     return buildMemberAudience({
@@ -176,24 +198,29 @@ export class LinkedInAudienceFetcher {
     const orgUrn = organizationUrn(canonicalId, metadata);
     const endMs = Date.now();
     const startMs = endMs - ANALYTICS_PERIOD_DAYS * 86_400_000;
+    let okCalls = 0;
+    let lastErr: unknown = null;
 
     const gains = await this.client
       .getOrganizationFollowerGains({ ...callCtx, orgUrn, startMs, endMs })
-      .then((r) =>
-        (r.elements ?? [])
+      .then((r) => {
+        okCalls += 1;
+        return (r.elements ?? [])
           .filter((e) => e.timeRange?.start != null)
           .map((e) => ({
             date: dayOfMs(e.timeRange?.start as number),
             organic: e.followerGains?.organicFollowerGain ?? 0,
             paid: e.followerGains?.paidFollowerGain ?? 0,
-          })),
-      )
+          }));
+      })
       .catch((err) => {
+        lastErr = err;
         this.warn('orgFollowerGains', orgUrn, err);
         return [];
       });
 
     const demographics = await this.fetchOrgDemographics(callCtx, orgUrn);
+    if (demographics) okCalls += 1;
 
     // Org-level engagement — lifetime aggregate (totals) + daily series.
     const src: OrgAudienceSource = {
@@ -205,6 +232,7 @@ export class LinkedInAudienceFetcher {
     await this.client
       .getShareStatisticsAggregate({ ...callCtx, orgUrn })
       .then((r) => {
+        okCalls += 1;
         const t = r.elements?.[0]?.totalShareStatistics;
         if (!t) return;
         src.engagementTotals = {
@@ -217,11 +245,15 @@ export class LinkedInAudienceFetcher {
           engagementRate: t.engagement,
         };
       })
-      .catch((err) => this.warn('shareStats(lifetime)', orgUrn, err));
+      .catch((err) => {
+        lastErr = err;
+        this.warn('shareStats(lifetime)', orgUrn, err);
+      });
 
     await this.client
       .getShareStatisticsAggregate({ ...callCtx, orgUrn, startMs, endMs })
       .then((r) => {
+        okCalls += 1;
         const daily: NonNullable<OrgAudienceSource['engagementDaily']> = {
           IMPRESSION: [],
           REACTION: [],
@@ -244,12 +276,16 @@ export class LinkedInAudienceFetcher {
         }
         src.engagementDaily = daily;
       })
-      .catch((err) => this.warn('shareStats(daily)', orgUrn, err));
+      .catch((err) => {
+        lastErr = err;
+        this.warn('shareStats(daily)', orgUrn, err);
+      });
 
     // Page statistics — lifetime facets + daily views series.
     await this.client
       .getOrganizationPageStatistics({ ...callCtx, orgUrn })
       .then(async (r) => {
+        okCalls += 1;
         const el = r.elements?.[0];
         if (!el) return;
         const views = el.totalPageStatistics?.views;
@@ -324,11 +360,15 @@ export class LinkedInAudienceFetcher {
           null,
         );
       })
-      .catch((err) => this.warn('pageStats(lifetime)', orgUrn, err));
+      .catch((err) => {
+        lastErr = err;
+        this.warn('pageStats(lifetime)', orgUrn, err);
+      });
 
     await this.client
       .getOrganizationPageStatistics({ ...callCtx, orgUrn, startMs, endMs })
       .then((r) => {
+        okCalls += 1;
         const daily = (r.elements ?? [])
           .filter((e) => e.timeRange?.start != null)
           .map((e) => ({
@@ -339,7 +379,15 @@ export class LinkedInAudienceFetcher {
           src.pageViews = { ...(src.pageViews ?? {}), daily };
         }
       })
-      .catch((err) => this.warn('pageStats(daily)', orgUrn, err));
+      .catch((err) => {
+        lastErr = err;
+        this.warn('pageStats(daily)', orgUrn, err);
+      });
+
+    if (okCalls === 0 && lastErr) {
+      // Nothing succeeded — back off rather than blank the stored snapshot.
+      throw lastErr;
+    }
 
     return buildOrgAudience(src);
   }
