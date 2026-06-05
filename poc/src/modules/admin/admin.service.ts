@@ -1387,18 +1387,105 @@ export class AdminService {
       orderBy: { receivedAt: 'desc' },
       take: Math.min(Math.max(limit, 1), 500),
     });
+
+    // The log only stores the raw payload snippet — parse it once per row to
+    // surface the Meta envelope (object/topic/entry id) and batch-resolve the
+    // entry ids to connected accounts so the UI can show handles.
+    const parsed = rows.map((r) => this.parseWebhookSnippet(r.payloadSnippet));
+    const entryIds = [
+      ...new Set(parsed.map((p) => p.entryId).filter((id): id is string => !!id)),
+    ];
+    const accounts = entryIds.length
+      ? await this.prisma.account.findMany({
+          where: { canonicalUserId: { in: entryIds } },
+          select: { id: true, handle: true, platform: true, canonicalUserId: true },
+        })
+      : [];
+    const accountsByCanonicalId = new Map(
+      accounts.map((a) => [a.canonicalUserId, a]),
+    );
+
     return {
-      items: rows.map((r) => ({
-        id: r.id.toString(),
-        platform: r.platform,
-        event_id: r.eventId,
-        received_at: r.receivedAt.toISOString(),
-        signature_valid: r.signatureValid,
-        account_resolved: r.accountResolved,
-        processed: r.processed,
-        payload_snippet: r.payloadSnippet,
-      })),
+      items: rows.map((r, i) => {
+        const p = parsed[i];
+        const account = p.entryId
+          ? accountsByCanonicalId.get(p.entryId)
+          : undefined;
+        return {
+          id: r.id.toString(),
+          platform: r.platform,
+          event_id: r.eventId,
+          received_at: r.receivedAt.toISOString(),
+          signature_valid: r.signatureValid,
+          account_resolved: r.accountResolved,
+          processed: r.processed,
+          payload_snippet: r.payloadSnippet,
+          // Enriched fields (parsed from the snippet at read time):
+          topic: p.topic,
+          object: p.object,
+          entry_id: p.entryId,
+          account_id: account?.id.toString() ?? null,
+          account_handle: account?.handle ?? null,
+          account_platform: account?.platform ?? null,
+          status: this.webhookStatus(r),
+          body_excerpt: p.bodyExcerpt,
+        };
+      }),
     };
+  }
+
+  /**
+   * Best-effort parse of a stored Meta webhook payload snippet. Snippets can
+   * be truncated (2 KB cap at ingest) or non-JSON (invalid-signature rows),
+   * so every field is nullable.
+   */
+  private parseWebhookSnippet(snippet: string | null): {
+    object: string | null;
+    topic: string | null;
+    entryId: string | null;
+    bodyExcerpt: string | null;
+  } {
+    const empty = { object: null, topic: null, entryId: null, bodyExcerpt: null };
+    if (!snippet) return empty;
+
+    let envelope: {
+      object?: unknown;
+      entry?: Array<{ id?: unknown; changes?: Array<{ field?: unknown; value?: unknown }> }>;
+    };
+    try {
+      envelope = JSON.parse(snippet) as typeof envelope;
+    } catch {
+      // Truncated or non-JSON — show the raw head so the row is still useful.
+      return { ...empty, bodyExcerpt: this.excerpt(snippet) };
+    }
+
+    const entry = envelope.entry?.[0];
+    const change = entry?.changes?.[0];
+    const value = change?.value;
+    return {
+      object: typeof envelope.object === 'string' ? envelope.object : null,
+      topic: typeof change?.field === 'string' ? change.field : null,
+      entryId: typeof entry?.id === 'string' ? entry.id : null,
+      bodyExcerpt: this.excerpt(
+        value !== undefined ? JSON.stringify(value) : snippet,
+      ),
+    };
+  }
+
+  private excerpt(text: string, max = 240): string {
+    return text.length <= max ? text : `${text.slice(0, max)}…`;
+  }
+
+  /** Single derived lifecycle state so the UI shows one badge, not three booleans. */
+  private webhookStatus(r: {
+    signatureValid: boolean;
+    accountResolved: boolean;
+    processed: boolean;
+  }): 'invalid_signature' | 'enqueued' | 'skipped' | 'unresolved' {
+    if (!r.signatureValid) return 'invalid_signature';
+    if (r.processed) return 'enqueued';
+    if (r.accountResolved) return 'skipped';
+    return 'unresolved';
   }
 
   async webhookSilence(): Promise<Record<string, unknown>> {

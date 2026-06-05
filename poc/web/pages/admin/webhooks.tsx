@@ -21,25 +21,39 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
+type WebhookStatus = 'invalid_signature' | 'enqueued' | 'skipped' | 'unresolved';
+
 type WebhookRow = {
   id: string;
   platform: string;
-  topic?: string;
+  topic?: string | null;
+  object?: string | null;
   received_at?: string;
+  entry_id?: string | null;
   account_id?: string | null;
-  status?: string;
-  body_excerpt?: string;
+  account_handle?: string | null;
+  status?: WebhookStatus;
+  body_excerpt?: string | null;
 };
 
 type SilenceRow = {
   account_id: string;
   account_handle?: string | null;
   platform: string;
+  product?: string;
   last_received_at?: string | null;
-  silence_minutes?: number;
+  silence_seconds?: number;
 };
 
-const ROW_GRID = 'grid-cols-[64px_84px_140px_80px_minmax(0,1fr)_56px]';
+const ROW_GRID =
+  'grid-cols-[118px_84px_120px_minmax(110px,160px)_92px_minmax(0,1fr)_56px]';
+
+const STATUS_META: Record<WebhookStatus, { label: string; color: string }> = {
+  enqueued: { label: 'enqueued', color: STATUS_COLORS.ok },
+  skipped: { label: 'skipped', color: STATUS_COLORS.info },
+  unresolved: { label: 'unresolved', color: STATUS_COLORS.warn },
+  invalid_signature: { label: 'bad sig', color: STATUS_COLORS.danger },
+};
 
 export default function WebhooksPage() {
   const inboundLive = useLive<WebhookRow[]>('/admin/webhooks/inbound?limit=300', 4000);
@@ -195,6 +209,7 @@ function InboundTable({
         <span>Platform</span>
         <span>Topic</span>
         <span>Account</span>
+        <span>Status</span>
         <span>Body excerpt</span>
         <span className="text-right">Action</span>
       </div>
@@ -203,19 +218,40 @@ function InboundTable({
           key={w.id}
           className={`grid ${ROW_GRID} items-center gap-3 border-b border-border/70 px-3 py-1.5 font-mono text-[11.5px] last:border-0`}
         >
-          <span className="text-muted-foreground/70">{fmtTime(w.received_at)}</span>
+          <span className="flex flex-col leading-tight">
+            <span className="text-muted-foreground/90">{fmtTime(w.received_at)}</span>
+            <span className="text-[10px] text-muted-foreground/60">
+              {fmtRelative(w.received_at)}
+            </span>
+          </span>
           <span>
             <Badge variant="default" className="w-full justify-center">
               {w.platform}
             </Badge>
           </span>
-          <span className="truncate" style={{ color: STATUS_COLORS.info }}>
-            {w.topic ?? '—'}
+          <span className="flex flex-col leading-tight truncate">
+            <span className="truncate" style={{ color: STATUS_COLORS.info }}>
+              {w.topic ?? '—'}
+            </span>
+            {w.object && (
+              <span className="text-[10px] text-muted-foreground/60">{w.object}</span>
+            )}
           </span>
-          <span>
-            <Badge variant="default" className="w-full justify-center">
-              #{w.account_id ?? '—'}
-            </Badge>
+          <span className="flex flex-col leading-tight truncate">
+            <span className="truncate">
+              {w.account_handle ?? (w.account_id ? `#${w.account_id}` : '—')}
+            </span>
+            {w.account_handle && w.account_id && (
+              <span className="text-[10px] text-muted-foreground/60">
+                #{w.account_id}
+              </span>
+            )}
+          </span>
+          <span
+            className="text-[10.5px] font-semibold"
+            style={{ color: STATUS_META[w.status ?? 'unresolved'].color }}
+          >
+            {STATUS_META[w.status ?? 'unresolved'].label}
           </span>
           <span
             className="overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-muted-foreground/70"
@@ -255,14 +291,18 @@ function SilenceTable({ rows }: { rows: SilenceRow[] }) {
       </TableHeader>
       <TableBody>
         {rows.map((r) => {
+          const neverReceived = r.last_received_at == null;
+          const minutes = neverReceived
+            ? null
+            : Math.round((r.silence_seconds ?? 0) / 60);
           const tone =
-            (r.silence_minutes ?? 0) > 60
+            neverReceived || (minutes ?? 0) > 60
               ? STATUS_COLORS.danger
-              : (r.silence_minutes ?? 0) > 15
+              : (minutes ?? 0) > 15
                 ? STATUS_COLORS.warn
                 : STATUS_COLORS.ok;
           return (
-            <TableRow key={r.account_id}>
+            <TableRow key={`${r.account_id}-${r.product ?? ''}`}>
               <TableCell className="font-mono text-xs">
                 <div>{r.account_handle ?? `Account ${r.account_id}`}</div>
                 <div className="text-[10px] text-muted-foreground/70">#{r.account_id}</div>
@@ -277,7 +317,7 @@ function SilenceTable({ rows }: { rows: SilenceRow[] }) {
                 className="text-right font-mono text-xs font-semibold"
                 style={{ color: tone }}
               >
-                {r.silence_minutes != null ? `${r.silence_minutes}m` : '—'}
+                {neverReceived ? 'never' : minutes != null ? `${minutes}m` : '—'}
               </TableCell>
             </TableRow>
           );
