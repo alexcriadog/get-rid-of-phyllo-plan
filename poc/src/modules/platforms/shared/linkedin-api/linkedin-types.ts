@@ -114,6 +114,27 @@ export interface LinkedInFollowerGainsElement {
   organizationalEntity?: string;
 }
 
+/** /rest/images asset — downloadUrl expires (downloadUrlExpiresAt, epoch ms). */
+export interface LinkedInImageAsset {
+  downloadUrl?: string;
+  downloadUrlExpiresAt?: number;
+  status?: string;
+}
+
+/** /rest/videos asset. */
+export interface LinkedInVideoAsset {
+  downloadUrl?: string;
+  thumbnail?: string;
+  status?: string;
+  duration?: number;
+}
+
+/** Restli BATCH_GET envelope: results keyed by (decoded) URN. */
+export interface LinkedInBatchResults<T> {
+  results?: Record<string, T>;
+  errors?: Record<string, unknown>;
+}
+
 export interface LinkedInTokenResponse {
   access_token?: string;
   expires_in?: number;

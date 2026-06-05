@@ -31,9 +31,11 @@ import {
   restliTimeIntervals,
 } from './linkedin-restli';
 import type {
+  LinkedInBatchResults,
   LinkedInCollection,
   LinkedInConnectionsSize,
   LinkedInFollowerGainsElement,
+  LinkedInImageAsset,
   LinkedInMe,
   LinkedInMemberAnalyticsElement,
   LinkedInMemberFollowersElement,
@@ -42,6 +44,7 @@ import type {
   LinkedInOrganizationAcl,
   LinkedInPost,
   LinkedInShareStatsElement,
+  LinkedInVideoAsset,
 } from './linkedin-types';
 
 const PLATFORM_NAME = 'linkedin';
@@ -249,13 +252,37 @@ export class BoundLinkedInClient {
     return this.get(path, args, true, 'FINDER');
   }
 
+  /** Batch-resolve image asset URNs → downloadUrl. Max ~20 per call. */
+  async getImages(
+    args: LinkedInCallContext & { imageUrns: string[] },
+  ): Promise<LinkedInBatchResults<LinkedInImageAsset>> {
+    return this.get(
+      `/rest/images?ids=${restliList(args.imageUrns)}`,
+      args,
+      true,
+      'BATCH_GET',
+    );
+  }
+
+  /** Batch-resolve video asset URNs → downloadUrl + thumbnail. */
+  async getVideos(
+    args: LinkedInCallContext & { videoUrns: string[] },
+  ): Promise<LinkedInBatchResults<LinkedInVideoAsset>> {
+    return this.get(
+      `/rest/videos?ids=${restliList(args.videoUrns)}`,
+      args,
+      true,
+      'BATCH_GET',
+    );
+  }
+
   // ─── internals ──────────────────────────────────────────────────────────
 
   private async get<T>(
     pathWithQuery: string,
     args: LinkedInCallContext,
     versioned: boolean,
-    restliMethod?: 'FINDER',
+    restliMethod?: 'FINDER' | 'BATCH_GET',
   ): Promise<T> {
     const endpoint = pathWithQuery.split('?')[0];
     const acquired = await this.acquire(args.context, COST_PER_CALL);

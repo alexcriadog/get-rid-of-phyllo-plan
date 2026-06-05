@@ -7,7 +7,10 @@
 //   1. /rest/posts?q=author (offset paging, ≤POSTS_MAX_PAGES pages)
 //   2. /rest/organizationalEntityShareStatistics in List() batches of
 //      SHARE_STATS_BATCH, split by URN type (shares / ugcPosts). Best-effort.
-//   3. Map to ContentData with stats merged by URN.
+//   3. /rest/images + /rest/videos BATCH_GET to resolve asset URNs into
+//      downloadUrl/thumbnail (posts only carry urn:li:image/video ids).
+//      Best-effort; downloadUrls expire but each 6h sync refreshes them.
+//   4. Map to ContentData with stats + media merged by URN.
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ContentData, FetchOpts } from '../../shared/platform-types';
@@ -30,7 +33,10 @@ import {
   POSTS_PAGE_SIZE,
   SHARE_STATS_BATCH,
 } from '../linkedin.constants';
-import { linkedInPostToContent } from '../mapper/linkedin-post.mapper';
+import {
+  linkedInPostToContent,
+  type LinkedInResolvedMedia,
+} from '../mapper/linkedin-post.mapper';
 import { LINKEDIN_API_CLIENT } from '../linkedin.tokens';
 
 @Injectable()
@@ -63,10 +69,70 @@ export class LinkedInContentFetcher {
 
     const posts = await this.fetchPosts(callCtx, orgUrn, opts);
     const statsByUrn = await this.fetchStats(callCtx, orgUrn, posts);
+    const mediaByUrn = await this.resolveMedia(callCtx, posts);
 
     return posts.map((p) =>
-      linkedInPostToContent(p, statsByUrn.get(p.id) ?? null),
+      linkedInPostToContent(p, statsByUrn.get(p.id) ?? null, undefined, mediaByUrn),
     );
+  }
+
+  /**
+   * Batch-resolve image/video asset URNs referenced by the posts into
+   * downloadUrl/thumbnail. Best-effort — a failed batch just means those
+   * posts ship without media URLs until the next sync.
+   */
+  private async resolveMedia(
+    callCtx: LinkedInCallContext,
+    posts: LinkedInPost[],
+  ): Promise<Map<string, LinkedInResolvedMedia>> {
+    const imageUrns = new Set<string>();
+    const videoUrns = new Set<string>();
+    for (const post of posts) {
+      const single = post.content?.media?.id;
+      if (single?.startsWith('urn:li:image:')) imageUrns.add(single);
+      else if (single?.startsWith('urn:li:video:')) videoUrns.add(single);
+      for (const img of post.content?.multiImage?.images ?? []) {
+        if (img.id?.startsWith('urn:li:image:')) imageUrns.add(img.id);
+      }
+    }
+
+    const media = new Map<string, LinkedInResolvedMedia>();
+    const batches = <T,>(arr: T[]): T[][] => {
+      const out: T[][] = [];
+      for (let i = 0; i < arr.length; i += SHARE_STATS_BATCH) {
+        out.push(arr.slice(i, i + SHARE_STATS_BATCH));
+      }
+      return out;
+    };
+
+    for (const batch of batches([...imageUrns])) {
+      try {
+        const res = await this.client.getImages({ ...callCtx, imageUrns: batch });
+        for (const [urn, asset] of Object.entries(res.results ?? {})) {
+          media.set(urn, { url: asset.downloadUrl ?? null });
+        }
+      } catch (err) {
+        this.logger.warn(
+          `getImages batch failed: ${err instanceof Error ? err.message : String(err)} — posts ship without image URLs`,
+        );
+      }
+    }
+    for (const batch of batches([...videoUrns])) {
+      try {
+        const res = await this.client.getVideos({ ...callCtx, videoUrns: batch });
+        for (const [urn, asset] of Object.entries(res.results ?? {})) {
+          media.set(urn, {
+            url: asset.downloadUrl ?? null,
+            thumbnail: asset.thumbnail ?? null,
+          });
+        }
+      } catch (err) {
+        this.logger.warn(
+          `getVideos batch failed: ${err instanceof Error ? err.message : String(err)} — posts ship without video URLs`,
+        );
+      }
+    }
+    return media;
   }
 
   private async fetchPosts(
