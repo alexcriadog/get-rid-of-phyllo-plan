@@ -70,8 +70,25 @@ export class LinkedInContentFetcher {
     const orgUrn = organizationUrn(canonicalId, metadata);
 
     const posts = await this.fetchPosts(callCtx, orgUrn, opts);
-    const statsByUrn = await this.fetchStats(callCtx, orgUrn, posts);
-    const mediaByUrn = await this.resolveMedia(callCtx, posts);
+
+    // Guarded enrichments: when the rate bucket is drained mid-sync, stats
+    // and media resolution fail wholesale. Persisting posts WITHOUT their
+    // previous metrics/media would wipe good Mongo docs (the posts upsert
+    // replaces `data` whole) — observed in prod 2026-06-05. If an enrichment
+    // was attempted and had ZERO successes, back off instead.
+    const statsHealth = { ok: 0, err: null as unknown };
+    const statsByUrn = await this.fetchStats(callCtx, orgUrn, posts, statsHealth);
+    if (posts.length > 0 && statsHealth.ok === 0 && statsHealth.err) {
+      throw statsHealth.err;
+    }
+
+    const mediaHealth = { ok: 0, err: null as unknown };
+    const mediaByUrn = await this.resolveMedia(callCtx, posts, mediaHealth);
+    if (mediaHealth.ok === 0 && mediaHealth.err) {
+      throw mediaHealth.err;
+    }
+
+    // socialMetadata stays optional — it only feeds metrics.extra.
     const socialByUrn = await this.fetchSocialMetadata(callCtx, posts);
 
     return posts.map((p) => {
@@ -142,6 +159,7 @@ export class LinkedInContentFetcher {
   private async resolveMedia(
     callCtx: LinkedInCallContext,
     posts: LinkedInPost[],
+    health: { ok: number; err: unknown },
   ): Promise<Map<string, LinkedInResolvedMedia>> {
     const imageUrns = new Set<string>();
     const videoUrns = new Set<string>();
@@ -166,10 +184,12 @@ export class LinkedInContentFetcher {
     for (const batch of batches([...imageUrns])) {
       try {
         const res = await this.client.getImages({ ...callCtx, imageUrns: batch });
+        health.ok += 1;
         for (const [urn, asset] of Object.entries(res.results ?? {})) {
           media.set(urn, { url: asset.downloadUrl ?? null });
         }
       } catch (err) {
+        health.err = err;
         this.logger.warn(
           `getImages batch failed: ${err instanceof Error ? err.message : String(err)} — posts ship without image URLs`,
         );
@@ -178,6 +198,7 @@ export class LinkedInContentFetcher {
     for (const batch of batches([...videoUrns])) {
       try {
         const res = await this.client.getVideos({ ...callCtx, videoUrns: batch });
+        health.ok += 1;
         for (const [urn, asset] of Object.entries(res.results ?? {})) {
           media.set(urn, {
             url: asset.downloadUrl ?? null,
@@ -185,6 +206,7 @@ export class LinkedInContentFetcher {
           });
         }
       } catch (err) {
+        health.err = err;
         this.logger.warn(
           `getVideos batch failed: ${err instanceof Error ? err.message : String(err)} — posts ship without video URLs`,
         );
@@ -228,6 +250,7 @@ export class LinkedInContentFetcher {
     callCtx: LinkedInCallContext,
     orgUrn: string,
     posts: LinkedInPost[],
+    health: { ok: number; err: unknown },
   ): Promise<Map<string, LinkedInTotalShareStatistics>> {
     const stats = new Map<string, LinkedInTotalShareStatistics>();
     const shareUrns = posts
@@ -251,6 +274,7 @@ export class LinkedInContentFetcher {
               ? { shareUrns: batch }
               : { ugcPostUrns: batch }),
           });
+          health.ok += 1;
           for (const el of res.elements ?? []) {
             const urn = el.share ?? el.ugcPost;
             if (urn && el.totalShareStatistics) {
@@ -258,6 +282,7 @@ export class LinkedInContentFetcher {
             }
           }
         } catch (err) {
+          health.err = err;
           this.logger.warn(
             `shareStatistics(${kind}) batch failed for ${orgUrn}: ${
               err instanceof Error ? err.message : String(err)
