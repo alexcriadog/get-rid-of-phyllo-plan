@@ -29,6 +29,47 @@ import type { RequestWithWorkspace } from '@/common/guards/bearer-api-key.guard'
 const CACHE_TTL_SECONDS = 5 * 60;
 const KEY_PREFIX = 'cache:v1';
 
+/** Structural slice of the ioredis client the purge needs (keeps tests light). */
+interface ScanDelClient {
+  scan(
+    cursor: string,
+    matchToken: 'MATCH',
+    pattern: string,
+    countToken: 'COUNT',
+    count: number,
+  ): Promise<[string, string[]]>;
+  del(...keys: string[]): Promise<number>;
+}
+
+/**
+ * Drop every cached /v1 read for one workspace. Called after operations that
+ * change WHAT the API may serve — re-seeding an account (the per-connection
+ * product scope may have narrowed: stale 200s must not outlive the prune) and
+ * disconnecting one. Keys are sha1(path|query) so per-account deletion isn't
+ * possible; nuking the workspace's 5-minute cache is a cheap, correct bound.
+ */
+export async function purgeV1CacheForWorkspace(
+  client: ScanDelClient,
+  workspaceId: string,
+): Promise<number> {
+  let cursor = '0';
+  let deleted = 0;
+  do {
+    const [next, keys] = await client.scan(
+      cursor,
+      'MATCH',
+      `${KEY_PREFIX}:${workspaceId}:*`,
+      'COUNT',
+      200,
+    );
+    cursor = next;
+    if (keys.length > 0) {
+      deleted += await client.del(...keys);
+    }
+  } while (cursor !== '0');
+  return deleted;
+}
+
 @Injectable()
 export class V1CacheInterceptor implements NestInterceptor {
   constructor(private readonly redis: RedisService) {}
