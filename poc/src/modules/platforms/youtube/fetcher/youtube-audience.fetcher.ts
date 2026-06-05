@@ -22,6 +22,7 @@ import {
   analyticsToAudience,
 } from '../mapper/analytics-to-audience.mapper';
 import { YOUTUBE_API_CLIENT } from '../youtube.tokens';
+import { rethrowCritical } from '../../shared/fetch-guards';
 
 const DEFAULT_PERIOD_DAYS = 90;
 
@@ -133,6 +134,9 @@ function pick(
   errors: Array<{ breakdown: string; message: string }>,
 ): YoutubeAnalyticsReport | null {
   if (result.status === 'fulfilled') return result.value;
+  // Rate-limit / revoked-token rejections must abort the sync — recording
+  // them as a null bucket would blank the stored audience snapshot.
+  rethrowCritical(result.reason);
   errors.push({
     breakdown: bucket,
     message: result.reason instanceof Error ? result.reason.message : String(result.reason),

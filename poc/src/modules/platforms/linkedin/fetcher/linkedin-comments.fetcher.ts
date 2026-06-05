@@ -15,6 +15,7 @@ import type {
   LinkedInCallContext,
 } from '../../shared/linkedin-api/linkedin-client';
 import { extractAccountId } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import {
   buildLinkedInContext,
   linkedInKind,
@@ -64,6 +65,7 @@ export class LinkedInCommentsFetcher {
       })
       .then((r) => (r.elements ?? []).slice(0, COMMENTS_MAX_POSTS))
       .catch((err) => {
+        rethrowCritical(err);
         this.logger.warn(
           `posts page failed for ${orgUrn}: ${msg(err)} — no comments this sync`,
         );
@@ -83,6 +85,7 @@ export class LinkedInCommentsFetcher {
         if (typeof count === 'number' && count > 0) commented.add(urn);
       }
     } catch (err) {
+      rethrowCritical(err);
       this.logger.warn(
         `socialMetadata failed for ${orgUrn}: ${msg(err)} — threading all posts`,
       );
@@ -103,6 +106,7 @@ export class LinkedInCommentsFetcher {
           out.push(linkedInCommentToComment(c, post.id));
         }
       } catch (err) {
+        rethrowCritical(err);
         this.logger.warn(
           `comments failed for ${post.id}: ${msg(err)} — skipping thread`,
         );

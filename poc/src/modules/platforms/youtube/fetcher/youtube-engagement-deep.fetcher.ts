@@ -28,6 +28,7 @@ import type {
 import { extractAccountId } from '../../shared/meta-graph';
 import { buildYoutubeContext } from '../youtube.context';
 import { YOUTUBE_API_CLIENT } from '../youtube.tokens';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import { analyticsBundleToEngagementDeep } from '../mapper/engagement-deep.mapper';
 
 const DEFAULT_WINDOW_DAYS = 28;
@@ -190,6 +191,7 @@ export class YoutubeEngagementDeepFetcher {
           })),
         };
       } catch (err) {
+        rethrowCritical(err);
         errors.push({
           bucket: 'retention',
           message: err instanceof Error ? err.message : String(err),
@@ -295,6 +297,9 @@ function pick(
   errors: Array<{ bucket: string; message: string }>,
 ): YoutubeAnalyticsReport | null {
   if (result.status === 'fulfilled') return result.value;
+  // Rate-limit / revoked-token rejections must abort the sync — recording
+  // them as a null bucket would blank stored per-video metrics.
+  rethrowCritical(result.reason);
   errors.push({
     bucket,
     message:

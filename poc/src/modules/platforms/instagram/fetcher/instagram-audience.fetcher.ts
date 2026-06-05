@@ -13,6 +13,7 @@ import {
   extractAccountId,
   extractGraphError,
 } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import type {
   AccountInsightsData,
   AudienceData,
@@ -130,6 +131,7 @@ export class InstagramAudienceFetcher {
         else if (breakdown === 'country') out.countryDistribution = buckets;
         else if (breakdown === 'city') out.cityDistribution = buckets;
       } catch (err) {
+        rethrowCritical(err);
         const detail = extractGraphError(err);
         this.logger.debug(
           `${metric} timeframe=${timeframe ?? 'lifetime'} breakdown=${breakdown} failed: ${detail.message}`,
@@ -299,6 +301,7 @@ export class InstagramAudienceFetcher {
         }
       }
     } catch (err) {
+      rethrowCritical(err);
       this.logger.debug(
         `account total_value insights failed: ${
           err instanceof Error ? err.message : String(err)
@@ -332,6 +335,7 @@ export class InstagramAudienceFetcher {
           .map((v) => ({ endTime: v.end_time as string, value: v.value as number }));
       }
     } catch (err) {
+      rethrowCritical(err);
       this.logger.debug(
         `follower_count series failed: ${
           err instanceof Error ? err.message : String(err)
@@ -406,6 +410,7 @@ export class InstagramAudienceFetcher {
         if (weeklyFlat.length > 0) out.audienceActivityWeekly = weeklyFlat;
       }
     } catch (err) {
+      rethrowCritical(err);
       this.logger.debug(
         `online_followers failed: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -458,6 +463,7 @@ export class InstagramAudienceFetcher {
         }
       }
     } catch (err) {
+      rethrowCritical(err);
       this.logger.debug(
         `profile_links_taps failed: ${err instanceof Error ? err.message : String(err)}`,
       );

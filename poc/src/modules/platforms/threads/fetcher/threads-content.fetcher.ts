@@ -17,6 +17,7 @@ import type {
   ThreadsPost,
 } from '../../shared/threads-api/threads-types';
 import { parseThreadsNextUrl } from '../../shared/threads-api/threads-paging';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import {
   extractAccountId,
   extractMetaError,
@@ -183,6 +184,7 @@ export class ThreadsContentFetcher {
       });
       mergeThreadsPostInsights(item, body.data ?? []);
     } catch (err) {
+      rethrowCritical(err);
       // Per-post insights are best-effort — a single 400 (e.g. account too
       // young, post too old) shouldn't poison the entire content sync.
       this.logger.debug(

@@ -23,6 +23,7 @@ import type {
   TwitchCallContext,
 } from '../../shared/twitch-api/twitch-client';
 import { extractAccountId } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import { buildTwitchContext } from '../twitch.context';
 import { clipToContent, videoToContent } from '../mapper/twitch-content.mapper';
 import { TWITCH_API_CLIENT } from '../twitch.tokens';
@@ -59,6 +60,7 @@ export class TwitchContentFetcher {
       })
       .then((r) => r.data ?? [])
       .catch((err) => {
+        rethrowCritical(err);
         this.logger.warn(
           `getVideos failed for ${broadcasterId}: ${
             err instanceof Error ? err.message : String(err)
@@ -90,6 +92,7 @@ export class TwitchContentFetcher {
       })
       .then((r) => r.data ?? [])
       .catch((err) => {
+        rethrowCritical(err);
         this.logger.warn(
           `getClips failed for ${broadcasterId}: ${
             err instanceof Error ? err.message : String(err)

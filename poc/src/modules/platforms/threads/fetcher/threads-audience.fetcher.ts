@@ -22,6 +22,7 @@
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { BoundThreadsClient } from '../../shared/threads-api/threads-client';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import type {
   ThreadsApiResponse,
   ThreadsInsight,
@@ -109,6 +110,7 @@ export class ThreadsAudienceFetcher {
             errorMeta: null as { code?: number; subcode?: number; message: string } | null,
           };
         } catch (err) {
+          rethrowCritical(err);
           const graph = extractGraphError(err);
           return {
             spec,

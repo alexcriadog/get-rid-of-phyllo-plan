@@ -14,6 +14,7 @@ import {
   extractMetaError,
   parseNextUrl,
 } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import type {
   ContentData,
   ContentMetrics,
@@ -260,6 +261,9 @@ export class InstagramContentFetcher {
       }
       return data;
     } catch (err) {
+      // Rate-limit / revoked tokens abort — the reach fallback would be
+      // denied too and an empty result wipes stored per-post metrics.
+      rethrowCritical(err);
       // `reach` is valid for every IG media type (STORY/REELS/VIDEO/IMAGE/
       // CAROUSEL_ALBUM), so this fallback never 400s on a metric mismatch.
       this.logger.warn(
@@ -269,6 +273,7 @@ export class InstagramContentFetcher {
         const body = await fetchOnce(['reach']);
         return body.data ?? [];
       } catch (err2) {
+        rethrowCritical(err2);
         this.logger.warn(
           `insights fallback failed (${ctx}): ${extractMetaError(err2)}`,
         );
@@ -333,6 +338,7 @@ export class InstagramContentFetcher {
       }
       return out;
     } catch (err) {
+      rethrowCritical(err);
       this.logger.warn(
         `insights breakdown ${metric}/${breakdown} failed (${ctx}): ${extractMetaError(err)}`,
       );

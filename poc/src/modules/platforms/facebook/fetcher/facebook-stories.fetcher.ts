@@ -17,6 +17,7 @@ import {
   extractAccountId,
   extractMetaError,
 } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import { buildFacebookContext } from '../facebook.context';
 import { FACEBOOK_GRAPH_CLIENT } from '../facebook.tokens';
 import type {
@@ -109,6 +110,7 @@ export class FacebookStoriesFetcher {
       });
       return mapStoryInsights(body.data ?? []);
     } catch (err) {
+      rethrowCritical(err);
       this.logger.debug(
         `story insights failed post_id=${story.post_id}: ${extractMetaError(err)}`,
       );
@@ -168,6 +170,7 @@ export class FacebookStoriesFetcher {
         thumbnailUrl: thumbCandidate?.source ?? body.picture ?? null,
       };
     } catch (err) {
+      rethrowCritical(err);
       this.logger.debug(
         `story media resolve failed media_id=${story.media_id} type=${story.media_type ?? '—'}: ${extractMetaError(err)}`,
       );

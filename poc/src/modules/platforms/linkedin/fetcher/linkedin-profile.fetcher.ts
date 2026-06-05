@@ -13,6 +13,7 @@ import type {
   LinkedInCallContext,
 } from '../../shared/linkedin-api/linkedin-client';
 import { extractAccountId } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import {
   buildLinkedInContext,
   linkedInKind,
@@ -64,6 +65,7 @@ export class LinkedInProfileFetcher {
         typeof r.firstDegreeSize === 'number' ? r.firstDegreeSize : null,
       )
       .catch((err) => {
+        rethrowCritical(err);
         this.logger.warn(
           `getConnectionsSize failed for ${canonicalId}: ${msg(err)} — proceeding without connections`,
         );
@@ -77,6 +79,7 @@ export class LinkedInProfileFetcher {
         return typeof v === 'number' ? v : null;
       })
       .catch((err) => {
+        rethrowCritical(err);
         this.logger.warn(
           `getMemberFollowersCount failed for ${canonicalId}: ${msg(err)} — proceeding without followers`,
         );
@@ -102,6 +105,7 @@ export class LinkedInProfileFetcher {
         typeof r.firstDegreeSize === 'number' ? r.firstDegreeSize : null,
       )
       .catch((err) => {
+        rethrowCritical(err);
         this.logger.warn(
           `getOrganizationFollowerCount failed for ${orgUrn}: ${msg(err)} — proceeding without followers`,
         );

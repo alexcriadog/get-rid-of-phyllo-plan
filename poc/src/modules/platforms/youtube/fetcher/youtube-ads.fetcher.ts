@@ -17,6 +17,7 @@ import {
   GoogleAdsConfigError,
 } from '../../shared/google-ads-api/google-ads-client';
 import { extractAccountId } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import { videoCampaignsToAdsSnapshot } from '../mapper/youtube-ads.mapper';
 
 const RECENT_VIDEO_CAMPAIGNS_GAQL = `
@@ -126,6 +127,7 @@ export class YoutubeAdsFetcher {
         rows: search.results ?? [],
       });
     } catch (err) {
+      rethrowCritical(err);
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`google-ads search failed for customer ${primary.id}: ${msg}`);
       return {

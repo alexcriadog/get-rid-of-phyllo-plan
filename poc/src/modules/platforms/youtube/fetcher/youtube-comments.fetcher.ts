@@ -20,6 +20,7 @@ import { isCommentsDisabled } from '../../shared/youtube-api/youtube-errors';
 import { extractAccountId } from '../../shared/meta-graph';
 import { buildYoutubeContext } from '../youtube.context';
 import { commentThreadToComments } from '../mapper/comment-thread-to-comment.mapper';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import { YOUTUBE_API_CLIENT } from '../youtube.tokens';
 
 const DEFAULT_TOP_N = 20;
@@ -81,6 +82,7 @@ export class YoutubeCommentsFetcher {
         .map((r) => String(r[videoIdx] ?? ''))
         .filter((v) => v.length > 0);
     } catch (err) {
+      rethrowCritical(err);
       this.logger.warn(
         `topVideoIdsByViews failed; fallback to empty list: ${
           err instanceof Error ? err.message : String(err)

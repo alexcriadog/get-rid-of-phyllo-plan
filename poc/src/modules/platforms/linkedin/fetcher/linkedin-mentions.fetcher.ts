@@ -13,6 +13,7 @@ import type {
   LinkedInCallContext,
 } from '../../shared/linkedin-api/linkedin-client';
 import { extractAccountId } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import {
   buildLinkedInContext,
   linkedInKind,
@@ -75,6 +76,7 @@ export class LinkedInMentionsFetcher {
         return [...urns].slice(0, limit);
       })
       .catch((err) => {
+        rethrowCritical(err);
         this.logger.warn(
           `notifications failed for ${orgUrn}: ${msg(err)} — no mentions this sync`,
         );
@@ -88,6 +90,7 @@ export class LinkedInMentionsFetcher {
         const content = linkedInPostToContent(post, null);
         out.push({ ...content, ownerHandle: post.author ?? null });
       } catch (err) {
+        rethrowCritical(err);
         this.logger.warn(`mention post ${urn} failed: ${msg(err)} — skipping`);
       }
     }

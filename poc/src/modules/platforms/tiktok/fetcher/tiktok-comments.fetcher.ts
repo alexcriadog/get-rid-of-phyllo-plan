@@ -8,6 +8,7 @@ import type {
   TikTokVideo,
 } from '../../shared/tiktok-api';
 import { extractAccountId, extractTikTokError } from '../../shared/tiktok-api';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import { commentToCommentData } from '../mapper/tiktok-comment.mapper';
 import {
   COMMENTS_MAX_PER_PAGE,
@@ -112,6 +113,7 @@ export class TikTokCommentsFetcher {
           out.push(commentToCommentData(c, videoId));
         }
       } catch (err) {
+        rethrowCritical(err);
         failures += 1;
         lastErr = extractTikTokError(err);
         this.logger.debug(`comment list failed video=${videoId}: ${lastErr}`);

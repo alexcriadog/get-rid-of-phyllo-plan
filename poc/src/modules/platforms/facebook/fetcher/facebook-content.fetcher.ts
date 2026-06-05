@@ -22,6 +22,7 @@ import {
   extractMetaError,
   parseNextUrl,
 } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import { DEFAULT_PAGE_SIZE } from '../facebook.constants';
 import { buildFacebookContext } from '../facebook.context';
 import { FACEBOOK_GRAPH_CLIENT } from '../facebook.tokens';
@@ -111,6 +112,7 @@ export class FacebookContentFetcher {
         accountId,
       });
     } catch (err) {
+      rethrowCritical(err);
       this.logger.debug(
         `videos batch failed for ${canonicalId}: ${extractMetaError(err)}`,
       );
@@ -294,6 +296,7 @@ export class FacebookContentFetcher {
         });
         mergePostInsights(item, body.data ?? []);
       } catch (err) {
+        rethrowCritical(err);
         this.logger.debug(
           `post insights failed for ${item.platformContentId}: ${extractMetaError(err)}`,
         );
@@ -318,6 +321,7 @@ export class FacebookContentFetcher {
       });
       mergeVideoInsights(item, body.data ?? []);
     } catch (err) {
+      rethrowCritical(err);
       this.logger.debug(
         `video insights failed for ${item.platformContentId}: ${extractMetaError(err)}`,
       );

@@ -15,6 +15,7 @@ import {
   extractAccountId,
   extractMetaError,
 } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import { AdapterFetchError } from '../../shared/platform-adapter.port';
 import type {
   AudienceData,
@@ -87,6 +88,7 @@ export class FacebookAudienceFetcher {
           });
           return { spec, body, error: null as string | null };
         } catch (err) {
+          rethrowCritical(err);
           return {
             spec,
             body: null as { data?: GraphInsight[] } | null,

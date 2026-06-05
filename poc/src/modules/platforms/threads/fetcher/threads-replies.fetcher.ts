@@ -19,6 +19,7 @@ import type {
   ThreadsReply,
 } from '../../shared/threads-api/threads-types';
 import { parseThreadsNextUrl } from '../../shared/threads-api/threads-paging';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import {
   extractAccountId,
   extractMetaError,
@@ -156,6 +157,7 @@ export class ThreadsRepliesFetcher {
         nextParams = { ...parsed.params, fields: REPLY_FIELDS };
       }
     } catch (err) {
+      rethrowCritical(err);
       // Per-post failure is best-effort — keep the rest of the comment sync
       // moving rather than abort.
       this.logger.debug(

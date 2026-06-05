@@ -24,6 +24,7 @@ import {
 import type { BoundGraphClient } from '../../shared/meta-graph/graph-client';
 import type { GraphListResponse } from '../../shared/meta-graph';
 import { parseNextUrl } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import { buildFacebookContext } from '../facebook.context';
 import { FACEBOOK_GRAPH_CLIENT } from '../facebook.tokens';
 import type {
@@ -237,6 +238,7 @@ export class FacebookExtrasService {
           accountId,
         })
         .catch((err) => {
+          rethrowCritical(err);
           this.logger.warn(
             `account insights failed for ${ad.id}: ${
               err instanceof Error ? err.message : String(err)
@@ -295,7 +297,10 @@ export class FacebookExtrasService {
           context: ctx,
           accountId,
         })
-        .catch(() => ({ data: [] }) as GraphListResponse<FacebookAdInsightsRow>);
+        .catch((err) => {
+          rethrowCritical(err);
+          return { data: [] } as GraphListResponse<FacebookAdInsightsRow>;
+        });
 
       for (const row of campaignBreakdown.data ?? []) {
         await collection.updateOne(
@@ -370,6 +375,7 @@ export class FacebookExtrasService {
         accountId: ownerAccountId,
       })
       .catch((err) => {
+        rethrowCritical(err);
         this.logger.warn(
           `public posts failed for ${targetPageId}: ${
             err instanceof Error ? err.message : String(err)

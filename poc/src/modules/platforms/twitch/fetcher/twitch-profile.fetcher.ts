@@ -23,6 +23,7 @@ import type {
 } from '../../shared/twitch-api/twitch-client';
 import type { TwitchSubscriptionsResponse } from '../../shared/twitch-api/twitch-types';
 import { extractAccountId } from '../../shared/meta-graph';
+import { rethrowCritical } from '../../shared/fetch-guards';
 import { buildTwitchContext } from '../twitch.context';
 import {
   twitchUserToProfile,
@@ -66,6 +67,7 @@ export class TwitchProfileFetcher {
       .getChannel({ ...callCtx, broadcasterId })
       .then((r) => r.data?.[0] ?? null)
       .catch((err) => {
+        rethrowCritical(err);
         this.logger.warn(
           `getChannel failed for ${broadcasterId}: ${
             err instanceof Error ? err.message : String(err)
@@ -84,6 +86,7 @@ export class TwitchProfileFetcher {
       })
       .then((r) => (typeof r.total === 'number' ? r.total : null))
       .catch((err) => {
+        rethrowCritical(err);
         this.logger.warn(
           `getFollowers failed for ${broadcasterId}: ${
             err instanceof Error ? err.message : String(err)
@@ -151,6 +154,7 @@ export class TwitchProfileFetcher {
         pages += 1;
       }
     } catch (err) {
+      rethrowCritical(err);
       this.logger.warn(
         `getSubscriptions failed for ${broadcasterId}: ${
           err instanceof Error ? err.message : String(err)
