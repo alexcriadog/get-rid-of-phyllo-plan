@@ -7,6 +7,7 @@ import { ThreadsApiModule } from '@modules/platforms/shared/threads-api/threads-
 import { InstagramApiModule } from '@modules/platforms/shared/instagram-api/instagram-api.module';
 import { LinkedInApiModule } from '@modules/platforms/shared/linkedin-api/linkedin-api.module';
 import { TokenRefreshCronService } from './token-refresh.cron.service';
+import { TokenHealthCronService } from './token-health.cron.service';
 
 /**
  * B-1: hosts the proactive token-refresh cron. Prisma / Redis / Aes / Metrics
@@ -14,6 +15,10 @@ import { TokenRefreshCronService } from './token-refresh.cron.service';
  * for their refresh services and OutboundWebhooksModule for the lifecycle
  * emitter (token.expired). The @Cron only actually fires on the api process
  * (see TokenRefreshCronService.onApplicationBootstrap).
+ *
+ * Also hosts TokenHealthCronService — the daily `data_access_expires_at`
+ * sweep (C-Token lifecycle hygiene). Exported so AdminController can serve
+ * GET /admin/token-health from its snapshot.
  */
 @Module({
   imports: [
@@ -25,7 +30,7 @@ import { TokenRefreshCronService } from './token-refresh.cron.service';
     InstagramApiModule,
     LinkedInApiModule,
   ],
-  providers: [TokenRefreshCronService],
-  exports: [TokenRefreshCronService],
+  providers: [TokenRefreshCronService, TokenHealthCronService],
+  exports: [TokenRefreshCronService, TokenHealthCronService],
 })
 export class TokenRefreshModule {}

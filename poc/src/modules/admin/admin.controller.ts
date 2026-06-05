@@ -14,6 +14,7 @@ import {
 import { z } from 'zod';
 import { AdminService } from './admin.service';
 import { ManualRefreshController } from '@modules/api/manual-refresh.controller';
+import { TokenHealthCronService } from '@modules/token-refresh/token-health.cron.service';
 import { ConnectToolGuard } from './connect-tool.guard';
 
 // ─── body schemas ──────────────────────────────────────────────────────────
@@ -129,6 +130,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly manualRefresh: ManualRefreshController,
+    private readonly tokenHealth: TokenHealthCronService,
   ) {}
 
   // ─── Overview + health ─────────────────────────────────────────────────
@@ -159,6 +161,29 @@ export class AdminController {
   @Get('rate-limits')
   async rateLimits(): Promise<unknown> {
     return this.admin.rateLimitsSnapshot();
+  }
+
+  /**
+   * Data-access window health (Meta/Threads `data_access_expires_at`).
+   * Serves the daily cron's snapshot; `?refresh=1` re-sweeps on demand
+   * (one /debug_token GET per connected Meta/Threads account).
+   */
+  @Get('token-health')
+  async tokenHealthSnapshot(
+    @Query('refresh') refresh: string | undefined,
+  ): Promise<unknown> {
+    if (refresh === '1' || refresh === 'true') {
+      return this.tokenHealth.runNow();
+    }
+    const snap = await this.tokenHealth.snapshot();
+    return (
+      snap ?? {
+        generatedAt: null,
+        warnDays: null,
+        entries: [],
+        hint: 'no snapshot yet — daily sweep runs at 05:40 UTC, or pass ?refresh=1',
+      }
+    );
   }
 
   @Post('rate-limits/replay')

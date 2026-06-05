@@ -186,8 +186,11 @@ you don't see it, that's why.
 3. Fields & gating — phased:
    - **Phase 1 (no new review!): `publish`** — requires only `threads_basic`,
      which connected accounts already grant. Instant new-post syncs.
-   - **Phase 2 (App Review): `replies` (`threads_read_replies`), `mentions`
-     (`threads_manage_mentions`)** — request Advanced Access with a screencast.
+   - **Phase 2: `replies` (`threads_read_replies`), `mentions`
+     (`threads_manage_mentions`)** — ~~request Advanced Access~~ DONE: both
+     scopes were already approved in the 2025-10-17 App Review submission
+     (verified in the dashboard 2026-06-05). Subscribe the fields directly;
+     no new review needed.
    - **Skip `delete`** for now — it needs `threads_delete`, hard to justify in
      review for a read-only connector; deletions reconcile via the 90-day poll.
 4. Verify: publish a thread from a connected test account → row in

@@ -45,8 +45,7 @@ Today the endpoint returns a snapshot. We have no historical view, no alerting, 
 
 **Trigger:** approach of any token's `data_access_expires_at` (currently 2026-07-26 for the 4 Meta accounts).
 
-- **`data_access_expires_at` monitor** — Meta's app-level `data_access_expires_at` (visible via `/debug_token`) caps how long even a long-lived Page token works. After it passes, the operator must re-authenticate. Schedule a daily check (`scripts/audit-tokens.ts` style) that flags accounts within 14 days of expiry and emits an admin alert.
-- **Threads `data_access_expires_at`** — Threads tokens carry the same field; the proactive refresh in `ThreadsTokenRefreshService.ensureFresh` only handles the access-token expiry, not the underlying data-access window. Add a parallel monitor.
+- ~~**`data_access_expires_at` monitor**~~ DONE 2026-06-05 — `TokenHealthCronService` (`src/modules/token-refresh/token-health.cron.service.ts`) sweeps Meta + Threads accounts daily at 05:40 UTC via `/debug_token`, warns at 14 days, bumps `token_health_alert` metrics, and serves the snapshot at `GET /admin/token-health` (`?refresh=1` to re-sweep on demand). IG-direct tokens are reported as `unsupported` (graph.instagram.com exposes no debug_token edge); Threads goes through `graph.threads.net/debug_token` best-effort — verify the edge works on the first prod sweep.
 - **Verify TikTok account 7 (@alexcriado1)** — `accounts.status='ready'` was forced via SQL on 2026-05-04 with the original token still in place (option B, conservative). Verify the next sync cycle succeeds; if it doesn't, re-OAuth via the UI (the new normalisation in `seedAccount` will handle it correctly).
 
 ## D. Scope and metric coverage
