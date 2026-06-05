@@ -33,17 +33,24 @@ import {
 import type {
   LinkedInBatchResults,
   LinkedInCollection,
+  LinkedInComment,
   LinkedInConnectionsSize,
+  LinkedInFollowerDemographicsElement,
   LinkedInFollowerGainsElement,
   LinkedInImageAsset,
   LinkedInMe,
   LinkedInMemberAnalyticsElement,
   LinkedInMemberFollowersElement,
   LinkedInNetworkSize,
+  LinkedInNotification,
   LinkedInOrganization,
   LinkedInOrganizationAcl,
+  LinkedInPageStatisticsElement,
   LinkedInPost,
+  LinkedInShareStatsAggregateElement,
   LinkedInShareStatsElement,
+  LinkedInSocialMetadata,
+  LinkedInStandardizedEntity,
   LinkedInVideoAsset,
 } from './linkedin-types';
 
@@ -68,7 +75,13 @@ export interface GetMemberAnalyticsArgs extends LinkedInCallContext {
     | 'MEMBERS_REACHED'
     | 'RESHARE'
     | 'REACTION'
-    | 'COMMENT';
+    | 'COMMENT'
+    | 'POST_SAVE'
+    | 'POST_SEND'
+    | 'LINK_CLICKS'
+    | 'PREMIUM_CTA_CLICKS'
+    | 'FOLLOWER_GAINED_FROM_CONTENT'
+    | 'PROFILE_VIEW_FROM_CONTENT';
   aggregation: 'TOTAL' | 'DAILY';
   /** Optional date window; lifetime when omitted. */
   start?: Date;
@@ -250,6 +263,121 @@ export class BoundLinkedInClient {
     if (args.ugcPostUrns?.length)
       path += `&ugcPosts=${restliList(args.ugcPostUrns)}`;
     return this.get(path, args, true, 'FINDER');
+  }
+
+  /** Lifetime follower demographics — follower-statistics WITHOUT timeIntervals. */
+  async getOrganizationFollowerDemographics(
+    args: LinkedInCallContext & { orgUrn: string },
+  ): Promise<LinkedInCollection<LinkedInFollowerDemographicsElement>> {
+    return this.get(
+      `/rest/organizationalEntityFollowerStatistics?q=organizationalEntity` +
+        `&organizationalEntity=${encodeUrn(args.orgUrn)}`,
+      args,
+      true,
+      'FINDER',
+    );
+  }
+
+  /** Org page views/clicks. Lifetime facets when intervals omitted; daily series otherwise. */
+  async getOrganizationPageStatistics(
+    args: LinkedInCallContext & {
+      orgUrn: string;
+      startMs?: number;
+      endMs?: number;
+    },
+  ): Promise<LinkedInCollection<LinkedInPageStatisticsElement>> {
+    let path =
+      `/rest/organizationPageStatistics?q=organization` +
+      `&organization=${encodeUrn(args.orgUrn)}`;
+    if (args.startMs != null && args.endMs != null) {
+      path += `&timeIntervals=${restliTimeIntervals(args.startMs, args.endMs)}`;
+    }
+    return this.get(path, args, true, 'FINDER');
+  }
+
+  /** Org-level share statistics: lifetime aggregate (no intervals) or daily series. */
+  async getShareStatisticsAggregate(
+    args: LinkedInCallContext & {
+      orgUrn: string;
+      startMs?: number;
+      endMs?: number;
+    },
+  ): Promise<LinkedInCollection<LinkedInShareStatsAggregateElement>> {
+    let path =
+      `/rest/organizationalEntityShareStatistics?q=organizationalEntity` +
+      `&organizationalEntity=${encodeUrn(args.orgUrn)}`;
+    if (args.startMs != null && args.endMs != null) {
+      path += `&timeIntervals=${restliTimeIntervals(args.startMs, args.endMs)}`;
+    }
+    return this.get(path, args, true, 'FINDER');
+  }
+
+  /** Per-post reaction-type counts + comment summaries, batched by post URN. */
+  async getSocialMetadata(
+    args: LinkedInCallContext & { postUrns: string[] },
+  ): Promise<LinkedInBatchResults<LinkedInSocialMetadata>> {
+    return this.get(
+      `/rest/socialMetadata?ids=${restliList(args.postUrns)}`,
+      args,
+      true,
+      'BATCH_GET',
+    );
+  }
+
+  /** Comment thread on one post. Restli sub-resource of socialActions. */
+  async getComments(
+    args: LinkedInCallContext & { postUrn: string; start?: number; count?: number },
+  ): Promise<LinkedInCollection<LinkedInComment>> {
+    const start = args.start ?? 0;
+    const count = args.count ?? 50;
+    return this.get(
+      `/rest/socialActions/${encodeUrn(args.postUrn)}/comments?start=${start}&count=${count}`,
+      args,
+      true,
+    );
+  }
+
+  /** Org social-action notifications (mentions, comments…). 60-day retention. */
+  async getOrganizationNotifications(
+    args: LinkedInCallContext & { orgUrn: string; actions: string[]; count?: number },
+  ): Promise<LinkedInCollection<LinkedInNotification>> {
+    const count = args.count ?? 20;
+    // `actions` is a List of enum values — raw, not URNs, so no encoding.
+    return this.get(
+      `/rest/organizationalEntityNotifications?q=criteria` +
+        `&actions=List(${args.actions.join(',')})` +
+        `&organizationalEntity=${encodeUrn(args.orgUrn)}&count=${count}`,
+      args,
+      true,
+      'FINDER',
+    );
+  }
+
+  /** Fetch one post by URN (used to hydrate mention notifications). */
+  async getPost(
+    args: LinkedInCallContext & { postUrn: string },
+  ): Promise<LinkedInPost> {
+    return this.get(`/rest/posts/${encodeUrn(args.postUrn)}`, args, true);
+  }
+
+  /**
+   * Decode standardized-data URN ids (industries / functions / seniorities /
+   * geo) into display names. Unversioned /v2 surface; geo wants a locale.
+   */
+  async getStandardizedNames(
+    args: LinkedInCallContext & {
+      collection: 'industries' | 'functions' | 'seniorities' | 'geo';
+      ids: string[];
+    },
+  ): Promise<LinkedInBatchResults<LinkedInStandardizedEntity>> {
+    const locale =
+      args.collection === 'geo' ? '&locale=(language:en,country:US)' : '';
+    return this.get(
+      `/v2/${args.collection}?ids=List(${args.ids.map(encodeURIComponent).join(',')})${locale}`,
+      args,
+      false,
+      'BATCH_GET',
+    );
   }
 
   /** Batch-resolve image asset URNs → downloadUrl. Max ~20 per call. */

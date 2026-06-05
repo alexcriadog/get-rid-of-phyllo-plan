@@ -20,6 +20,7 @@ import type {
 } from '../../shared/linkedin-api/linkedin-client';
 import type {
   LinkedInPost,
+  LinkedInSocialMetadata,
   LinkedInTotalShareStatistics,
 } from '../../shared/linkedin-api/linkedin-types';
 import { extractAccountId } from '../../shared/meta-graph';
@@ -32,6 +33,7 @@ import {
   POSTS_MAX_PAGES,
   POSTS_PAGE_SIZE,
   SHARE_STATS_BATCH,
+  SOCIAL_METADATA_BATCH,
 } from '../linkedin.constants';
 import {
   linkedInPostToContent,
@@ -70,10 +72,62 @@ export class LinkedInContentFetcher {
     const posts = await this.fetchPosts(callCtx, orgUrn, opts);
     const statsByUrn = await this.fetchStats(callCtx, orgUrn, posts);
     const mediaByUrn = await this.resolveMedia(callCtx, posts);
+    const socialByUrn = await this.fetchSocialMetadata(callCtx, posts);
 
-    return posts.map((p) =>
-      linkedInPostToContent(p, statsByUrn.get(p.id) ?? null, undefined, mediaByUrn),
-    );
+    return posts.map((p) => {
+      const content = linkedInPostToContent(
+        p,
+        statsByUrn.get(p.id) ?? null,
+        undefined,
+        mediaByUrn,
+      );
+      // Merge per-reaction-type breakdown (socialMetadata) into extra.
+      const social = socialByUrn.get(p.id);
+      if (!social?.reactionSummaries) return content;
+      const extra: Record<string, number> = { ...(content.metrics.extra ?? {}) };
+      for (const [type, summary] of Object.entries(social.reactionSummaries)) {
+        if (typeof summary?.count === 'number') {
+          // LIKE → reactionLike, PRAISE → reactionPraise, …
+          const key = `reaction${type.charAt(0)}${type.slice(1).toLowerCase()}`;
+          extra[key] = summary.count;
+        }
+      }
+      if (typeof social.commentSummary?.topLevelCount === 'number') {
+        extra['commentsTopLevel'] = social.commentSummary.topLevelCount;
+      }
+      return {
+        ...content,
+        metrics: { ...content.metrics, extra },
+      };
+    });
+  }
+
+  /** Per-post reaction-type counts via socialMetadata BATCH_GET. Best-effort. */
+  private async fetchSocialMetadata(
+    callCtx: LinkedInCallContext,
+    posts: LinkedInPost[],
+  ): Promise<Map<string, LinkedInSocialMetadata>> {
+    const out = new Map<string, LinkedInSocialMetadata>();
+    const urns = posts.map((p) => p.id);
+    for (let i = 0; i < urns.length; i += SOCIAL_METADATA_BATCH) {
+      const batch = urns.slice(i, i + SOCIAL_METADATA_BATCH);
+      try {
+        const res = await this.client.getSocialMetadata({
+          ...callCtx,
+          postUrns: batch,
+        });
+        for (const [urn, meta] of Object.entries(res.results ?? {})) {
+          out.set(urn, meta);
+        }
+      } catch (err) {
+        this.logger.warn(
+          `socialMetadata batch failed: ${
+            err instanceof Error ? err.message : String(err)
+          } — posts ship without reaction breakdown`,
+        );
+      }
+    }
+    return out;
   }
 
   /**

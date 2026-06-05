@@ -1,21 +1,29 @@
-// LinkedIn audience fetcher — analytics aggregates, no demographics.
+// LinkedIn audience fetcher — analytics aggregates + org demographics.
 //
-// Member (~11 calls): memberFollowersCount q=me + q=dateRange(30d), then
+// Member (~17 calls): memberFollowersCount q=me + q=dateRange(30d), then
 //   memberCreatorPostAnalytics one call PER metric per aggregation:
-//   5× TOTAL + 4× DAILY (DAILY unsupported for MEMBERS_REACHED).
-//   Every metric is best-effort — partial results beat a failed sync.
-// Organization (1 call): organizationalEntityFollowerStatistics
-//   timeIntervals daily gains.
+//   11× TOTAL + 4× DAILY (DAILY unsupported for the rest).
+// Organization (~8-13 calls): follower gains (timeIntervals) + lifetime
+//   follower demographics (7 facets, URNs decoded via standardized data) +
+//   org-level share statistics (lifetime aggregate + daily series) + page
+//   statistics (lifetime facets + daily series).
+//
+// Every call is best-effort — partial snapshots beat failed syncs.
 
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { AudienceData } from '../../shared/platform-types';
+import type {
+  AudienceData,
+  DistributionBucket,
+} from '../../shared/platform-types';
 import type {
   BoundLinkedInClient,
   LinkedInCallContext,
 } from '../../shared/linkedin-api/linkedin-client';
 import type {
   LinkedInDateRange,
+  LinkedInFollowerDemographicsElement,
   LinkedInMemberAnalyticsElement,
+  LinkedInStandardizedEntity,
 } from '../../shared/linkedin-api/linkedin-types';
 import { extractAccountId } from '../../shared/meta-graph';
 import {
@@ -31,9 +39,15 @@ import {
 import {
   buildMemberAudience,
   buildOrgAudience,
+  type OrgAudienceSource,
+  type OrgDemographics,
   type SimpleSeriesPoint,
 } from '../mapper/linkedin-analytics.mapper';
 import { LINKEDIN_API_CLIENT } from '../linkedin.tokens';
+
+const TOP_BUCKETS = 25;
+
+type FacetCollection = 'industries' | 'functions' | 'seniorities' | 'geo';
 
 @Injectable()
 export class LinkedInAudienceFetcher {
@@ -62,6 +76,8 @@ export class LinkedInAudienceFetcher {
     }
     return this.fetchMember(callCtx, canonicalId);
   }
+
+  // ─── member ──────────────────────────────────────────────────────────────
 
   private async fetchMember(
     callCtx: LinkedInCallContext,
@@ -150,6 +166,8 @@ export class LinkedInAudienceFetcher {
     });
   }
 
+  // ─── organization ────────────────────────────────────────────────────────
+
   private async fetchOrg(
     callCtx: LinkedInCallContext,
     canonicalId: string,
@@ -165,9 +183,7 @@ export class LinkedInAudienceFetcher {
         (r.elements ?? [])
           .filter((e) => e.timeRange?.start != null)
           .map((e) => ({
-            date: new Date(e.timeRange?.start as number)
-              .toISOString()
-              .slice(0, 10),
+            date: dayOfMs(e.timeRange?.start as number),
             organic: e.followerGains?.organicFollowerGain ?? 0,
             paid: e.followerGains?.paidFollowerGain ?? 0,
           })),
@@ -177,10 +193,217 @@ export class LinkedInAudienceFetcher {
         return [];
       });
 
-    return buildOrgAudience({
+    const demographics = await this.fetchOrgDemographics(callCtx, orgUrn);
+
+    // Org-level engagement — lifetime aggregate (totals) + daily series.
+    const src: OrgAudienceSource = {
       periodDays: ANALYTICS_PERIOD_DAYS,
       followerGainsDaily: gains,
-    });
+      demographics,
+    };
+
+    await this.client
+      .getShareStatisticsAggregate({ ...callCtx, orgUrn })
+      .then((r) => {
+        const t = r.elements?.[0]?.totalShareStatistics;
+        if (!t) return;
+        src.engagementTotals = {
+          views: t.impressionCount,
+          reach: t.uniqueImpressionsCount,
+          likes: t.likeCount,
+          comments: t.commentCount,
+          shares: t.shareCount,
+          clicks: t.clickCount,
+          engagementRate: t.engagement,
+        };
+      })
+      .catch((err) => this.warn('shareStats(lifetime)', orgUrn, err));
+
+    await this.client
+      .getShareStatisticsAggregate({ ...callCtx, orgUrn, startMs, endMs })
+      .then((r) => {
+        const daily: NonNullable<OrgAudienceSource['engagementDaily']> = {
+          IMPRESSION: [],
+          REACTION: [],
+          COMMENT: [],
+          RESHARE: [],
+        };
+        for (const e of r.elements ?? []) {
+          const t = e.totalShareStatistics;
+          const startTime = e.timeRange?.start;
+          if (!t || startTime == null) continue;
+          const date = dayOfMs(startTime);
+          if (typeof t.impressionCount === 'number')
+            daily.IMPRESSION!.push({ date, value: t.impressionCount });
+          if (typeof t.likeCount === 'number')
+            daily.REACTION!.push({ date, value: t.likeCount });
+          if (typeof t.commentCount === 'number')
+            daily.COMMENT!.push({ date, value: t.commentCount });
+          if (typeof t.shareCount === 'number')
+            daily.RESHARE!.push({ date, value: t.shareCount });
+        }
+        src.engagementDaily = daily;
+      })
+      .catch((err) => this.warn('shareStats(daily)', orgUrn, err));
+
+    // Page statistics — lifetime facets + daily views series.
+    await this.client
+      .getOrganizationPageStatistics({ ...callCtx, orgUrn })
+      .then(async (r) => {
+        const el = r.elements?.[0];
+        if (!el) return;
+        const views = el.totalPageStatistics?.views;
+        src.pageViews = {
+          total: views?.allPageViews?.pageViews,
+          desktop: views?.allDesktopPageViews?.pageViews,
+          mobile: views?.allMobilePageViews?.pageViews,
+        };
+        const geoFacet = (el.pageStatisticsByGeoCountry ?? [])
+          .map((g) => ({
+            urn: g.geo ?? '',
+            value: g.pageStatistics?.views?.allPageViews?.pageViews ?? 0,
+          }))
+          .filter((g) => g.urn && g.value > 0);
+        if (geoFacet.length > 0) {
+          const names = await this.decodeNames(
+            callCtx,
+            'geo',
+            geoFacet.map((g) => g.urn),
+          );
+          src.pageViews.visitorCountries = toBuckets(
+            geoFacet.map((g) => ({
+              label: names.get(g.urn) ?? urnTail(g.urn),
+              value: g.value,
+            })),
+          );
+        }
+      })
+      .catch((err) => this.warn('pageStats(lifetime)', orgUrn, err));
+
+    await this.client
+      .getOrganizationPageStatistics({ ...callCtx, orgUrn, startMs, endMs })
+      .then((r) => {
+        const daily = (r.elements ?? [])
+          .filter((e) => e.timeRange?.start != null)
+          .map((e) => ({
+            date: dayOfMs(e.timeRange?.start as number),
+            value: e.totalPageStatistics?.views?.allPageViews?.pageViews ?? 0,
+          }));
+        if (daily.length > 0) {
+          src.pageViews = { ...(src.pageViews ?? {}), daily };
+        }
+      })
+      .catch((err) => this.warn('pageStats(daily)', orgUrn, err));
+
+    return buildOrgAudience(src);
+  }
+
+  /** Lifetime follower demographics, URNs decoded to display names. */
+  private async fetchOrgDemographics(
+    callCtx: LinkedInCallContext,
+    orgUrn: string,
+  ): Promise<OrgDemographics | undefined> {
+    let el: LinkedInFollowerDemographicsElement | undefined;
+    try {
+      const res = await this.client.getOrganizationFollowerDemographics({
+        ...callCtx,
+        orgUrn,
+      });
+      el = res.elements?.[0];
+    } catch (err) {
+      this.warn('followerDemographics', orgUrn, err);
+      return undefined;
+    }
+    if (!el) return undefined;
+
+    const facet = async (
+      rows:
+        | Array<
+            { followerCounts?: { organicFollowerCount?: number } } & Record<
+              string,
+              unknown
+            >
+          >
+        | undefined,
+      urnField: string,
+      collection: FacetCollection | null,
+    ): Promise<DistributionBucket[] | undefined> => {
+      const items = (rows ?? [])
+        .map((r) => ({
+          key: typeof r[urnField] === 'string' ? (r[urnField] as string) : '',
+          value: r.followerCounts?.organicFollowerCount ?? 0,
+        }))
+        .filter((r) => r.key && r.value > 0);
+      if (items.length === 0) return undefined;
+      let names = new Map<string, string>();
+      if (collection) {
+        names = await this.decodeNames(
+          callCtx,
+          collection,
+          items.map((i) => i.key),
+        );
+      }
+      return toBuckets(
+        items.map((i) => ({
+          label: names.get(i.key) ?? urnTail(i.key),
+          value: i.value,
+        })),
+      );
+    };
+
+    return {
+      country: await facet(el.followerCountsByGeoCountry, 'geo', 'geo'),
+      industry: await facet(
+        el.followerCountsByIndustry,
+        'industry',
+        'industries',
+      ),
+      seniority: await facet(
+        el.followerCountsBySeniority,
+        'seniority',
+        'seniorities',
+      ),
+      function: await facet(
+        el.followerCountsByFunction,
+        'function',
+        'functions',
+      ),
+      // Enum strings, no decoration needed.
+      companySize: await facet(
+        el.followerCountsByStaffCountRange,
+        'staffCountRange',
+        null,
+      ),
+    };
+  }
+
+  /** Decode standardized-data URNs → display names. Best-effort. */
+  private async decodeNames(
+    callCtx: LinkedInCallContext,
+    collection: FacetCollection,
+    urns: string[],
+  ): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const ids = [...new Set(urns.map(urnTail))].filter(Boolean);
+    if (ids.length === 0) return out;
+    try {
+      const res = await this.client.getStandardizedNames({
+        ...callCtx,
+        collection,
+        ids,
+      });
+      for (const [id, entity] of Object.entries(res.results ?? {})) {
+        const name = entityName(entity);
+        if (!name) continue;
+        // Key back by full URN for caller convenience.
+        for (const urn of urns) {
+          if (urnTail(urn) === id) out.set(urn, name);
+        }
+      }
+    } catch (err) {
+      this.warn(`decode(${collection})`, ids.join(','), err);
+    }
+    return out;
   }
 
   private warn(what: string, id: string, err: unknown): void {
@@ -198,6 +421,34 @@ function dateOf(range: LinkedInDateRange | undefined): string {
   const mm = String(s.month).padStart(2, '0');
   const dd = String(s.day).padStart(2, '0');
   return `${s.year}-${mm}-${dd}`;
+}
+
+function dayOfMs(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function urnTail(urn: string): string {
+  return urn.split(':').pop() ?? urn;
+}
+
+function entityName(e: LinkedInStandardizedEntity): string | null {
+  if (e.localizedName) return e.localizedName;
+  if (e.defaultLocalizedName?.value) return e.defaultLocalizedName.value;
+  const localized = e.name?.localized;
+  if (localized) {
+    const first = Object.values(localized)[0];
+    if (typeof first === 'string') return first;
+  }
+  return null;
+}
+
+function toBuckets(
+  items: Array<{ label: string; value: number }>,
+): DistributionBucket[] {
+  return items
+    .sort((a, b) => b.value - a.value)
+    .slice(0, TOP_BUCKETS)
+    .map((i) => ({ label: i.label, value: i.value, unit: 'count' as const }));
 }
 
 function sumCounts(

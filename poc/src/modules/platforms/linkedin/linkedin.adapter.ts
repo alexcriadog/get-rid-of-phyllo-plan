@@ -16,6 +16,7 @@ import {
 } from '../shared/platform-adapter.port';
 import type {
   AudienceData,
+  CommentData,
   ContentData,
   FetchOpts,
   ProfileData,
@@ -29,6 +30,8 @@ import { LINKEDIN_API_CLIENT } from './linkedin.tokens';
 import { LinkedInProfileFetcher } from './fetcher/linkedin-profile.fetcher';
 import { LinkedInAudienceFetcher } from './fetcher/linkedin-audience.fetcher';
 import { LinkedInContentFetcher } from './fetcher/linkedin-content.fetcher';
+import { LinkedInCommentsFetcher } from './fetcher/linkedin-comments.fetcher';
+import { LinkedInMentionsFetcher } from './fetcher/linkedin-mentions.fetcher';
 
 @Injectable()
 export class LinkedInAdapter implements PlatformAdapter {
@@ -42,6 +45,8 @@ export class LinkedInAdapter implements PlatformAdapter {
     private readonly profileFetcher: LinkedInProfileFetcher,
     private readonly audienceFetcher: LinkedInAudienceFetcher,
     private readonly contentFetcher: LinkedInContentFetcher,
+    private readonly commentsFetcher: LinkedInCommentsFetcher,
+    private readonly mentionsFetcher: LinkedInMentionsFetcher,
   ) {
     void this.linkedInClient;
   }
@@ -90,5 +95,25 @@ export class LinkedInAdapter implements PlatformAdapter {
   ): Promise<ContentData[]> {
     const token = await this.freshToken(metadata, accessToken);
     return this.contentFetcher.fetch(token, canonicalId, opts, metadata);
+  }
+
+  async fetchComments(
+    accessToken: string,
+    canonicalId: string,
+    opts: FetchOpts,
+    metadata?: Record<string, unknown>,
+  ): Promise<CommentData[]> {
+    const token = await this.freshToken(metadata, accessToken);
+    return this.commentsFetcher.fetch(token, canonicalId, opts, metadata);
+  }
+
+  async fetchMentions(
+    accessToken: string,
+    canonicalId: string,
+    opts: FetchOpts,
+    metadata?: Record<string, unknown>,
+  ): Promise<ContentData[]> {
+    const token = await this.freshToken(metadata, accessToken);
+    return this.mentionsFetcher.fetch(token, canonicalId, opts, metadata);
   }
 }

@@ -138,6 +138,9 @@ const CADENCE_DEFAULTS: CadenceRow[] = [
   { platform: 'linkedin', product: 'identity', defaultIntervalSeconds: 21600 },
   { platform: 'linkedin', product: 'audience', defaultIntervalSeconds: 86400 },
   { platform: 'linkedin', product: 'engagement_new', defaultIntervalSeconds: 21600 },
+  // Comments thread on ~10 recent posts ≈ 2-12 calls; mentions ≈ 2-11 calls.
+  { platform: 'linkedin', product: 'comments', defaultIntervalSeconds: 21600 },
+  { platform: 'linkedin', product: 'mentions', defaultIntervalSeconds: 43200 },
 ];
 
 async function seedCadences(): Promise<number> {
@@ -312,6 +315,7 @@ const PRODUCTS_BY_PLATFORM_FOR_BACKFILL: Record<string, string[]> = {
   ],
   // Twitch — see accounts.service.ts PRODUCTS_BY_PLATFORM for rationale.
   twitch: ['identity', 'engagement_new'],
+  linkedin: ['identity', 'audience', 'engagement_new', 'comments', 'mentions'],
 };
 
 /**

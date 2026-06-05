@@ -1,13 +1,17 @@
 // LinkedIn support matrix.
 //
-// Three products:
+// Five products:
 //   - identity: /v2/me (+ connections + memberFollowersCount) for members;
 //     /rest/organizations + networkSizes for orgs.
-//   - audience: NO demographics on either surface. Member analytics
-//     aggregates + follower series land in accountInsights.
-//   - engagement_new: ORG posts only. Member posts are not listable —
-//     r_member_social is a closed LinkedIn permission ("not accepting
-//     access requests"); member accounts return zero content items.
+//   - audience: org accounts get follower demographics (country/industry/
+//     seniority/function/companySize), page-view stats and org-level daily
+//     engagement series; members get analytics aggregates + follower series
+//     in accountInsights (LinkedIn exposes no member demographics).
+//   - engagement_new: ORG posts only (+ per-reaction-type breakdown via
+//     socialMetadata). Member posts are not listable — r_member_social is a
+//     closed LinkedIn permission; member accounts return zero content items.
+//   - comments: org post comment threads (actor URNs, no display names).
+//   - mentions: posts by others that @-mention the org (notifications API).
 
 import type { SupportMatrix } from '../shared/platform-types';
 
@@ -41,17 +45,24 @@ export const LINKEDIN_SUPPORT_MATRIX: SupportMatrix = {
   audience: {
     genderDistribution: 'not_supported',
     ageDistribution: 'not_supported',
-    countryDistribution: 'not_supported',
+    countryDistribution: 'supported', // org rows only (follower geo)
     cityDistribution: 'not_supported',
+    industryDistribution: 'supported', // org rows only
+    seniorityDistribution: 'supported', // org rows only
+    functionDistribution: 'supported', // org rows only
+    companySizeDistribution: 'supported', // org rows only
     interests: 'not_supported',
     audienceActivity: 'not_supported',
     audienceActivityWeekly: 'not_supported',
   },
   comments: {
-    list: 'not_supported',
-    threaded: 'not_supported',
-    likes: 'not_supported',
+    list: 'supported', // org rows only
+    threaded: 'supported',
+    likes: 'supported',
     pinned: 'not_supported',
+  },
+  mentions: {
+    list: 'supported', // org rows only — SHARE_MENTION notifications (60d)
   },
   engagement_deep: {
     perVideoMetrics: 'not_supported',

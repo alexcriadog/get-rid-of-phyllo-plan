@@ -198,6 +198,14 @@ export interface AudienceData {
   ageDistribution: DistributionBucket[];
   countryDistribution: DistributionBucket[];
   cityDistribution: DistributionBucket[];
+  /**
+   * Professional-graph facets (LinkedIn org followers). Optional and
+   * platform-specific — other platforms leave them undefined.
+   */
+  industryDistribution?: DistributionBucket[];
+  seniorityDistribution?: DistributionBucket[];
+  functionDistribution?: DistributionBucket[];
+  companySizeDistribution?: DistributionBucket[];
   /** Demographics of accounts that WERE reached (wider than followers). */
   reachedDemographics?: DemographicDistributions;
   /** Demographics of accounts that engaged. */

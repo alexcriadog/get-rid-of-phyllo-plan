@@ -340,9 +340,26 @@ export const PLATFORM_CATALOG: Readonly<
     {
       id: 'engagement_new',
       label: 'Org posts + metrics',
-      hint: 'Organization posts with share statistics. Member posts are not exposed by LinkedIn (r_member_social is a closed permission).',
+      hint: 'Organization posts with share statistics + per-reaction-type breakdown. Member posts are not exposed by LinkedIn (r_member_social is a closed permission).',
       default: true,
-      scopes: ['r_organization_social'],
+      // r_organization_social_feed → socialMetadata reaction breakdowns.
+      scopes: ['r_organization_social', 'r_organization_social_feed'],
+    },
+    {
+      id: 'comments',
+      label: 'Comments on org posts',
+      hint: 'Comment threads on recent organization posts',
+      default: true,
+      scopes: ['r_organization_social_feed'],
+    },
+    {
+      id: 'mentions',
+      label: 'Org mentions',
+      hint: 'Posts by others that @-mention the organization (notifications API, 60-day retention)',
+      default: true,
+      // organizationalEntityNotifications needs rw_organization_admin,
+      // already carried unconditionally by identity.
+      scopes: [],
     },
   ],
 };

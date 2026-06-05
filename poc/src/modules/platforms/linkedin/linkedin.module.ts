@@ -17,6 +17,8 @@ import { LINKEDIN_API_CLIENT } from './linkedin.tokens';
 import { LinkedInProfileFetcher } from './fetcher/linkedin-profile.fetcher';
 import { LinkedInAudienceFetcher } from './fetcher/linkedin-audience.fetcher';
 import { LinkedInContentFetcher } from './fetcher/linkedin-content.fetcher';
+import { LinkedInCommentsFetcher } from './fetcher/linkedin-comments.fetcher';
+import { LinkedInMentionsFetcher } from './fetcher/linkedin-mentions.fetcher';
 
 @Module({
   imports: [LinkedInApiModule],
@@ -26,6 +28,8 @@ import { LinkedInContentFetcher } from './fetcher/linkedin-content.fetcher';
     LinkedInProfileFetcher,
     LinkedInAudienceFetcher,
     LinkedInContentFetcher,
+    LinkedInCommentsFetcher,
+    LinkedInMentionsFetcher,
     {
       provide: LINKEDIN_API_CLIENT,
       useFactory: (client: LinkedInClient, strategy: LinkedInRateLimitStrategy) =>

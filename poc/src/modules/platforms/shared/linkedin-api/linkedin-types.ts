@@ -114,6 +114,113 @@ export interface LinkedInFollowerGainsElement {
   organizationalEntity?: string;
 }
 
+interface LinkedInFollowerCounts {
+  organicFollowerCount?: number;
+  paidFollowerCount?: number;
+}
+
+/** Lifetime follower demographics (follower-statistics WITHOUT timeIntervals). */
+export interface LinkedInFollowerDemographicsElement {
+  followerCountsBySeniority?: Array<{
+    seniority?: string; // urn:li:seniority:N
+    followerCounts?: LinkedInFollowerCounts;
+  }>;
+  followerCountsByFunction?: Array<{
+    function?: string; // urn:li:function:N
+    followerCounts?: LinkedInFollowerCounts;
+  }>;
+  followerCountsByIndustry?: Array<{
+    industry?: string; // urn:li:industry:N
+    followerCounts?: LinkedInFollowerCounts;
+  }>;
+  followerCountsByGeoCountry?: Array<{
+    geo?: string; // urn:li:geo:N
+    followerCounts?: LinkedInFollowerCounts;
+  }>;
+  followerCountsByStaffCountRange?: Array<{
+    staffCountRange?: string; // SIZE_2_TO_10 …
+    followerCounts?: LinkedInFollowerCounts;
+  }>;
+  followerCountsByAssociationType?: Array<{
+    associationType?: string | null; // EMPLOYEE | null
+    followerCounts?: LinkedInFollowerCounts;
+  }>;
+  organizationalEntity?: string;
+}
+
+interface LinkedInPageViewsBucket {
+  pageViews?: number;
+  uniquePageViews?: number;
+}
+
+export interface LinkedInPageStatisticsElement {
+  totalPageStatistics?: {
+    views?: {
+      allPageViews?: LinkedInPageViewsBucket;
+      allDesktopPageViews?: LinkedInPageViewsBucket;
+      allMobilePageViews?: LinkedInPageViewsBucket;
+      overviewPageViews?: LinkedInPageViewsBucket;
+      careersPageViews?: LinkedInPageViewsBucket;
+      jobsPageViews?: LinkedInPageViewsBucket;
+      lifeAtPageViews?: LinkedInPageViewsBucket;
+    };
+    clicks?: Record<string, unknown>;
+  };
+  pageStatisticsByGeoCountry?: Array<{
+    geo?: string;
+    pageStatistics?: {
+      views?: { allPageViews?: LinkedInPageViewsBucket };
+    };
+  }>;
+  timeRange?: { start?: number; end?: number };
+  organization?: string;
+}
+
+/** Aggregate / time-bound org share statistics element. */
+export interface LinkedInShareStatsAggregateElement {
+  totalShareStatistics?: LinkedInTotalShareStatistics;
+  timeRange?: { start?: number; end?: number };
+  organizationalEntity?: string;
+}
+
+/** socialMetadata — per-reaction-type counts + comment summary. */
+export interface LinkedInSocialMetadata {
+  reactionSummaries?: Record<string, { count?: number }>;
+  commentSummary?: { count?: number; topLevelCount?: number };
+  commentsState?: string;
+  entity?: string;
+}
+
+export interface LinkedInComment {
+  id?: string | number;
+  $URN?: string;
+  commentUrn?: string;
+  actor?: string; // urn:li:person|organization:...
+  object?: string; // parent post urn
+  message?: { text?: string };
+  created?: { time?: number };
+  parentComment?: string;
+  likesSummary?: {
+    totalLikes?: number;
+    aggregatedTotalLikes?: number;
+  };
+}
+
+export interface LinkedInNotification {
+  action?: string; // SHARE_MENTION | COMMENT | LIKE | SHARE | ...
+  organizationalEntity?: string;
+  generatedActivity?: string;
+  sourcePost?: string; // urn:li:share|ugcPost:...
+  lastModifiedAt?: number;
+}
+
+/** Standardized-data entity (industries / functions / seniorities / geo). */
+export interface LinkedInStandardizedEntity {
+  localizedName?: string;
+  name?: { localized?: Record<string, string> };
+  defaultLocalizedName?: { value?: string };
+}
+
 /** /rest/images asset — downloadUrl expires (downloadUrlExpiresAt, epoch ms). */
 export interface LinkedInImageAsset {
   downloadUrl?: string;
