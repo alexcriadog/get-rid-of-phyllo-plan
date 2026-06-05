@@ -157,15 +157,22 @@ The ingest endpoints are implemented and deployed:
 - `GET/POST /webhooks/ingest/threads` — hub.challenge verify + signature check,
   enqueues HIGH `engagement_new` syncs for publish/replies/mentions/delete.
 
-### TikTok (no review gate — dashboard only)
+### TikTok (dashboard; revision review since app is Live)
 
-1. developers.tiktok.com → our app → **Webhooks** section → set callback URL:
+Webhooks is an **addable product** (like Login Kit), NOT a fixed section — if
+you don't see it, that's why.
+
+1. developers.tiktok.com → our app (Camaleonic Analytics) → **+ Create
+   Revision** (live apps are read-only).
+2. In the revision: **Products → Add products → Webhooks** → set callback URL:
    `https://smconnector.camaleonicanalytics.com/api/poc/webhooks/ingest/tiktok`
-2. Env: `TIKTOK_CLIENT_SECRET` — already set in prod (token refresh uses it).
+   → Test URL → Submit the revision (adding a product re-runs app review;
+   webhooks itself has no extra approval gate).
+3. Env: `TIKTOK_CLIENT_SECRET` — already set in prod (token refresh uses it).
    The signature is HMAC'd with this same secret; nothing new to add.
-3. Verify: revoke a test TikTok connection from the TikTok app → the row should
-   appear in `/admin/webhooks` as `enqueued`-style processed and the account
-   should flip to `disconnected` (check `account.disconnected` outbound event).
+4. Verify: revoke a test TikTok connection from the TikTok app → the row should
+   appear in `/admin/webhooks` as processed and the account should flip to
+   `disconnected` (check `account.disconnected` outbound event).
 
 ### Threads (dashboard + App Review for some fields)
 
