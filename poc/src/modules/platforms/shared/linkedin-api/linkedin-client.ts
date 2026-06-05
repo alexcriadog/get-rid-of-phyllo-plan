@@ -135,9 +135,11 @@ export class BoundLinkedInClient {
   async getConnectionsSize(
     args: LinkedInCallContext & { personId: string },
   ): Promise<LinkedInConnectionsSize> {
-    // URN sits literally in the path (doc example keeps colons unencoded).
+    // The URN in the path MUST be percent-encoded. The doc example shows raw
+    // colons but the live API rejects them with 400 ILLEGAL_ARGUMENT
+    // "Syntax exception in path variables" (verified in prod 2026-06-05).
     return this.get(
-      `/v2/connections/urn:li:person:${args.personId}`,
+      `/v2/connections/${encodeUrn(`urn:li:person:${args.personId}`)}`,
       args,
       false,
     );
