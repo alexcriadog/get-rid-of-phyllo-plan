@@ -258,25 +258,71 @@ export class LinkedInAudienceFetcher {
           desktop: views?.allDesktopPageViews?.pageViews,
           mobile: views?.allMobilePageViews?.pageViews,
         };
-        const geoFacet = (el.pageStatisticsByGeoCountry ?? [])
-          .map((g) => ({
-            urn: g.geo ?? '',
-            value: g.pageStatistics?.views?.allPageViews?.pageViews ?? 0,
-          }))
-          .filter((g) => g.urn && g.value > 0);
-        if (geoFacet.length > 0) {
-          const names = await this.decodeNames(
-            callCtx,
-            'geo',
-            geoFacet.map((g) => g.urn),
-          );
-          src.pageViews.visitorCountries = toBuckets(
-            geoFacet.map((g) => ({
-              label: names.get(g.urn) ?? urnTail(g.urn),
-              value: g.value,
+        // Visitor demographics — the 5 facets of the Page admin card
+        // (Location / Industry / Seniority / Job function / Company size),
+        // all carried in this same lifetime response.
+        const visitorFacet = async (
+          rows:
+            | Array<
+                {
+                  pageStatistics?: {
+                    views?: { allPageViews?: { pageViews?: number } };
+                  };
+                } & Record<string, unknown>
+              >
+            | undefined,
+          keyField: string,
+          collection: FacetCollection | null,
+        ): Promise<DistributionBucket[] | undefined> => {
+          const items = (rows ?? [])
+            .map((r) => ({
+              key:
+                typeof r[keyField] === 'string' ? (r[keyField] as string) : '',
+              value: r.pageStatistics?.views?.allPageViews?.pageViews ?? 0,
+            }))
+            .filter((r) => r.key && r.value > 0);
+          if (items.length === 0) return undefined;
+          let names = new Map<string, string>();
+          if (collection) {
+            names = await this.decodeNames(
+              callCtx,
+              collection,
+              items.map((i) => i.key),
+            );
+          }
+          return toBuckets(
+            items.map((i) => ({
+              label: names.get(i.key) ?? urnTail(i.key),
+              value: i.value,
             })),
           );
-        }
+        };
+
+        src.pageViews.visitorCountries = await visitorFacet(
+          el.pageStatisticsByGeoCountry,
+          'geo',
+          'geo',
+        );
+        src.pageViews.visitorIndustries = await visitorFacet(
+          el.pageStatisticsByIndustryV2,
+          'industryV2',
+          'industries',
+        );
+        src.pageViews.visitorSeniorities = await visitorFacet(
+          el.pageStatisticsBySeniority,
+          'seniority',
+          'seniorities',
+        );
+        src.pageViews.visitorFunctions = await visitorFacet(
+          el.pageStatisticsByFunction,
+          'function',
+          'functions',
+        );
+        src.pageViews.visitorCompanySizes = await visitorFacet(
+          el.pageStatisticsByStaffCountRange,
+          'staffCountRange',
+          null,
+        );
       })
       .catch((err) => this.warn('pageStats(lifetime)', orgUrn, err));
 

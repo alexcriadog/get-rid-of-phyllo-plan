@@ -126,8 +126,25 @@ export interface OrgAudienceSource {
     desktop?: number;
     mobile?: number;
     daily?: SimpleSeriesPoint[];
+    /** Visitor demographics (the Page admin "Visitor demographics" card). */
     visitorCountries?: DistributionBucket[];
+    visitorIndustries?: DistributionBucket[];
+    visitorSeniorities?: DistributionBucket[];
+    visitorFunctions?: DistributionBucket[];
+    visitorCompanySizes?: DistributionBucket[];
   };
+}
+
+function hasVisitorDemographics(
+  pv: OrgAudienceSource['pageViews'],
+): boolean {
+  return Boolean(
+    pv?.visitorCountries?.length ||
+      pv?.visitorIndustries?.length ||
+      pv?.visitorSeniorities?.length ||
+      pv?.visitorFunctions?.length ||
+      pv?.visitorCompanySizes?.length,
+  );
 }
 
 export function buildOrgAudience(src: OrgAudienceSource): AudienceData {
@@ -158,10 +175,24 @@ export function buildOrgAudience(src: OrgAudienceSource): AudienceData {
     ...(src.demographics?.companySize
       ? { companySizeDistribution: src.demographics.companySize }
       : {}),
-    ...(src.pageViews?.visitorCountries?.length
+    ...(hasVisitorDemographics(src.pageViews)
       ? {
           reachedDemographics: {
-            countryDistribution: src.pageViews.visitorCountries,
+            ...(src.pageViews?.visitorCountries?.length
+              ? { countryDistribution: src.pageViews.visitorCountries }
+              : {}),
+            ...(src.pageViews?.visitorIndustries?.length
+              ? { industryDistribution: src.pageViews.visitorIndustries }
+              : {}),
+            ...(src.pageViews?.visitorSeniorities?.length
+              ? { seniorityDistribution: src.pageViews.visitorSeniorities }
+              : {}),
+            ...(src.pageViews?.visitorFunctions?.length
+              ? { functionDistribution: src.pageViews.visitorFunctions }
+              : {}),
+            ...(src.pageViews?.visitorCompanySizes?.length
+              ? { companySizeDistribution: src.pageViews.visitorCompanySizes }
+              : {}),
           },
         }
       : {}),

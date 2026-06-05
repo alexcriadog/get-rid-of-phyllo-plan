@@ -153,6 +153,10 @@ interface LinkedInPageViewsBucket {
   uniquePageViews?: number;
 }
 
+interface LinkedInPageFacetStats {
+  views?: { allPageViews?: LinkedInPageViewsBucket };
+}
+
 export interface LinkedInPageStatisticsElement {
   totalPageStatistics?: {
     views?: {
@@ -166,11 +170,26 @@ export interface LinkedInPageStatisticsElement {
     };
     clicks?: Record<string, unknown>;
   };
+  // Visitor-demographics facets (the Page admin "Visitor demographics" card).
   pageStatisticsByGeoCountry?: Array<{
     geo?: string;
-    pageStatistics?: {
-      views?: { allPageViews?: LinkedInPageViewsBucket };
-    };
+    pageStatistics?: LinkedInPageFacetStats;
+  }>;
+  pageStatisticsByIndustryV2?: Array<{
+    industryV2?: string; // urn:li:industry:N
+    pageStatistics?: LinkedInPageFacetStats;
+  }>;
+  pageStatisticsBySeniority?: Array<{
+    seniority?: string; // urn:li:seniority:N
+    pageStatistics?: LinkedInPageFacetStats;
+  }>;
+  pageStatisticsByFunction?: Array<{
+    function?: string; // urn:li:function:N
+    pageStatistics?: LinkedInPageFacetStats;
+  }>;
+  pageStatisticsByStaffCountRange?: Array<{
+    staffCountRange?: string; // SIZE_11_TO_50 …
+    pageStatistics?: LinkedInPageFacetStats;
   }>;
   timeRange?: { start?: number; end?: number };
   organization?: string;

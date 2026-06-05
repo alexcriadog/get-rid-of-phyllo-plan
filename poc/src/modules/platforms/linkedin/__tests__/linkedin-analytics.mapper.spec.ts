@@ -95,6 +95,16 @@ describe('buildOrgAudience', () => {
         mobile: 232,
         daily: [{ date: '2026-05-04', value: 20 }],
         visitorCountries: [{ label: 'Spain', value: 12, unit: 'count' }],
+        visitorIndustries: [
+          { label: 'Marketing Services', value: 49, unit: 'count' },
+        ],
+        visitorSeniorities: [{ label: 'Senior', value: 9, unit: 'count' }],
+        visitorFunctions: [
+          { label: 'Business Development', value: 7, unit: 'count' },
+        ],
+        visitorCompanySizes: [
+          { label: 'SIZE_11_TO_50', value: 5, unit: 'count' },
+        ],
       },
     });
     expect(audience.countryDistribution).toEqual([
@@ -109,6 +119,18 @@ describe('buildOrgAudience', () => {
     expect(audience.reachedDemographics?.countryDistribution).toEqual([
       { label: 'Spain', value: 12, unit: 'count' },
     ]);
+    expect(audience.reachedDemographics?.industryDistribution?.[0]?.label).toBe(
+      'Marketing Services',
+    );
+    expect(
+      audience.reachedDemographics?.seniorityDistribution?.[0]?.value,
+    ).toBe(9);
+    expect(
+      audience.reachedDemographics?.functionDistribution?.[0]?.label,
+    ).toBe('Business Development');
+    expect(
+      audience.reachedDemographics?.companySizeDistribution?.[0]?.label,
+    ).toBe('SIZE_11_TO_50');
     const i = audience.accountInsights;
     expect(i?.views).toBe(9000);
     expect(i?.reach).toBe(4000);

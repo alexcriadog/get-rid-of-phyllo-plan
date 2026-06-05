@@ -98,6 +98,14 @@ export interface DemographicDistributions {
   ageDistribution?: DistributionBucket[];
   countryDistribution?: DistributionBucket[];
   cityDistribution?: DistributionBucket[];
+  /**
+   * Professional-graph facets (LinkedIn page-visitor demographics).
+   * Optional and platform-specific.
+   */
+  industryDistribution?: DistributionBucket[];
+  seniorityDistribution?: DistributionBucket[];
+  functionDistribution?: DistributionBucket[];
+  companySizeDistribution?: DistributionBucket[];
   /** Per-breakdown errors when the platform refused (permissions, audience size, etc.). */
   errors?: DemographicBreakdownError[];
   /**
