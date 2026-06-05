@@ -10,6 +10,8 @@ import axios from 'axios';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
+import { RedisService } from '@shared/redis/redis.service';
+import { purgeV1CacheForWorkspace } from '@/common/interceptors/cache.interceptor';
 import { OutboundWebhooksService } from '@modules/outbound-webhooks/outbound-webhooks.service';
 import { PRODUCTS_BY_PLATFORM, type Platform } from './products.catalog';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
@@ -80,6 +82,7 @@ export class AccountsService {
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
     private readonly workspaces: WorkspacesService,
+    private readonly redis: RedisService,
     // Optional: when AccountsModule is imported into a process that doesn't
     // wire OutboundWebhooks (e.g. the worker), seeding still succeeds —
     // emit is just a no-op.
@@ -177,7 +180,7 @@ export class AccountsService {
           } as Prisma.InputJsonValue)
         : Prisma.JsonNull;
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // Look up first so we can decide whether re-OAuth should also resume an
       // auto-paused account. We only override syncTier when it's currently
       // 'paused' — that preserves deliberate 'lite'/'demo' tiers across
@@ -335,6 +338,31 @@ export class AccountsService {
         sync_jobs_created: jobIds,
       };
     });
+
+    // Stale-read guard: cached /v1 product responses (5-min TTL) may predate
+    // the prune above — a connection narrowed to fewer products must not keep
+    // serving the old products from cache. Fire-and-forget.
+    this.purgeWorkspaceCache(workspaceId);
+    return result;
+  }
+
+  /**
+   * Drop the workspace's cached /v1 reads so a scope change (re-seed prune /
+   * disconnect) is visible immediately instead of after the cache TTL.
+   * Best-effort: on Redis failure the cache self-expires in 5 minutes anyway.
+   */
+  private purgeWorkspaceCache(workspaceId: string): void {
+    purgeV1CacheForWorkspace(this.redis.client, workspaceId)
+      .then((n) => {
+        if (n > 0) {
+          this.logger.log(
+            `Purged ${n} cached /v1 read(s) for workspace ${workspaceId}`,
+          );
+        }
+      })
+      .catch(() => {
+        // Best-effort by design.
+      });
   }
 
   /**
@@ -528,6 +556,10 @@ export class AccountsService {
         data: { status: 'idle', nextRunAt: null },
       }),
     ]);
+
+    // Disconnected account data must stop being served immediately, not
+    // after the /v1 cache TTL. Fire-and-forget.
+    this.purgeWorkspaceCache(workspaceId);
 
     // Fire-and-forget — webhook delivery must not block the response or
     // roll back the disconnect. Test-mode accounts never emit (see
