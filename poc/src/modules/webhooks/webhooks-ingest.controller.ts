@@ -13,15 +13,19 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { Prisma } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { PrismaService } from '@shared/database/prisma.service';
 import { BullMqService, SyncJobPayload } from '@shared/redis/bullmq.service';
 import { MetricsService } from '@shared/metrics/metrics.service';
 import { FIELD_TO_PRODUCT } from './meta-webhook-fields';
+import { InboundWebhookLogService } from './inbound-webhook-log.service';
+import {
+  extractRawBody,
+  payloadSnippet,
+  verifyMetaHubSignature,
+} from './webhook-ingest.util';
 
 const SYNC_QUEUE_NAME = 'sync';
-const PAYLOAD_SNIPPET_MAX_BYTES = 2048;
 
 interface MetaChange {
   field?: string;
@@ -47,6 +51,7 @@ export class WebhooksIngestController {
     private readonly prisma: PrismaService,
     private readonly bullmq: BullMqService,
     private readonly metrics: MetricsService,
+    private readonly webhookLog: InboundWebhookLogService,
   ) {}
 
   /**
@@ -79,18 +84,22 @@ export class WebhooksIngestController {
     @Req() req: Request,
     @Headers('x-hub-signature-256') signatureHeader: string | undefined,
   ): Promise<void> {
-    const rawBody = this.extractRawBody(req);
-    const signatureValid = this.verifySignature(rawBody, signatureHeader);
+    const rawBody = extractRawBody(req);
+    const signatureValid = verifyMetaHubSignature(
+      rawBody,
+      signatureHeader,
+      process.env.META_APP_SECRET,
+    );
 
     if (!signatureValid) {
       // Log the invalid attempt so the admin UI silence detector can show
       // these — use a synthetic event id so dedupe still works.
       const syntheticEventId = createHash('sha256').update(rawBody).digest('hex');
-      await this.recordWebhook(
+      await this.webhookLog.record(
         'meta',
         syntheticEventId,
         false,
-        this.snippet(rawBody),
+        payloadSnippet(rawBody),
         false,
         false,
       );
@@ -124,11 +133,11 @@ export class WebhooksIngestController {
       .update(`${entryId}:${entryTime}:${JSON.stringify(change)}`)
       .digest('hex');
 
-    const inserted = await this.recordWebhook(
+    const inserted = await this.webhookLog.record(
       'meta',
       eventId,
       true,
-      this.snippet(rawBody),
+      payloadSnippet(rawBody),
       false,
       false,
     );
@@ -168,10 +177,7 @@ export class WebhooksIngestController {
     // synthetic jobId here would also crash the worker, which does
     // BigInt(jobId).)
     if (!syncJob) {
-      await this.prisma.inboundWebhookLog.updateMany({
-        where: { platform: 'meta', eventId },
-        data: { accountResolved: true },
-      });
+      await this.webhookLog.markResolved('meta', eventId, false);
       this.metrics.incr('webhook_skipped_no_product', {
         platform: 'meta',
         product,
@@ -196,95 +202,9 @@ export class WebhooksIngestController {
       removeOnFail: { age: 86_400, count: 200 },
     });
 
-    await this.prisma.inboundWebhookLog.updateMany({
-      where: { platform: 'meta', eventId },
-      data: { accountResolved: true, processed: true },
-    });
+    await this.webhookLog.markResolved('meta', eventId, true);
 
     this.metrics.incr('webhook_enqueued', { platform: 'meta', product });
   }
 
-  private verifySignature(
-    rawBody: Buffer,
-    signatureHeader: string | undefined,
-  ): boolean {
-    const appSecret = process.env.META_APP_SECRET;
-    if (!appSecret || !signatureHeader) return false;
-
-    const prefix = 'sha256=';
-    if (!signatureHeader.startsWith(prefix)) return false;
-
-    const providedHex = signatureHeader.slice(prefix.length);
-    if (!/^[0-9a-fA-F]+$/.test(providedHex)) return false;
-
-    const computedHex = createHmac('sha256', appSecret).update(rawBody).digest('hex');
-
-    const providedBuf = Buffer.from(providedHex, 'hex');
-    const computedBuf = Buffer.from(computedHex, 'hex');
-
-    if (providedBuf.length !== computedBuf.length) return false;
-
-    try {
-      return timingSafeEqual(providedBuf, computedBuf);
-    } catch {
-      return false;
-    }
-  }
-
-  private extractRawBody(req: Request): Buffer {
-    const body = (req as Request & { body?: unknown }).body;
-    if (Buffer.isBuffer(body)) return body;
-    // Some middleware configurations attach the raw body as `rawBody`.
-    const rawBody = (req as Request & { rawBody?: unknown }).rawBody;
-    if (Buffer.isBuffer(rawBody)) return rawBody;
-    if (typeof body === 'string') return Buffer.from(body, 'utf8');
-    // Last-resort stringify — signature will fail but we still return a
-    // deterministic buffer so logging does not crash.
-    return Buffer.from(JSON.stringify(body ?? {}), 'utf8');
-  }
-
-  private snippet(rawBody: Buffer): string {
-    if (rawBody.length <= PAYLOAD_SNIPPET_MAX_BYTES) {
-      return rawBody.toString('utf8');
-    }
-    return `${rawBody.subarray(0, PAYLOAD_SNIPPET_MAX_BYTES).toString('utf8')}...[truncated]`;
-  }
-
-  /**
-   * Insert a row and report whether it was actually new. Duplicate key
-   * violations (same platform+event_id) are swallowed → returns false.
-   */
-  private async recordWebhook(
-    platform: string,
-    eventId: string,
-    signatureValid: boolean,
-    payloadSnippet: string,
-    accountResolved: boolean,
-    processed: boolean,
-  ): Promise<boolean> {
-    try {
-      await this.prisma.inboundWebhookLog.create({
-        data: {
-          platform,
-          eventId,
-          signatureValid,
-          payloadSnippet,
-          accountResolved,
-          processed,
-        },
-      });
-      return true;
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        return false;
-      }
-      this.logger.error(
-        `Failed to write inbound_webhook_log: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return false;
-    }
-  }
 }

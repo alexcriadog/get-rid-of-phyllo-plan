@@ -144,5 +144,45 @@ This matches our Meta design (webhook → HIGH-priority product sync).
 Every implementation reuses the Meta pattern: verify → `recordWebhook` (platform,
 eventId dedupe) → map → enqueue HIGH sync → throttle-lock absorbs bursts. The admin
 panel (`/admin/webhooks`) picks up new platforms automatically (platform column comes
-from the log row), though `parseWebhookSnippet` in `admin.service.ts` is Meta-envelope
-specific and will need per-platform branches as they land.
+from the log row); `parseWebhookSnippet` in `admin.service.ts` has per-platform
+branches (meta / threads / tiktok).
+
+---
+
+## Setup runbook (TikTok + Threads — code shipped 2026-06-05)
+
+The ingest endpoints are implemented and deployed:
+- `POST /webhooks/ingest/tiktok` — verifies `TikTok-Signature`, disconnects the
+  account on `authorization.removed` (logs other events).
+- `GET/POST /webhooks/ingest/threads` — hub.challenge verify + signature check,
+  enqueues HIGH `engagement_new` syncs for publish/replies/mentions/delete.
+
+### TikTok (no review gate — dashboard only)
+
+1. developers.tiktok.com → our app → **Webhooks** section → set callback URL:
+   `https://smconnector.camaleonicanalytics.com/api/poc/webhooks/ingest/tiktok`
+2. Env: `TIKTOK_CLIENT_SECRET` — already set in prod (token refresh uses it).
+   The signature is HMAC'd with this same secret; nothing new to add.
+3. Verify: revoke a test TikTok connection from the TikTok app → the row should
+   appear in `/admin/webhooks` as `enqueued`-style processed and the account
+   should flip to `disconnected` (check `account.disconnected` outbound event).
+
+### Threads (dashboard + App Review for some fields)
+
+1. Env: `THREADS_APP_SECRET` already in prod. Optionally set
+   `THREADS_WEBHOOK_VERIFY_TOKEN` (falls back to `META_WEBHOOK_VERIFY_TOKEN`).
+2. developers.facebook.com → the **Threads app** (separate from the FB/IG app) →
+   Use Cases → Customize → Settings → add subcase **"Get real-time notifications
+   with Threads webhooks"** → callback URL:
+   `https://smconnector.camaleonicanalytics.com/api/poc/webhooks/ingest/threads`
+   + the verify token from step 1 → Subscribe to fields.
+3. Fields & gating — phased:
+   - **Phase 1 (no new review!): `publish`** — requires only `threads_basic`,
+     which connected accounts already grant. Instant new-post syncs.
+   - **Phase 2 (App Review): `replies` (`threads_read_replies`), `mentions`
+     (`threads_manage_mentions`)** — request Advanced Access with a screencast.
+   - **Skip `delete`** for now — it needs `threads_delete`, hard to justify in
+     review for a read-only connector; deletions reconcile via the 90-day poll.
+4. Verify: publish a thread from a connected test account → row in
+   `/admin/webhooks` (platform `threads`, topic `publish`) → engagement sync
+   enqueued → post visible in Mongo `posts` within seconds.

@@ -1389,9 +1389,11 @@ export class AdminService {
     });
 
     // The log only stores the raw payload snippet — parse it once per row to
-    // surface the Meta envelope (object/topic/entry id) and batch-resolve the
-    // entry ids to connected accounts so the UI can show handles.
-    const parsed = rows.map((r) => this.parseWebhookSnippet(r.payloadSnippet));
+    // surface the platform envelope (object/topic/entry id) and batch-resolve
+    // the entry ids to connected accounts so the UI can show handles.
+    const parsed = rows.map((r) =>
+      this.parseWebhookSnippet(r.payloadSnippet, r.platform),
+    );
     const entryIds = [
       ...new Set(parsed.map((p) => p.entryId).filter((id): id is string => !!id)),
     ];
@@ -1435,11 +1437,17 @@ export class AdminService {
   }
 
   /**
-   * Best-effort parse of a stored Meta webhook payload snippet. Snippets can
-   * be truncated (2 KB cap at ingest) or non-JSON (invalid-signature rows),
-   * so every field is nullable.
+   * Best-effort parse of a stored webhook payload snippet, per platform
+   * envelope shape. Snippets can be truncated (2 KB cap at ingest) or
+   * non-JSON (invalid-signature rows), so every field is nullable.
+   *   - meta:    {object, entry:[{id, changes:[{field, value}]}]}
+   *   - threads: {topic, target_id, values:{value, field}}        (flat)
+   *   - tiktok:  {event, user_openid, content}                    (flat)
    */
-  private parseWebhookSnippet(snippet: string | null): {
+  private parseWebhookSnippet(
+    snippet: string | null,
+    platform: string,
+  ): {
     object: string | null;
     topic: string | null;
     entryId: string | null;
@@ -1449,8 +1457,17 @@ export class AdminService {
     if (!snippet) return empty;
 
     let envelope: {
+      // meta
       object?: unknown;
       entry?: Array<{ id?: unknown; changes?: Array<{ field?: unknown; value?: unknown }> }>;
+      // threads
+      topic?: unknown;
+      target_id?: unknown;
+      values?: { value?: unknown; field?: unknown };
+      // tiktok
+      event?: unknown;
+      user_openid?: unknown;
+      content?: unknown;
     };
     try {
       envelope = JSON.parse(snippet) as typeof envelope;
@@ -1459,6 +1476,41 @@ export class AdminService {
       return { ...empty, bodyExcerpt: this.excerpt(snippet) };
     }
 
+    if (platform === 'threads') {
+      const value = envelope.values?.value;
+      return {
+        object: typeof envelope.topic === 'string' ? envelope.topic : null,
+        topic:
+          typeof envelope.values?.field === 'string'
+            ? envelope.values.field
+            : null,
+        entryId:
+          typeof envelope.target_id === 'string'
+            ? envelope.target_id
+            : typeof envelope.target_id === 'number'
+              ? String(envelope.target_id)
+              : null,
+        bodyExcerpt: this.excerpt(
+          value !== undefined ? JSON.stringify(value) : snippet,
+        ),
+      };
+    }
+
+    if (platform === 'tiktok') {
+      return {
+        object: null,
+        topic: typeof envelope.event === 'string' ? envelope.event : null,
+        entryId:
+          typeof envelope.user_openid === 'string'
+            ? envelope.user_openid
+            : null,
+        bodyExcerpt: this.excerpt(
+          typeof envelope.content === 'string' ? envelope.content : snippet,
+        ),
+      };
+    }
+
+    // Default: classic Meta (FB/IG) envelope.
     const entry = envelope.entry?.[0];
     const change = entry?.changes?.[0];
     const value = change?.value;
