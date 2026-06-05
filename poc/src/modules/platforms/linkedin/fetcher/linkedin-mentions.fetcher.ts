@@ -60,14 +60,17 @@ export class LinkedInMentionsFetcher {
       .then((r) => {
         const urns = new Set<string>();
         for (const n of r.elements ?? []) {
-          const urn = n.sourcePost ?? n.generatedActivity;
-          if (
-            urn &&
-            (urn.startsWith('urn:li:share:') ||
-              urn.startsWith('urn:li:ugcPost:'))
-          ) {
-            urns.add(urn);
-          }
+          // Field semantics verified against live traffic 2026-06-05:
+          // generatedActivity carries the ugcPost/share URN of the mentioning
+          // post; sourcePost is an urn:li:activity wrapper. Prefer whichever
+          // is a fetchable post URN.
+          const urn = [n.generatedActivity, n.sourcePost].find(
+            (u) =>
+              u &&
+              (u.startsWith('urn:li:share:') ||
+                u.startsWith('urn:li:ugcPost:')),
+          );
+          if (urn) urns.add(urn);
         }
         return [...urns].slice(0, limit);
       })
