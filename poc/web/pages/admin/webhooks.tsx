@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { ChevronRight, RefreshCw } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
 import { adminPost } from '../../lib/api';
@@ -34,6 +34,7 @@ type WebhookRow = {
   account_handle?: string | null;
   status?: WebhookStatus;
   body_excerpt?: string | null;
+  payload_snippet?: string | null;
 };
 
 type SilenceRow = {
@@ -122,7 +123,7 @@ export default function WebhooksPage() {
 
           <Section
             title={`Recent ${Math.min(inbound.length, 100)} deliveries`}
-            description="Click ↻ to replay through the queue"
+            description="Click a row to see the full payload · click ↻ to replay through the queue"
             bare
           >
             <InboundTable inbound={inbound.slice(0, 100)} busy={busy} onReplay={replay} />
@@ -193,6 +194,7 @@ function InboundTable({
   busy: string | null;
   onReplay: (id: string) => void;
 }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   if (inbound.length === 0) {
     return (
       <div className="p-5">
@@ -213,69 +215,119 @@ function InboundTable({
         <span>Body excerpt</span>
         <span className="text-right">Action</span>
       </div>
-      {inbound.map((w) => (
-        <div
-          key={w.id}
-          className={`grid ${ROW_GRID} items-center gap-3 border-b border-border/70 px-3 py-1.5 font-mono text-[11.5px] last:border-0`}
-        >
-          <span className="flex flex-col leading-tight">
-            <span className="text-muted-foreground/90">{fmtTime(w.received_at)}</span>
-            <span className="text-[10px] text-muted-foreground/60">
-              {fmtRelative(w.received_at)}
-            </span>
-          </span>
-          <span>
-            <Badge variant="default" className="w-full justify-center">
-              {w.platform}
-            </Badge>
-          </span>
-          <span className="flex flex-col leading-tight truncate">
-            <span className="truncate" style={{ color: STATUS_COLORS.info }}>
-              {w.topic ?? '—'}
-            </span>
-            {w.object && (
-              <span className="text-[10px] text-muted-foreground/60">{w.object}</span>
-            )}
-          </span>
-          <span className="flex flex-col leading-tight truncate">
-            <span className="truncate">
-              {w.account_handle ?? (w.account_id ? `#${w.account_id}` : '—')}
-            </span>
-            {w.account_handle && w.account_id && (
-              <span className="text-[10px] text-muted-foreground/60">
-                #{w.account_id}
-              </span>
-            )}
-          </span>
-          <span
-            className="text-[10.5px] font-semibold"
-            style={{ color: STATUS_META[w.status ?? 'unresolved'].color }}
-          >
-            {STATUS_META[w.status ?? 'unresolved'].label}
-          </span>
-          <span
-            className="overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-muted-foreground/70"
-            title={w.body_excerpt ?? ''}
-          >
-            {w.body_excerpt ?? ''}
-          </span>
-          <span className="flex justify-end">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => onReplay(w.id)}
-              disabled={busy === w.id}
-              title="Replay this webhook through the queue"
-              aria-label="Replay webhook"
+      {inbound.map((w) => {
+        const isExpanded = expandedId === w.id;
+        return (
+          <div key={w.id} className="border-b border-border/70 last:border-0">
+            <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={isExpanded}
+              onClick={() => setExpandedId(isExpanded ? null : w.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setExpandedId(isExpanded ? null : w.id);
+                }
+              }}
+              className={`grid ${ROW_GRID} cursor-pointer items-center gap-3 px-3 py-1.5 font-mono text-[11.5px] transition-colors hover:bg-secondary/60 ${isExpanded ? 'bg-secondary/60' : ''}`}
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${busy === w.id ? 'animate-spin' : ''}`} />
-            </Button>
-          </span>
-        </div>
-      ))}
+              <span className="flex flex-col leading-tight">
+                <span className="text-muted-foreground/90">{fmtTime(w.received_at)}</span>
+                <span className="text-[10px] text-muted-foreground/60">
+                  {fmtRelative(w.received_at)}
+                </span>
+              </span>
+              <span>
+                <Badge variant="default" className="w-full justify-center">
+                  {w.platform}
+                </Badge>
+              </span>
+              <span className="flex flex-col leading-tight truncate">
+                <span className="truncate" style={{ color: STATUS_COLORS.info }}>
+                  {w.topic ?? '—'}
+                </span>
+                {w.object && (
+                  <span className="text-[10px] text-muted-foreground/60">{w.object}</span>
+                )}
+              </span>
+              <span className="flex flex-col leading-tight truncate">
+                <span className="truncate">
+                  {w.account_handle ?? (w.account_id ? `#${w.account_id}` : '—')}
+                </span>
+                {w.account_handle && w.account_id && (
+                  <span className="text-[10px] text-muted-foreground/60">
+                    #{w.account_id}
+                  </span>
+                )}
+              </span>
+              <span
+                className="text-[10.5px] font-semibold"
+                style={{ color: STATUS_META[w.status ?? 'unresolved'].color }}
+              >
+                {STATUS_META[w.status ?? 'unresolved'].label}
+              </span>
+              <span className="flex items-center gap-1.5 overflow-hidden">
+                <ChevronRight
+                  className={`h-3 w-3 shrink-0 text-muted-foreground/50 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                />
+                <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-muted-foreground/70">
+                  {w.body_excerpt ?? ''}
+                </span>
+              </span>
+              <span className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReplay(w.id);
+                  }}
+                  disabled={busy === w.id}
+                  title="Replay this webhook through the queue"
+                  aria-label="Replay webhook"
+                >
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 ${busy === w.id ? 'animate-spin' : ''}`}
+                  />
+                </Button>
+              </span>
+            </div>
+            {isExpanded && <ExpandedPayload row={w} />}
+          </div>
+        );
+      })}
     </ScrollArea>
   );
+}
+
+/** Full stored payload (up to the 2 KB ingest cap), pretty-printed when it parses. */
+function ExpandedPayload({ row }: { row: WebhookRow }) {
+  const pretty = useMemo(
+    () => prettyJson(row.payload_snippet ?? row.body_excerpt ?? ''),
+    [row.payload_snippet, row.body_excerpt],
+  );
+  return (
+    <div className="border-t border-border/50 bg-background/60 px-4 py-3">
+      <div className="mb-2 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[10px] text-muted-foreground/70">
+        {row.entry_id && <span>entry_id: {row.entry_id}</span>}
+        <span>event: #{row.id}</span>
+      </div>
+      <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border/60 bg-secondary/40 p-3 font-mono text-[10.5px] leading-relaxed text-foreground/90">
+        {pretty || '(empty payload)'}
+      </pre>
+    </div>
+  );
+}
+
+function prettyJson(raw: string): string {
+  if (!raw) return '';
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw; // truncated snippet or non-JSON — show as-is
+  }
 }
 
 function SilenceTable({ rows }: { rows: SilenceRow[] }) {
