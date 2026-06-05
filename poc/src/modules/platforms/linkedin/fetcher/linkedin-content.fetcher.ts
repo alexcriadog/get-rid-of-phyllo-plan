@@ -102,30 +102,34 @@ export class LinkedInContentFetcher {
     });
   }
 
-  /** Per-post reaction-type counts via socialMetadata BATCH_GET. Best-effort. */
+  /**
+   * Per-post reaction-type counts via socialMetadata BATCH_GET. Best-effort.
+   * ONE batch only (the newest SOCIAL_METADATA_BATCH posts — input is sorted
+   * CREATED desc): LinkedIn throttles this endpoint with a tight per-day
+   * dev-tier quota (429s observed in prod 2026-06-05 after multi-batch
+   * bursts). Older posts keep the breakdown from previous syncs.
+   */
   private async fetchSocialMetadata(
     callCtx: LinkedInCallContext,
     posts: LinkedInPost[],
   ): Promise<Map<string, LinkedInSocialMetadata>> {
     const out = new Map<string, LinkedInSocialMetadata>();
-    const urns = posts.map((p) => p.id);
-    for (let i = 0; i < urns.length; i += SOCIAL_METADATA_BATCH) {
-      const batch = urns.slice(i, i + SOCIAL_METADATA_BATCH);
-      try {
-        const res = await this.client.getSocialMetadata({
-          ...callCtx,
-          postUrns: batch,
-        });
-        for (const [urn, meta] of Object.entries(res.results ?? {})) {
-          out.set(urn, meta);
-        }
-      } catch (err) {
-        this.logger.warn(
-          `socialMetadata batch failed: ${
-            err instanceof Error ? err.message : String(err)
-          } — posts ship without reaction breakdown`,
-        );
+    const batch = posts.slice(0, SOCIAL_METADATA_BATCH).map((p) => p.id);
+    if (batch.length === 0) return out;
+    try {
+      const res = await this.client.getSocialMetadata({
+        ...callCtx,
+        postUrns: batch,
+      });
+      for (const [urn, meta] of Object.entries(res.results ?? {})) {
+        out.set(urn, meta);
       }
+    } catch (err) {
+      this.logger.warn(
+        `socialMetadata batch failed: ${
+          err instanceof Error ? err.message : String(err)
+        } — posts ship without reaction breakdown`,
+      );
     }
     return out;
   }
