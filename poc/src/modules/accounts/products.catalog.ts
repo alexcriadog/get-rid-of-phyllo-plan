@@ -242,7 +242,10 @@ export const PLATFORM_CATALOG: Readonly<
       id: 'mentions',
       label: 'Mentions (@-tags)',
       default: true,
-      scopes: ['threads_manage_insights'],
+      // /me/mentions is gated by threads_manage_mentions (approved in the
+      // 2025-10-17 App Review), NOT threads_manage_insights — a token minted
+      // without it gets a 403 on the mentions edge.
+      scopes: ['threads_manage_mentions'],
     },
   ],
   youtube: [

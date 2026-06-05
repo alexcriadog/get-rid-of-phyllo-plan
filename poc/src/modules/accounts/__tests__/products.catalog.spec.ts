@@ -42,6 +42,7 @@ const LEGACY_FULL_SCOPES: Record<string, string[]> = {
     'threads_basic',
     'threads_manage_insights',
     'threads_read_replies',
+    'threads_manage_mentions',
   ],
   youtube: [
     'https://www.googleapis.com/auth/youtube.readonly',
