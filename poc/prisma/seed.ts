@@ -131,16 +131,21 @@ const CADENCE_DEFAULTS: CadenceRow[] = [
   // content every 4h.
   { platform: 'twitch', product: 'identity', defaultIntervalSeconds: 21600 },
   { platform: 'twitch', product: 'engagement_new', defaultIntervalSeconds: 14400 },
-  // LinkedIn — dev tier is ~500 calls/app/day + 100/member/day (midnight UTC
-  // reset), so cadences are deliberately slow. identity ≈3 calls, audience
-  // ≈11 calls (one metric per memberCreatorPostAnalytics call), org
-  // engagement ≈3 calls per sync.
-  { platform: 'linkedin', product: 'identity', defaultIntervalSeconds: 21600 },
+  // LinkedIn — dev tier is a HARD ~500 calls/app/day (midnight UTC reset).
+  // A full org sync cycle is call-heavy (posts pagination + per-post share
+  // statistics + socialMetadata + media + facet-name decodes; comments hits
+  // ~1 call per recent post). At the old 6h cadence the daily quota was
+  // exhausted before noon, so later syncs got 429s and wrote nulls over good
+  // data. Cadences are now stretched to fit comfortably inside 500/day:
+  //   identity 12h (2/day), engagement_new/comments/mentions/audience 24h.
+  // Raise these once the LinkedIn app is upgraded off the development tier.
+  { platform: 'linkedin', product: 'identity', defaultIntervalSeconds: 43200 },
   { platform: 'linkedin', product: 'audience', defaultIntervalSeconds: 86400 },
-  { platform: 'linkedin', product: 'engagement_new', defaultIntervalSeconds: 21600 },
-  // Comments thread on ~10 recent posts ≈ 2-12 calls; mentions ≈ 2-11 calls.
-  { platform: 'linkedin', product: 'comments', defaultIntervalSeconds: 21600 },
-  { platform: 'linkedin', product: 'mentions', defaultIntervalSeconds: 43200 },
+  { platform: 'linkedin', product: 'engagement_new', defaultIntervalSeconds: 86400 },
+  // Comments is the heaviest product (≈1 socialActions call per recent post),
+  // so daily; mentions daily too.
+  { platform: 'linkedin', product: 'comments', defaultIntervalSeconds: 86400 },
+  { platform: 'linkedin', product: 'mentions', defaultIntervalSeconds: 86400 },
 ];
 
 async function seedCadences(): Promise<number> {
