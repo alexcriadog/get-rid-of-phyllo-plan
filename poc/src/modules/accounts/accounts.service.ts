@@ -13,7 +13,7 @@ import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { RedisService } from '@shared/redis/redis.service';
 import { purgeV1CacheForWorkspace } from '@/common/interceptors/cache.interceptor';
 import { OutboundWebhooksService } from '@modules/outbound-webhooks/outbound-webhooks.service';
-import { PhylloWebhookEmitter } from '@modules/outbound-webhooks/phyllo-webhook-emitter.service';
+import { StandardWebhookEmitter } from '@modules/outbound-webhooks/standard-webhook-emitter.service';
 import { PRODUCTS_BY_PLATFORM, type Platform } from './products.catalog';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
 import { enforceWorkspaceProducts } from './seed-products-enforcement';
@@ -90,11 +90,11 @@ export class AccountsService {
     @Optional()
     @Inject(OutboundWebhooksService)
     private readonly outboundWebhooks: OutboundWebhooksService | null = null,
-    // Optional Phyllo-compatible thin-webhook emitter — fires
-    // ACCOUNTS.CONNECTED / ACCOUNTS.DISCONNECTED to phyllo-format endpoints.
+    // Optional InsightIQ-compatible thin-webhook emitter — fires
+    // ACCOUNTS.CONNECTED / ACCOUNTS.DISCONNECTED to standard-format endpoints.
     @Optional()
-    @Inject(PhylloWebhookEmitter)
-    private readonly phylloWebhooks: PhylloWebhookEmitter | null = null,
+    @Inject(StandardWebhookEmitter)
+    private readonly standardWebhooks: StandardWebhookEmitter | null = null,
   ) {}
 
   async seedAccount(input: SeedAccountInput): Promise<SeedAccountResult> {
@@ -337,8 +337,8 @@ export class AccountsService {
           handle: input.handle ?? null,
           occurred_at: now.toISOString(),
         });
-        // Phyllo-compatible ACCOUNTS.CONNECTED (thin) to phyllo-format endpoints.
-        void this.phylloWebhooks?.fireLifecycle({
+        // InsightIQ-compatible ACCOUNTS.CONNECTED (thin) to standard-format endpoints.
+        void this.standardWebhooks?.fireLifecycle({
           accountId: account.id,
           type: 'account.connected',
         });
@@ -584,8 +584,8 @@ export class AccountsService {
         canonical_user_id: existing.canonicalUserId,
         occurred_at: disconnectedAt.toISOString(),
       });
-      // Phyllo-compatible ACCOUNTS.DISCONNECTED (thin) to phyllo-format endpoints.
-      void this.phylloWebhooks?.fireLifecycle({
+      // InsightIQ-compatible ACCOUNTS.DISCONNECTED (thin) to standard-format endpoints.
+      void this.standardWebhooks?.fireLifecycle({
         accountId: existing.id,
         type: 'account.disconnected',
       });

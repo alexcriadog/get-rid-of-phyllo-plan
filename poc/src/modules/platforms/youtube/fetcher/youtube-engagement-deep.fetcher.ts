@@ -244,27 +244,19 @@ export class YoutubeEngagementDeepFetcher {
     }
     if (accountId == null) return [];
 
-    // Read the recent posts from Mongo. Patterns match what
-    // sync.worker.ts writes for `engagement_new`.
-    const col = this.mongo.getCollection('posts');
+    // Read the recent content external ids from the canonical `contents`
+    // collection (what canonical-write.service stores for engagement_new).
+    const col = this.mongo.getCollection('contents');
     const cursor = col
       .find(
-        {
-          $or: [
-            { account_id: accountId.toString() },
-            { account_id: Number(accountId.toString()) },
-          ],
-          platform: 'youtube',
-        } as unknown as Prisma.JsonObject,
-        {
-          projection: { platform_content_id: 1 },
-        },
+        { account_pk: accountId.toString() } as unknown as Prisma.JsonObject,
+        { projection: { external_id: 1 } },
       )
-      .sort({ 'data.publishedAt': -1, updated_at: -1 })
+      .sort({ published_at: -1, updated_at: -1 })
       .limit(MAX_VIDEOS_PER_SYNC);
     const docs = await cursor.toArray();
     const ids = docs
-      .map((d) => (d as { platform_content_id?: unknown }).platform_content_id)
+      .map((d) => (d as { external_id?: unknown }).external_id)
       .filter((v): v is string => typeof v === 'string' && v.length > 0);
     return ids;
   }

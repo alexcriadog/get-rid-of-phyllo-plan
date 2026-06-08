@@ -2447,17 +2447,24 @@ export class AdminService {
     collection: string;
     field: string;
   }> = [
-    { collection: 'posts', field: 'account_id' },
-    { collection: 'comments', field: 'account_id' },
+    // Canonical served collections (account_pk-keyed).
+    { collection: 'profiles', field: 'account_pk' },
+    { collection: 'contents', field: 'account_pk' },
+    { collection: 'audience', field: 'account_pk' },
+    { collection: 'comments', field: 'account_pk' },
+    { collection: 'webhook_emit_state', field: 'account_pk' },
+    // Side-channel / internal collections (account_id-keyed).
     { collection: 'page_comments', field: 'account_id' },
     { collection: 'page_ratings', field: 'account_id' },
     { collection: 'ad_insights', field: 'account_id' },
     { collection: 'ads_campaigns', field: 'account_id' },
+    { collection: 'event_log', field: 'account_id' },
+    { collection: 'raw_platform_responses', field: 'accountId' },
+    // Legacy internal collections (no longer written; purge any residue).
+    { collection: 'posts', field: 'account_id' },
     { collection: 'identity_snapshots', field: 'account_id' },
     { collection: 'audience_snapshots', field: 'account_id' },
     { collection: 'engagement_deep_snapshots', field: 'account_id' },
-    { collection: 'event_log', field: 'account_id' },
-    { collection: 'raw_platform_responses', field: 'accountId' },
   ];
 
   /**

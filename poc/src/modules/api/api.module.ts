@@ -8,13 +8,12 @@ import { ApiKeysModule } from '@modules/api-keys/api-keys.module';
 import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.interceptor';
 import { V1CacheInterceptor } from '@/common/interceptors/cache.interceptor';
 import { ManualRefreshController } from './manual-refresh.controller';
-import { V1AccountsController } from './v1-accounts.controller';
-import { SnapshotReader } from './snapshot-reader';
 
 /**
- * API surface used by the public UI and the admin dashboard. Relies on
- * the Redis/BullMQ globals from shared modules so we don't have to
- * re-import them here.
+ * Internal API surface: the manual-refresh trigger used by the dashboard. The
+ * public data read API (InsightIQ-standard, /v1/*) now lives in
+ * `@modules/data-api`; the old custom-shape /v1 read controller was removed
+ * when the canonical format became the only served format.
  */
 @Module({
   imports: [
@@ -25,8 +24,8 @@ import { SnapshotReader } from './snapshot-reader';
     AccountsModule,
     ApiKeysModule,
   ],
-  controllers: [ManualRefreshController, V1AccountsController],
-  providers: [ManualRefreshController, RateLimitInterceptor, V1CacheInterceptor, SnapshotReader],
+  controllers: [ManualRefreshController],
+  providers: [ManualRefreshController, RateLimitInterceptor, V1CacheInterceptor],
   exports: [ManualRefreshController],
 })
 export class ApiModule {}

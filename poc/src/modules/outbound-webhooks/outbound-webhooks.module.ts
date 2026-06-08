@@ -9,7 +9,7 @@ import { WebhookDeliveriesController } from './webhook-deliveries.controller';
 import { TokenLifecycleEmitter } from './token-lifecycle-emitter.service';
 import { DataEventDispatcher } from './data-event-dispatcher.service';
 import { WebhooksDigestService } from './webhooks-digest.service';
-import { PhylloWebhookEmitter } from './phyllo-webhook-emitter.service';
+import { StandardWebhookEmitter } from './standard-webhook-emitter.service';
 
 @Module({
   imports: [SharedDatabaseModule, SharedRedisModule, ApiKeysModule],
@@ -19,14 +19,14 @@ import { PhylloWebhookEmitter } from './phyllo-webhook-emitter.service';
     TokenLifecycleEmitter,
     DataEventDispatcher,
     WebhooksDigestService,
-    PhylloWebhookEmitter,
+    StandardWebhookEmitter,
     RateLimitInterceptor,
   ],
   exports: [
     OutboundWebhooksService,
     TokenLifecycleEmitter,
     DataEventDispatcher,
-    PhylloWebhookEmitter,
+    StandardWebhookEmitter,
   ],
 })
 export class OutboundWebhooksModule {}

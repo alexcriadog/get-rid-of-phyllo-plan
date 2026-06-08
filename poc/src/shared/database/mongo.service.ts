@@ -23,13 +23,13 @@ export const MONGO_COLLECTIONS = {
   pageComments: 'page_comments',
   adInsights: 'ad_insights',
   publicPageSnapshots: 'public_page_snapshots',
-  // Phyllo-compatible projection (dual-write, see PLAN-phyllo-schema-alignment.md).
-  // Documents are stored exactly as the Phyllo /v1 API serves them, so the
+  // InsightIQ-compatible projection (dual-write, see PLAN-canonical-data-api.md).
+  // Documents are stored exactly as the InsightIQ /v1 API serves them, so the
   // compat read layer is a thin projection.
-  phylloProfiles: 'phyllo_profiles',
-  phylloContents: 'phyllo_contents',
-  phylloAudience: 'phyllo_audience',
-  phylloComments: 'phyllo_comments',
+  profilesCol: 'profiles',
+  contentsCol: 'contents',
+  audienceCol: 'audience',
+  commentsCol: 'comments',
 } as const;
 
 export type MongoCollectionKey = keyof typeof MONGO_COLLECTIONS;
@@ -106,22 +106,22 @@ export class MongoService implements OnModuleInit, OnModuleDestroy {
       // camelCase accountId + fetchedAt — match them so the recency purge
       // (webhooks-retention) and admin listing are index-backed.
       { collection: 'raw_platform_responses', keys: { accountId: 1, fetchedAt: -1 } },
-      // ── Phyllo-compatible projection (dual-write) ──
+      // ── InsightIQ-compatible projection (dual-write) ──
       // Snapshot docs: one per account. List docs: keyed by (account, external id).
-      // The minted Phyllo UUID `id` is globally unique — used by /v1/<x>/{id}.
-      { collection: 'phyllo_profiles', keys: { account_pk: 1 }, options: { unique: true } },
-      { collection: 'phyllo_profiles', keys: { id: 1 }, options: { unique: true } },
-      { collection: 'phyllo_audience', keys: { account_pk: 1 }, options: { unique: true } },
-      { collection: 'phyllo_audience', keys: { id: 1 }, options: { unique: true } },
-      { collection: 'phyllo_contents', keys: { account_pk: 1, external_id: 1 }, options: { unique: true } },
-      { collection: 'phyllo_contents', keys: { id: 1 }, options: { unique: true } },
-      { collection: 'phyllo_contents', keys: { account_pk: 1, published_at: -1 } },
-      { collection: 'phyllo_comments', keys: { account_pk: 1, content_external_id: 1, external_id: 1 }, options: { unique: true } },
-      { collection: 'phyllo_comments', keys: { id: 1 }, options: { unique: true } },
-      { collection: 'phyllo_comments', keys: { account_pk: 1, content_external_id: 1 } },
-      // ADDED-vs-UPDATED marker for the Phyllo webhook emitter (one per
+      // The minted InsightIQ UUID `id` is globally unique — used by /v1/<x>/{id}.
+      { collection: 'profiles', keys: { account_pk: 1 }, options: { unique: true } },
+      { collection: 'profiles', keys: { id: 1 }, options: { unique: true } },
+      { collection: 'audience', keys: { account_pk: 1 }, options: { unique: true } },
+      { collection: 'audience', keys: { id: 1 }, options: { unique: true } },
+      { collection: 'contents', keys: { account_pk: 1, external_id: 1 }, options: { unique: true } },
+      { collection: 'contents', keys: { id: 1 }, options: { unique: true } },
+      { collection: 'contents', keys: { account_pk: 1, published_at: -1 } },
+      { collection: 'comments', keys: { account_pk: 1, content_external_id: 1, external_id: 1 }, options: { unique: true } },
+      { collection: 'comments', keys: { id: 1 }, options: { unique: true } },
+      { collection: 'comments', keys: { account_pk: 1, content_external_id: 1 } },
+      // ADDED-vs-UPDATED marker for the InsightIQ webhook emitter (one per
       // account+product; first emit inserts, subsequent ones read it).
-      { collection: 'phyllo_emit_state', keys: { account_pk: 1, product: 1 }, options: { unique: true } },
+      { collection: 'webhook_emit_state', keys: { account_pk: 1, product: 1 }, options: { unique: true } },
     ];
 
     let created = 0;

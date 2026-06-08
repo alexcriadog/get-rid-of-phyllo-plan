@@ -14,7 +14,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { OutboundWebhooksService } from './outbound-webhooks.service';
-import { PhylloWebhookEmitter } from './phyllo-webhook-emitter.service';
+import { StandardWebhookEmitter } from './standard-webhook-emitter.service';
 
 type Cadence = 'immediate' | 'hourly' | 'daily';
 
@@ -49,7 +49,7 @@ export class DataEventDispatcher {
   constructor(
     private readonly prisma: PrismaService,
     private readonly webhooks: OutboundWebhooksService,
-    private readonly phylloWebhooks: PhylloWebhookEmitter,
+    private readonly standardWebhooks: StandardWebhookEmitter,
   ) {}
 
   /**
@@ -87,10 +87,10 @@ export class DataEventDispatcher {
     }
     if (account.isTest) return;
 
-    // Phyllo-compatible thin webhooks fire immediately and independently of
-    // the native cadence/digest logic below (Phyllo has no digest concept).
+    // InsightIQ-compatible thin webhooks fire immediately and independently of
+    // the native cadence/digest logic below (InsightIQ has no digest concept).
     // Best-effort — the emitter swallows its own errors.
-    await this.phylloWebhooks.fireData({
+    await this.standardWebhooks.fireData({
       accountId: args.accountId,
       product: args.product,
       sampleIds: args.sampleIds,

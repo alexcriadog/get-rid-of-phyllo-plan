@@ -1,4 +1,4 @@
-/*! Camaleonic Connect SDK v2.0.0 — 2026-05-26 */
+/*! Camaleonic Connect SDK v2.0.0 — 2026-06-04 */
 
 // sdk/src/index.ts
 var VERSION = "2.0.0";
@@ -11,6 +11,17 @@ var MSG = {
 var DEFAULT_HEIGHT = 480;
 var MODAL_WIDTH = 440;
 var MIN_HEIGHT = 140;
+function resolveTheme(opts) {
+  if (opts.theme === "light" || opts.theme === "dark") return opts.theme;
+  try {
+    if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+  } catch {
+  }
+  return "light";
+}
+var SURFACE = { light: "#ffffff", dark: "#1a1a1f" };
+var CLOSE_FG = { light: "#71717a", dark: "#a1a1aa" };
+var CLOSE_HOVER = { light: "#18181b", dark: "#f4f4f5" };
 function resolveBaseUrl(opts) {
   if (typeof opts.baseUrl === "string" && opts.baseUrl.length > 0) {
     return opts.baseUrl.replace(/\/+$/, "");
@@ -45,6 +56,7 @@ function buildConnectUrl(baseUrl, opts, platform) {
     embed: "1"
   });
   if (platform) qs.set("platform", platform);
+  qs.set("theme", resolveTheme(opts));
   return baseUrl + "/connect?" + qs.toString();
 }
 function init(opts) {
@@ -108,16 +120,25 @@ function init(opts) {
     }
   }
   function buildOverlay(url) {
+    const theme = resolveTheme(opts);
     overlay = document.createElement("div");
     overlay.setAttribute("data-camaleonic-overlay", "");
-    overlay.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(8,8,12,0.6);backdrop-filter:blur(4px);";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(8,8,12,0.55);backdrop-filter:blur(3px);";
     modal = document.createElement("div");
     modal.setAttribute("data-camaleonic-modal", "");
-    modal.style.cssText = "position:relative;width:" + MODAL_WIDTH + "px;max-width:calc(100vw - 32px);height:" + DEFAULT_HEIGHT + "px;max-height:calc(100vh - 48px);border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.5);background:#fff;";
+    modal.style.cssText = "position:relative;width:" + MODAL_WIDTH + "px;max-width:calc(100vw - 32px);height:" + DEFAULT_HEIGHT + "px;max-height:calc(100vh - 48px);border-radius:18px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,0.35);background:" + SURFACE[theme] + ";";
     const closeBtn = document.createElement("button");
     closeBtn.setAttribute("aria-label", "Close");
-    closeBtn.textContent = "\u2715";
-    closeBtn.style.cssText = "position:absolute;top:10px;right:10px;z-index:2;width:28px;height:28px;border:0;border-radius:50%;background:rgba(0,0,0,0.06);cursor:pointer;font-size:14px;line-height:28px;";
+    closeBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="display:block"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+    const closeFg = CLOSE_FG[theme];
+    const closeHover = CLOSE_HOVER[theme];
+    closeBtn.style.cssText = "position:absolute;top:13px;right:13px;z-index:2;width:24px;height:24px;border:0;background:transparent;color:" + closeFg + ";cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;transition:color .15s;";
+    closeBtn.onmouseenter = () => {
+      closeBtn.style.color = closeHover;
+    };
+    closeBtn.onmouseleave = () => {
+      closeBtn.style.color = closeFg;
+    };
     closeBtn.onclick = () => emitExit();
     const iframe = document.createElement("iframe");
     iframe.src = url;
