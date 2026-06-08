@@ -21,7 +21,7 @@ import { SdkTokensModule } from '@modules/sdk-tokens/sdk-tokens.module';
 import { OutboundWebhooksModule } from '@modules/outbound-webhooks/outbound-webhooks.module';
 import { AdminSaasModule } from '@modules/admin-saas/admin-saas.module';
 import { TokenRefreshModule } from '@modules/token-refresh/token-refresh.module';
-import { PhylloApiModule } from '@modules/phyllo-api/phyllo-api.module';
+import { DataApiModule } from '@modules/data-api/data-api.module';
 
 @Module({
   imports: [
@@ -46,7 +46,7 @@ import { PhylloApiModule } from '@modules/phyllo-api/phyllo-api.module';
     ApiModule,
     WebhooksModule,
     TokenRefreshModule,
-    PhylloApiModule,
+    DataApiModule,
   ],
   providers: [
     {

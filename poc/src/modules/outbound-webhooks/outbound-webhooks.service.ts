@@ -480,14 +480,14 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
 
     const ts = Math.floor(Date.now() / 1000).toString();
     const body = JSON.stringify(delivery.payload);
-    // Phyllo-format endpoints (PLAN-phyllo-schema-alignment.md §5) sign with a
+    // InsightIQ-format endpoints (PLAN-canonical-data-api.md §5) sign with a
     // bare `Webhook-Signatures` header = HMAC-SHA256(secret, raw body), hex —
-    // exactly what Phyllo sends. Native endpoints keep the timestamped
+    // exactly what InsightIQ sends. Native endpoints keep the timestamped
     // X-Camaleonic-Signature scheme.
-    const isPhyllo =
-      (delivery.endpoint as { format?: string }).format === 'phyllo';
+    const isStandard =
+      (delivery.endpoint as { format?: string }).format === 'standard';
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (isPhyllo) {
+    if (isStandard) {
       const sig = createHmac('sha256', delivery.endpoint.secret).update(body).digest('hex');
       headers['Webhook-Signatures'] = sig;
     } else {

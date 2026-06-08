@@ -8,7 +8,7 @@ import { CadenceService } from './cadence.service';
 import { ThrottleLockService } from './throttle-lock.service';
 import { SchedulerService } from './scheduler.service';
 import { SyncWorker } from './sync.worker';
-import { PhylloDualWriteService } from './phyllo-dual-write.service';
+import { CanonicalWriteService } from './canonical-write.service';
 
 /**
  * Wires the scheduler + worker + supporting services.
@@ -33,7 +33,7 @@ import { PhylloDualWriteService } from './phyllo-dual-write.service';
     ThrottleLockService,
     SchedulerService,
     SyncWorker,
-    PhylloDualWriteService,
+    CanonicalWriteService,
   ],
   exports: [CadenceService, ThrottleLockService],
 })

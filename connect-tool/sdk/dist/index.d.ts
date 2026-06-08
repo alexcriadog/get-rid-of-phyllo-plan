@@ -28,6 +28,8 @@ export interface CamaleonicConnectOptions {
     platform?: PlatformKey;
     /** Allow-list; if exactly one entry and no `platform`, treated as the single platform. */
     platforms?: ReadonlyArray<PlatformKey>;
+    /** Colour theme. 'auto' (default) follows the host's prefers-color-scheme. */
+    theme?: 'light' | 'dark' | 'auto';
     baseUrl?: string;
     onSuccess?: (data: SuccessPayload) => void;
     onError?: (err: ErrorPayload) => void;
