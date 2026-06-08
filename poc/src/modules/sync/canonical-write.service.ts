@@ -32,6 +32,7 @@ import {
   toApiAudience,
   toApiContent,
   toApiComment,
+  coalesceMerge,
   type SchemaContext,
 } from "@modules/data-schema";
 import { deepToContentParts } from "@modules/data-schema/mappers/content.mapper";
@@ -170,12 +171,17 @@ export class CanonicalWriteService {
     ctx: SchemaContext,
     data: ProfileData,
   ): Promise<void> {
-    const doc = toApiProfile(ctx, data);
+    const fresh = toApiProfile(ctx, data);
     const now = new Date();
-    await this.mongo.getCollection("profiles").updateOne(
+    const col = this.mongo.getCollection<{ doc?: unknown }>("profiles");
+    // Keep last-known-good: merge over the stored doc so a partial fetch
+    // (e.g. a rate-limited stats sub-call → null fields) never clobbers data.
+    const existing = await col.findOne({ account_pk: ctx.accountPk });
+    const doc = existing?.doc ? coalesceMerge(existing.doc, fresh) : fresh;
+    await col.updateOne(
       { account_pk: ctx.accountPk },
       {
-        $set: { id: doc.id, account_pk: ctx.accountPk, doc, updated_at: now },
+        $set: { id: fresh.id, account_pk: ctx.accountPk, doc, updated_at: now },
         $setOnInsert: { created_at: now },
       },
       { upsert: true },
@@ -186,12 +192,15 @@ export class CanonicalWriteService {
     ctx: SchemaContext,
     data: AudienceData,
   ): Promise<void> {
-    const doc = toApiAudience(ctx, data);
+    const fresh = toApiAudience(ctx, data);
     const now = new Date();
-    await this.mongo.getCollection("audience").updateOne(
+    const col = this.mongo.getCollection<{ doc?: unknown }>("audience");
+    const existing = await col.findOne({ account_pk: ctx.accountPk });
+    const doc = existing?.doc ? coalesceMerge(existing.doc, fresh) : fresh;
+    await col.updateOne(
       { account_pk: ctx.accountPk },
       {
-        $set: { id: doc.id, account_pk: ctx.accountPk, doc, updated_at: now },
+        $set: { id: fresh.id, account_pk: ctx.accountPk, doc, updated_at: now },
         $setOnInsert: { created_at: now },
       },
       { upsert: true },
@@ -204,19 +213,37 @@ export class CanonicalWriteService {
   ): Promise<PersistDelta> {
     if (!Array.isArray(items) || items.length === 0) return ZERO_DELTA;
     const now = new Date();
+    const col = this.mongo.getCollection<{
+      external_id?: string;
+      doc?: unknown;
+    }>("contents");
+    // Bulk-load the stored docs once so we can keep last-known-good per post
+    // (e.g. engagement comes back null when share-stats are rate-limited).
+    const externalIds = items
+      .map((i) => i.platformContentId)
+      .filter((x): x is string => typeof x === "string" && x.length > 0);
+    const existingDocs = await col
+      .find({ account_pk: ctx.accountPk, external_id: { $in: externalIds } })
+      .toArray();
+    const prevByExt = new Map<string, unknown>();
+    for (const d of existingDocs) {
+      if (d.external_id) prevByExt.set(d.external_id, d.doc);
+    }
     const ops: AnyBulkWriteOperation[] = [];
     const idByOpIndex: string[] = [];
     for (const item of items) {
       const externalId = item.platformContentId;
       if (!externalId) continue;
       idByOpIndex.push(externalId);
-      const doc = toApiContent(ctx, item);
+      const fresh = toApiContent(ctx, item);
+      const prev = prevByExt.get(externalId);
+      const doc = prev ? coalesceMerge(prev, fresh) : fresh;
       ops.push({
         updateOne: {
           filter: { account_pk: ctx.accountPk, external_id: externalId },
           update: {
             $set: {
-              id: doc.id,
+              id: fresh.id,
               account_pk: ctx.accountPk,
               external_id: externalId,
               published_at: item.publishedAt ?? null,
@@ -230,9 +257,7 @@ export class CanonicalWriteService {
       });
     }
     if (ops.length === 0) return ZERO_DELTA;
-    const res = await this.mongo
-      .getCollection("contents")
-      .bulkWrite(ops, { ordered: false });
+    const res = await col.bulkWrite(ops, { ordered: false });
     return this.deltaFromBulk(res, idByOpIndex);
   }
 
@@ -242,13 +267,29 @@ export class CanonicalWriteService {
   ): Promise<PersistDelta> {
     if (!Array.isArray(items) || items.length === 0) return ZERO_DELTA;
     const now = new Date();
+    const col = this.mongo.getCollection<{
+      external_id?: string;
+      doc?: unknown;
+    }>("comments");
+    const externalIds = items
+      .map((i) => i.platformCommentId)
+      .filter((x): x is string => typeof x === "string" && x.length > 0);
+    const existingDocs = await col
+      .find({ account_pk: ctx.accountPk, external_id: { $in: externalIds } })
+      .toArray();
+    const prevByExt = new Map<string, unknown>();
+    for (const d of existingDocs) {
+      if (d.external_id) prevByExt.set(d.external_id, d.doc);
+    }
     const ops: AnyBulkWriteOperation[] = [];
     const idByOpIndex: string[] = [];
     for (const item of items) {
       const externalId = item.platformCommentId;
       if (!externalId) continue;
       idByOpIndex.push(externalId);
-      const doc = toApiComment(ctx, item);
+      const fresh = toApiComment(ctx, item);
+      const prev = prevByExt.get(externalId);
+      const doc = prev ? coalesceMerge(prev, fresh) : fresh;
       ops.push({
         updateOne: {
           filter: {
@@ -258,7 +299,7 @@ export class CanonicalWriteService {
           },
           update: {
             $set: {
-              id: doc.id,
+              id: fresh.id,
               account_pk: ctx.accountPk,
               content_external_id: item.platformContentId,
               external_id: externalId,
@@ -272,9 +313,7 @@ export class CanonicalWriteService {
       });
     }
     if (ops.length === 0) return ZERO_DELTA;
-    const res = await this.mongo
-      .getCollection("comments")
-      .bulkWrite(ops, { ordered: false });
+    const res = await col.bulkWrite(ops, { ordered: false });
     return this.deltaFromBulk(res, idByOpIndex);
   }
 

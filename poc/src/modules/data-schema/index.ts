@@ -7,6 +7,7 @@ export * from "./buckets";
 export * from "./format";
 export * from "./work-platforms";
 export * from "./envelope";
+export { coalesceMerge } from "./coalesce-merge";
 export { buildEnvelope } from "./mappers/envelope.mapper";
 export { toApiProfile } from "./mappers/profile.mapper";
 export { toApiAudience } from "./mappers/audience.mapper";
