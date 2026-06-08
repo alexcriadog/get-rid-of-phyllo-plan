@@ -162,27 +162,87 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
   const id = String(ctx.params?.id || '');
   try {
     const db = await getDb();
-    const filters = [{ account_id: id }, { account_id: Number(id) || id }];
-    const [identityDoc, audienceDoc, postDocs] = await Promise.all([
-      db.collection('identity_snapshots').findOne({ $or: filters }),
+    // Canonical collections (wrapper: { account_pk, doc, updated_at }).
+    const [profileDoc, audienceDoc, contentDocs] = await Promise.all([
+      db.collection('profiles').findOne({ account_pk: id }),
+      db.collection('audience').findOne({ account_pk: id }),
       db
-        .collection('audience_snapshots')
-        .findOne({ $or: filters }, { sort: { captured_at: -1 } }),
-      db
-        .collection('posts')
-        .find({ $or: filters })
-        .sort({ 'data.publishedAt': -1, updated_at: -1 })
+        .collection('contents')
+        .find({ account_pk: id })
+        .sort({ published_at: -1, updated_at: -1 })
         .limit(8)
         .toArray(),
     ]);
-    return {
-      props: {
-        id,
-        identity: identityDoc ? (toPlainJson(identityDoc) as IdentitySnapshot) : null,
-        audience: audienceDoc ? (toPlainJson(audienceDoc) as AudienceSnapshot) : null,
-        posts: postDocs.map((p) => toPlainJson(p) as Post),
-      },
-    };
+
+    const pj = (v: unknown) => toPlainJson(v);
+    const platformOf = (doc: Record<string, any> | undefined): string =>
+      String(doc?.work_platform?.name ?? '').toLowerCase().replace(/\s+/g, '');
+
+    // ── identity ──
+    let identity: IdentitySnapshot | null = null;
+    if (profileDoc) {
+      const w = pj(profileDoc) as { doc?: Record<string, any>; updated_at?: string };
+      const doc = w.doc ?? {};
+      const rep = doc.reputation ?? {};
+      identity = {
+        account_id: id,
+        platform: platformOf(doc),
+        updated_at: w.updated_at,
+        data: {
+          username: doc.platform_username ?? doc.username ?? undefined,
+          displayName: doc.full_name ?? undefined,
+          biography: doc.introduction ?? undefined,
+          avatarUrl: doc.image_url ?? undefined,
+          profileUrl: doc.url ?? undefined,
+          followersCount: rep.follower_count ?? undefined,
+          followingCount: rep.following_count ?? undefined,
+          postsCount: rep.content_count ?? undefined,
+          verified: doc.is_verified ?? undefined,
+          subscriberCount: rep.subscriber_count ?? undefined,
+        },
+      };
+    }
+
+    // ── audience (canonical → old distributions; uses additive gender/age) ──
+    let audience: AudienceSnapshot | null = null;
+    if (audienceDoc) {
+      const w = pj(audienceDoc) as { doc?: Record<string, any>; updated_at?: string };
+      const doc = w.doc ?? {};
+      audience = {
+        account_id: id,
+        updated_at: w.updated_at,
+        data: {
+          countryDistribution: (doc.countries ?? []).map((c: any) => ({ label: c.code, value: c.value })),
+          cityDistribution: (doc.cities ?? []).map((c: any) => ({ label: c.name, value: c.value })),
+          genderDistribution: (doc.gender_distribution ?? []).map((g: any) => ({ label: g.label, value: g.value })),
+          ageDistribution: (doc.age_distribution ?? []).map((a: any) => ({ label: a.label, value: a.value })),
+        },
+      };
+    }
+
+    // ── posts (canonical content → old Post shape) ──
+    const posts: Post[] = contentDocs.map((raw) => {
+      const w = pj(raw) as { doc?: Record<string, any>; external_id?: string };
+      const doc = w.doc ?? {};
+      const eng = doc.engagement ?? {};
+      return {
+        account_id: id,
+        platform: platformOf(doc),
+        platform_content_id: String(w.external_id ?? doc.external_id ?? ''),
+        data: {
+          platformContentId: doc.external_id ?? undefined,
+          contentType: String(doc.type ?? '').toLowerCase() || undefined,
+          caption: doc.description ?? doc.title ?? null,
+          permalink: doc.url ?? null,
+          mediaUrls: doc.media_url ? [doc.media_url] : Array.isArray(doc.media_urls) ? doc.media_urls : [],
+          thumbnailUrl: doc.persistent_thumbnail_url ?? doc.thumbnail_url ?? null,
+          metrics: { likes: eng.like_count ?? undefined, comments: eng.comment_count ?? undefined },
+          publishedAt: doc.published_at ?? null,
+        },
+      };
+    });
+
+    return { props: { id, identity, audience, posts } };
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(err);

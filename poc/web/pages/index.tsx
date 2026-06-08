@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { safeCollection } from '../lib/mongo';
+import { CONNECTOR_API_URL } from '../lib/api';
 import { fmtNumber } from '../lib/format';
 import { RelativeTime } from '../components/RelativeTime';
 
@@ -24,49 +26,125 @@ type IdentitySnapshot = {
   updated_at?: string;
 };
 
-type AudienceData = {
-  cityDistribution?: Array<{ label: string; value: number }>;
-  countryDistribution?: Array<{ label: string; value: number }>;
-};
+type WorkspaceOption = { slug: string; name: string; account_count: number };
 
-type AudienceSnapshot = {
-  account_id: string;
-  data?: AudienceData;
+// Canonical Mongo wrapper: { account_pk, doc: <ApiProfile|ApiAudience>, updated_at }.
+type ProfileWrapper = {
+  account_pk: string;
+  updated_at?: string;
+  doc?: {
+    username?: string | null;
+    platform_username?: string | null;
+    full_name?: string | null;
+    introduction?: string | null;
+    image_url?: string | null;
+    is_verified?: boolean | null;
+    reputation?: {
+      follower_count?: number | null;
+      following_count?: number | null;
+      content_count?: number | null;
+    } | null;
+  };
 };
+type AudienceWrapper = {
+  account_pk: string;
+  doc?: {
+    cities?: Array<{ name: string; value: number }>;
+    countries?: Array<{ code: string; value: number }>;
+  };
+};
+type AccountItem = { id: string; platform: string; handle?: string | null; connected_at?: string };
 
 type PageProps = {
+  workspaces: WorkspaceOption[];
+  selected: string; // '' = all workspaces
   accounts: IdentitySnapshot[];
   topCityByAccount: Record<string, { city: string; value: number } | null>;
   topCountryByAccount: Record<string, { country: string; pct: number } | null>;
 };
 
-export const getServerSideProps: GetServerSideProps<PageProps> = async () => {
-  const [rawIdentity, rawAudience] = await Promise.all([
-    safeCollection<IdentitySnapshot>('identity_snapshots'),
-    safeCollection<AudienceSnapshot>('audience_snapshots'),
+async function fetchJson<T>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(url, { headers: { accept: 'application/json' } });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
+  const selected = String(ctx.query.workspace ?? '').trim();
+
+  // Workspaces (for the selector) + accounts (for the chosen workspace) come
+  // from the connector admin API — it's workspace-aware. Stats/avatars come
+  // from the canonical Mongo `profiles`/`audience` collections, keyed by
+  // account_pk (= the account id).
+  const [wsRes, acctRes, rawProfiles, rawAudience] = await Promise.all([
+    fetchJson<{ data?: WorkspaceOption[] }>(`${CONNECTOR_API_URL}/admin/workspaces?limit=200`),
+    fetchJson<{ items?: AccountItem[] }>(
+      `${CONNECTOR_API_URL}/admin/accounts${selected ? `?workspace=${encodeURIComponent(selected)}` : ''}`,
+    ),
+    safeCollection<ProfileWrapper>('profiles'),
+    safeCollection<AudienceWrapper>('audience'),
   ]);
 
-  const accounts = rawIdentity.map((r) => toPlainJson(r) as IdentitySnapshot);
+  const workspaces: WorkspaceOption[] = (wsRes?.data ?? []).map((w) => ({
+    slug: w.slug,
+    name: w.name,
+    account_count: w.account_count,
+  }));
+  const items = acctRes?.items ?? [];
+
+  const profByPk = new Map<string, ProfileWrapper>();
+  for (const p of rawProfiles) profByPk.set(String(p.account_pk), p);
+
+  const accounts: IdentitySnapshot[] = items.map((it) => {
+    const w = profByPk.get(String(it.id));
+    const doc = w?.doc ?? {};
+    const rep = doc.reputation ?? {};
+    return toPlainJson({
+      account_id: String(it.id),
+      platform: it.platform,
+      updated_at: w?.updated_at ?? it.connected_at ?? undefined,
+      data: {
+        username: doc.platform_username ?? doc.username ?? it.handle ?? undefined,
+        displayName: doc.full_name ?? it.handle ?? undefined,
+        biography: doc.introduction ?? undefined,
+        avatarUrl: doc.image_url ?? undefined,
+        followersCount: rep.follower_count ?? undefined,
+        followingCount: rep.following_count ?? undefined,
+        postsCount: rep.content_count ?? undefined,
+        verified: doc.is_verified ?? undefined,
+      },
+    }) as IdentitySnapshot;
+  });
 
   const topCityByAccount: Record<string, { city: string; value: number } | null> = {};
   const topCountryByAccount: Record<string, { country: string; pct: number } | null> = {};
-  for (const snap of rawAudience) {
-    const key = String(snap.account_id);
-    const cities = snap.data?.cityDistribution ?? [];
-    const countries = snap.data?.countryDistribution ?? [];
+  const audByPk = new Map<string, AudienceWrapper>();
+  for (const a of rawAudience) audByPk.set(String(a.account_pk), a);
+  for (const it of items) {
+    const key = String(it.id);
+    const doc = audByPk.get(key)?.doc ?? {};
+    const cities = doc.cities ?? [];
+    const countries = doc.countries ?? [];
     topCityByAccount[key] = cities.length
-      ? { city: [...cities].sort((a, b) => b.value - a.value)[0].label, value: [...cities].sort((a, b) => b.value - a.value)[0].value }
+      ? (() => {
+          const top = [...cities].sort((a, b) => b.value - a.value)[0];
+          return { city: top.name, value: top.value };
+        })()
       : null;
-    if (countries.length) {
-      const sorted = [...countries].sort((a, b) => b.value - a.value);
-      const total = countries.reduce((a, c) => a + c.value, 0) || 1;
-      topCountryByAccount[key] = { country: sorted[0].label, pct: (sorted[0].value / total) * 100 };
-    } else {
-      topCountryByAccount[key] = null;
-    }
+    topCountryByAccount[key] = countries.length
+      ? (() => {
+          const top = [...countries].sort((a, b) => b.value - a.value)[0];
+          // Canonical audience values are already 0..100 percentages.
+          return { country: top.code, pct: top.value };
+        })()
+      : null;
   }
 
-  return { props: { accounts, topCityByAccount, topCountryByAccount } };
+  return { props: { workspaces, selected, accounts, topCityByAccount, topCountryByAccount } };
 };
 
 function toPlainJson(value: unknown): unknown {
@@ -95,7 +173,40 @@ const TILE_PALETTES: Array<'mint' | 'uv' | 'white' | 'outline'> = [
   'white',
 ];
 
-export default function Home({ accounts, topCityByAccount, topCountryByAccount }: PageProps) {
+function WorkspaceSelect({ workspaces, selected }: { workspaces: WorkspaceOption[]; selected: string }) {
+  const router = useRouter();
+  return (
+    <select
+      value={selected}
+      onChange={(e) => {
+        const v = e.target.value;
+        router.push(v ? `/?workspace=${encodeURIComponent(v)}` : '/');
+      }}
+      aria-label="Workspace"
+      style={{
+        background: '#000',
+        color: '#fff',
+        border: '1px solid #3d00bf',
+        borderRadius: 999,
+        padding: '6px 14px',
+        fontFamily: 'var(--v-mono)',
+        fontSize: 12,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+      }}
+    >
+      <option value="">All workspaces</option>
+      {workspaces.map((w) => (
+        <option key={w.slug} value={w.slug}>
+          {w.name} ({w.account_count})
+        </option>
+      ))}
+    </select>
+  );
+}
+
+export default function Home({ workspaces, selected, accounts, topCityByAccount, topCountryByAccount }: PageProps) {
   return (
     <div className="v-canvas">
       <div
@@ -146,6 +257,7 @@ export default function Home({ accounts, topCityByAccount, topCountryByAccount }
           <span className="v-eyebrow" style={{ color: '#ffffff' }}>
             Connected accounts
           </span>
+          <WorkspaceSelect workspaces={workspaces} selected={selected} />
           <div
             style={{
               flex: 1,
