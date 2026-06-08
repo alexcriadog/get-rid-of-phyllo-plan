@@ -76,14 +76,20 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
   const selected = String(ctx.query.workspace ?? '').trim();
 
+  // Server-side base: use the INTERNAL connector URL (http://api:3000), NOT the
+  // public NEXT_PUBLIC one — the latter routes through Caddy's basic-auth-gated
+  // /api/poc/admin/*, which an SSR fetch can't authenticate against (401).
+  const API_BASE =
+    process.env.CONNECTOR_API_URL || CONNECTOR_API_URL || 'http://localhost:3000';
+
   // Workspaces (for the selector) + accounts (for the chosen workspace) come
   // from the connector admin API — it's workspace-aware. Stats/avatars come
   // from the canonical Mongo `profiles`/`audience` collections, keyed by
   // account_pk (= the account id).
   const [wsRes, acctRes, rawProfiles, rawAudience] = await Promise.all([
-    fetchJson<{ data?: WorkspaceOption[] }>(`${CONNECTOR_API_URL}/admin/workspaces?limit=200`),
+    fetchJson<{ data?: WorkspaceOption[] }>(`${API_BASE}/admin/workspaces?limit=200`),
     fetchJson<{ items?: AccountItem[] }>(
-      `${CONNECTOR_API_URL}/admin/accounts${selected ? `?workspace=${encodeURIComponent(selected)}` : ''}`,
+      `${API_BASE}/admin/accounts${selected ? `?workspace=${encodeURIComponent(selected)}` : ''}`,
     ),
     safeCollection<ProfileWrapper>('profiles'),
     safeCollection<AudienceWrapper>('audience'),
