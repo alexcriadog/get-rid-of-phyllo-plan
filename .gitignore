@@ -43,3 +43,8 @@ Thumbs.db
 # Playwright artifacts
 connect-tool/test-results/
 connect-tool/playwright-report/
+
+# Build output / scratch (added 2026-06-08)
+connect-tool/.next/
+*.bak
+.screenshots/*.network-response

@@ -8,6 +8,7 @@ import { CadenceService } from './cadence.service';
 import { ThrottleLockService } from './throttle-lock.service';
 import { SchedulerService } from './scheduler.service';
 import { SyncWorker } from './sync.worker';
+import { PhylloDualWriteService } from './phyllo-dual-write.service';
 
 /**
  * Wires the scheduler + worker + supporting services.
@@ -27,7 +28,13 @@ import { SyncWorker } from './sync.worker';
     MetaGraphModule,
     OutboundWebhooksModule,
   ],
-  providers: [CadenceService, ThrottleLockService, SchedulerService, SyncWorker],
+  providers: [
+    CadenceService,
+    ThrottleLockService,
+    SchedulerService,
+    SyncWorker,
+    PhylloDualWriteService,
+  ],
   exports: [CadenceService, ThrottleLockService],
 })
 export class SyncModule {}

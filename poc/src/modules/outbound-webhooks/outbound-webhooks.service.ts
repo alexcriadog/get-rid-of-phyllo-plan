@@ -480,9 +480,24 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
 
     const ts = Math.floor(Date.now() / 1000).toString();
     const body = JSON.stringify(delivery.payload);
-    const sig = createHmac('sha256', delivery.endpoint.secret)
-      .update(`${ts}.${body}`)
-      .digest('hex');
+    // Phyllo-format endpoints (PLAN-phyllo-schema-alignment.md §5) sign with a
+    // bare `Webhook-Signatures` header = HMAC-SHA256(secret, raw body), hex —
+    // exactly what Phyllo sends. Native endpoints keep the timestamped
+    // X-Camaleonic-Signature scheme.
+    const isPhyllo =
+      (delivery.endpoint as { format?: string }).format === 'phyllo';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (isPhyllo) {
+      const sig = createHmac('sha256', delivery.endpoint.secret).update(body).digest('hex');
+      headers['Webhook-Signatures'] = sig;
+    } else {
+      const sig = createHmac('sha256', delivery.endpoint.secret)
+        .update(`${ts}.${body}`)
+        .digest('hex');
+      headers['X-Camaleonic-Event'] = delivery.event;
+      headers['X-Camaleonic-Delivery'] = delivery.id;
+      headers['X-Camaleonic-Signature'] = `t=${ts},v1=${sig}`;
+    }
 
     const attempts = delivery.attempts + 1;
     const startedAt = Date.now();
@@ -496,12 +511,7 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
         // saves memory on a misbehaving client that floods the response.
         maxContentLength: 64_000,
         transitional: { clarifyTimeoutError: true },
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Camaleonic-Event': delivery.event,
-          'X-Camaleonic-Delivery': delivery.id,
-          'X-Camaleonic-Signature': `t=${ts},v1=${sig}`,
-        },
+        headers,
       });
       const durationMs = Date.now() - startedAt;
       const responseBody = truncateBody(res.data);

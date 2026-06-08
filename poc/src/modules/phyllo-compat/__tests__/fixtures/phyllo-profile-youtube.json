@@ -1,0 +1,72 @@
+{
+  "id": "9c86500c-9109-476e-ad1e-0c89d946cb61",
+  "created_at": "2025-08-25T11:16:37.465159",
+  "updated_at": "2026-06-05T11:16:41.233643",
+  "user": {
+    "id": "fdc2769d-21dc-4006-adfe-f468d03cf97d",
+    "name": "test"
+  },
+  "account": {
+    "id": "dbc4b901-0758-43f6-9955-9ed1ef7da7ee",
+    "platform_username": "team@camaleonicanalytics.com",
+    "username": "team@camaleonicanalytics.com"
+  },
+  "work_platform": {
+    "id": "14d9ddf5-51c6-415e-bde6-f8ed36ad7054",
+    "name": "YouTube",
+    "logo_url": "https://cdn.getphyllo.com/platforms_logo/logos/logo_youtube.png"
+  },
+  "username": "team@camaleonicanalytics.com",
+  "platform_username": "team@camaleonicanalytics.com",
+  "full_name": "Camaleonic Analytics Team",
+  "first_name": "Camaleonic Analytics",
+  "last_name": "Team",
+  "nick_name": null,
+  "url": "https://youtube.com/@camaleonicanalyticsteam4765",
+  "introduction": "Sponsorship Data Consulting \n\nThe most evolved technology in sponsorship detection. Fast & reliable analysis from live TV, digital content & Social Media.\n\n",
+  "image_url": "https://lh3.googleusercontent.com/a-/ALV-UjVwmqGyImhx0oTw6WYjgogGvBTYnztwqpkPCPMlNIHKDuHbvFYTZKTKD1uQCANdsGfbItZ1RAFbVe65jAeZvai1Mv3-dwF4XxI0wBIl_f-TVx0enyF0i14lMnRIANO3KYo1WI_sV4HB9a_t3J73ur594yZJVAsO4zxv5vbb-H5bdPWhiRWs9LSlCPm74lyYAV4ALrWEskfRmsV0VZnfSiU2jSKMuPqcx_nSggqC-dQdlAk8ACT28awObI-iRAq3QPI_pDB8HZ3DBlhuAxYxdO9cUWRwsF-VTv-nlpiyyWhpNFpQVPjmP5EVyKHlTSARz67IQgYo4fzO4ietkJHChu-Q2-OtYm58IR26cL6oM-L8QqjQ8uCzJP-fjhZtzwadhlvwTvaJ6hS7-sdjmOqxWX1LZQgyegK1P4IDo2T1cbcPVSXlC5R5-hustLr2BBVIde9d9JLe0gOIk4PkElg7S7ObH8LZtkT7LX0COkW_Upf8IOzTbkis85rSNRkqqLJkzShk_E3pHhZXfc3lvBi7Pzn0gPNKYdVnA1BHvZ5-d5xhxN29v4os_-7q365PsJadhbn_iE14ZIW1NL4_WfZNpgqC_4QHclwd-Sq6RNJ2q12qN6qRhcCzMbc-9T9TVVM9WfQEkG9pHLRrad9mLngydyRbdO9qLQLcH5QPA11kVHZVHIypi5MiJMlDuK9WuPRvWiNcK4Gj3lypB_HttPZH9sw_3ZZQnJGnAMMMCHXfDIZwWow8Oes8HqAR7o5lisuc642yqkXDmxbs756r9hcrWDOIkUQC8bKsMxt3JbIoKkZbhgsojqlYHhgAfnQtHpwo2pVhpD3racl8IiKC8trhIwKv08KlYBe1Bj012bELZACmfwr071LIt8MVHnIaYBSWccqLbYXilRxMFrvhJirnggAe2ptr6JsPrZ4RgOQOwIlIBuu2fSahAOx-Hst7wz1oEi4qbC65ZJdrJuRWYFRk63syaRn_D9uekH8L_8UT8HJt1jjVgs1XGgWAlTmzG9VJYFE8KyB58FJrsnyVckUkbCVlxMNc6_te-JWh3zWHNWEu2jl6rxk=s100",
+  "date_of_birth": null,
+  "external_id": "105936189900321623233",
+  "platform_account_type": null,
+  "category": null,
+  "website": null,
+  "reputation": {
+    "follower_count": null,
+    "following_count": null,
+    "subscriber_count": 12,
+    "paid_subscriber_count": null,
+    "content_count": 5,
+    "content_group_count": null,
+    "watch_time_in_hours": 622.75,
+    "average_open_rate": null,
+    "average_click_rate": null,
+    "like_count": null,
+    "connection_count": null
+  },
+  "emails": [
+    {
+      "type": "WORK",
+      "email_id": "team@camaleonicanalytics.com"
+    },
+    {
+      "type": "WORK",
+      "email_id": "aescofet@camaleonicanalytics.com"
+    }
+  ],
+  "phone_numbers": [],
+  "addresses": [],
+  "gender": null,
+  "country": null,
+  "platform_profile_name": "Camaleonic Analytics Team",
+  "platform_profile_id": "UCP4XmI7Df-LpQsd_m6v_Pow",
+  "platform_profile_published_at": "2021-03-19T16:40:55.875528",
+  "is_verified": true,
+  "is_business": true,
+  "work_experiences": null,
+  "education": null,
+  "publications": null,
+  "certifications": null,
+  "volunteer_experiences": null,
+  "honors": null,
+  "projects": null
+}

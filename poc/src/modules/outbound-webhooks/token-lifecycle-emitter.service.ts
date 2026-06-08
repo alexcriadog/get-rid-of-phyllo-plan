@@ -17,6 +17,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@shared/database/prisma.service';
 import { OutboundWebhooksService } from './outbound-webhooks.service';
+import { PhylloWebhookEmitter } from './phyllo-webhook-emitter.service';
 
 @Injectable()
 export class TokenLifecycleEmitter {
@@ -25,6 +26,7 @@ export class TokenLifecycleEmitter {
   constructor(
     private readonly prisma: PrismaService,
     private readonly webhooks: OutboundWebhooksService,
+    private readonly phylloWebhooks: PhylloWebhookEmitter,
   ) {}
 
   /** Access-token was successfully refreshed via refresh-token grant. */
@@ -91,6 +93,8 @@ export class TokenLifecycleEmitter {
       reason: opts.reason,
       occurred_at: new Date().toISOString(),
     });
+    // Phyllo-compatible SESSION.EXPIRED (thin) to phyllo-format endpoints.
+    void this.phylloWebhooks.fireLifecycle({ accountId, type: 'token.expired' });
   }
 
   private async loadAccount(accountId: bigint): Promise<{

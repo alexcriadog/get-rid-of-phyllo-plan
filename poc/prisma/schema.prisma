@@ -184,6 +184,7 @@ model Workspace {
   secret           WorkspaceSecret?
   webhookEndpoints WebhookEndpoint[]
   accounts         Account[]
+  phylloCompatCredentials PhylloCompatCredential[]
 
   @@map("workspaces")
 }
@@ -222,6 +223,27 @@ model WorkspaceSecret {
   @@map("workspace_secrets")
 }
 
+// Basic-auth credentials for the Phyllo-compatible read API
+// (PLAN-phyllo-schema-alignment.md, Phase 2). The consumer sends
+// `Authorization: Basic base64(client_id:client_secret)`, exactly like
+// Phyllo. We store only the SHA-256 of the secret and verify in constant time.
+model PhylloCompatCredential {
+  id               String    @id @default(cuid())
+  workspaceId      String    @map("workspace_id")
+  // Public client id (Basic-auth username). Safe to show in dashboards/logs.
+  clientId         String    @unique @map("client_id")
+  // SHA-256 hex digest of the client secret (Basic-auth password).
+  clientSecretHash String    @map("client_secret_hash")
+  label            String?
+  lastUsedAt       DateTime? @map("last_used_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("phyllo_compat_credentials")
+}
+
 model WebhookEndpoint {
   id          String   @id @default(cuid())
   workspaceId String   @map("workspace_id")
@@ -236,6 +258,12 @@ model WebhookEndpoint {
   events      Json
   active      Boolean  @default(true)
   description String?
+  // Wire format for this endpoint's deliveries:
+  //   "camaleonic" (default) — our native envelope + X-Camaleonic-Signature.
+  //   "phyllo"               — Phyllo/InsightIQ-compatible thin events +
+  //                            Webhook-Signatures (HMAC-SHA256 of raw body).
+  // See PLAN-phyllo-schema-alignment.md, Phase 3.
+  format      String   @default("camaleonic")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

@@ -14,6 +14,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { OutboundWebhooksService } from './outbound-webhooks.service';
+import { PhylloWebhookEmitter } from './phyllo-webhook-emitter.service';
 
 type Cadence = 'immediate' | 'hourly' | 'daily';
 
@@ -48,6 +49,7 @@ export class DataEventDispatcher {
   constructor(
     private readonly prisma: PrismaService,
     private readonly webhooks: OutboundWebhooksService,
+    private readonly phylloWebhooks: PhylloWebhookEmitter,
   ) {}
 
   /**
@@ -84,6 +86,15 @@ export class DataEventDispatcher {
       return;
     }
     if (account.isTest) return;
+
+    // Phyllo-compatible thin webhooks fire immediately and independently of
+    // the native cadence/digest logic below (Phyllo has no digest concept).
+    // Best-effort — the emitter swallows its own errors.
+    await this.phylloWebhooks.fireData({
+      accountId: args.accountId,
+      product: args.product,
+      sampleIds: args.sampleIds,
+    });
 
     const cadence = await this.resolveCadence(account.workspaceId, args.product);
     const eventName = `data.${args.product}.updated`;

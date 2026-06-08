@@ -1,0 +1,531 @@
+{
+  "id": "3e1c5463-1722-4a5b-9a24-f985941244e3",
+  "created_at": "2026-03-03T12:05:47.094075",
+  "updated_at": "2026-05-30T11:10:00.350620",
+  "user": {
+    "id": "027fdca5-7c8b-4409-a860-bed0d9259ae8",
+    "name": "1117_1"
+  },
+  "account": {
+    "id": "f0f722df-eede-428d-9b18-766a1f35aef1",
+    "platform_username": "camaleonicanalytics",
+    "username": "camaleonicanalytics"
+  },
+  "work_platform": {
+    "id": "9bb8913b-ddd9-430b-a66a-d74d846e6c66",
+    "name": "Instagram",
+    "logo_url": "https://cdn.getphyllo.com/platforms_logo/logos/logo_instagram.png"
+  },
+  "countries": [
+    {
+      "code": "TR",
+      "value": 0.24
+    },
+    {
+      "code": "NL",
+      "value": 0.24
+    },
+    {
+      "code": "PL",
+      "value": 0.24
+    },
+    {
+      "code": "NI",
+      "value": 0.24
+    },
+    {
+      "code": "NG",
+      "value": 0.24
+    },
+    {
+      "code": "VN",
+      "value": 0.24
+    },
+    {
+      "code": "PE",
+      "value": 1.66
+    },
+    {
+      "code": "AU",
+      "value": 0.24
+    },
+    {
+      "code": "AR",
+      "value": 1.43
+    },
+    {
+      "code": "CR",
+      "value": 0.24
+    },
+    {
+      "code": "VE",
+      "value": 0.24
+    },
+    {
+      "code": "ES",
+      "value": 62.95
+    },
+    {
+      "code": "CO",
+      "value": 3.33
+    },
+    {
+      "code": "MX",
+      "value": 3.33
+    },
+    {
+      "code": "IT",
+      "value": 0.24
+    },
+    {
+      "code": "CL",
+      "value": 1.66
+    },
+    {
+      "code": "GP",
+      "value": 0.24
+    },
+    {
+      "code": "GM",
+      "value": 0.24
+    },
+    {
+      "code": "CH",
+      "value": 0.71
+    },
+    {
+      "code": "AE",
+      "value": 0.24
+    },
+    {
+      "code": "AD",
+      "value": 9.98
+    },
+    {
+      "code": "EG",
+      "value": 0.24
+    },
+    {
+      "code": "US",
+      "value": 1.66
+    },
+    {
+      "code": "CA",
+      "value": 0.48
+    },
+    {
+      "code": "EC",
+      "value": 0.24
+    },
+    {
+      "code": "IE",
+      "value": 0.24
+    },
+    {
+      "code": "GB",
+      "value": 1.19
+    },
+    {
+      "code": "ID",
+      "value": 0.71
+    },
+    {
+      "code": "MA",
+      "value": 0.24
+    },
+    {
+      "code": "BR",
+      "value": 1.43
+    },
+    {
+      "code": "HU",
+      "value": 0.24
+    },
+    {
+      "code": "FR",
+      "value": 0.71
+    },
+    {
+      "code": "DO",
+      "value": 0.95
+    },
+    {
+      "code": "LU",
+      "value": 0.71
+    },
+    {
+      "code": "PY",
+      "value": 0.24
+    },
+    {
+      "code": "PT",
+      "value": 0.24
+    },
+    {
+      "code": "HK",
+      "value": 0.48
+    },
+    {
+      "code": "TW",
+      "value": 0.48
+    },
+    {
+      "code": "FI",
+      "value": 0.24
+    },
+    {
+      "code": "PR",
+      "value": 0.24
+    },
+    {
+      "code": "DE",
+      "value": 0.71
+    },
+    {
+      "code": "RS",
+      "value": 0.24
+    },
+    {
+      "code": "CU",
+      "value": 0.24
+    }
+  ],
+  "cities": [
+    {
+      "name": "San Fel\u00edu de Codinas, Catalu\u00f1a",
+      "value": 1.85
+    },
+    {
+      "name": "Tei\u00e0, Catalu\u00f1a",
+      "value": 0.74
+    },
+    {
+      "name": "Escaldes, Escaldes-Engordany",
+      "value": 4.06
+    },
+    {
+      "name": "Sant Juli\u00e0 de L\u00f2ria, Sant Juli\u00e0 de L\u00f2ria",
+      "value": 1.85
+    },
+    {
+      "name": "Andorra la Vella, Andorra la Vella",
+      "value": 4.8
+    },
+    {
+      "name": "Santiago, Santiago Metropolitan Region",
+      "value": 1.85
+    },
+    {
+      "name": "Granollers, Catalu\u00f1a",
+      "value": 0.74
+    },
+    {
+      "name": "Lleida, Catalu\u00f1a",
+      "value": 2.95
+    },
+    {
+      "name": "Mexico City, Distrito Federal",
+      "value": 1.48
+    },
+    {
+      "name": "Ripollet, Catalu\u00f1a",
+      "value": 0.74
+    },
+    {
+      "name": "Lima, Lima Region",
+      "value": 2.58
+    },
+    {
+      "name": "Palau-solit\u00e0 i Plegamans, Catalu\u00f1a",
+      "value": 0.74
+    },
+    {
+      "name": "A Coru\u00f1a, Galicia",
+      "value": 0.74
+    },
+    {
+      "name": "Badalona, Catalu\u00f1a",
+      "value": 1.11
+    },
+    {
+      "name": "Cabrils, Catalu\u00f1a",
+      "value": 0.74
+    },
+    {
+      "name": "Madrid, Comunidad de Madrid",
+      "value": 6.64
+    },
+    {
+      "name": "Encamp, Encamp",
+      "value": 0.74
+    },
+    {
+      "name": "Seville, Andalusia",
+      "value": 1.48
+    },
+    {
+      "name": "Seo de Urgel, Catalu\u00f1a",
+      "value": 2.58
+    },
+    {
+      "name": "Xinbei, New Taipei City",
+      "value": 0.74
+    },
+    {
+      "name": "Cadiz, Andalusia",
+      "value": 1.11
+    },
+    {
+      "name": "C\u00f3rdoba, C\u00f3rdoba",
+      "value": 1.11
+    },
+    {
+      "name": "Buenos Aires, Ciudad Aut\u00f3noma de Buenos Aires",
+      "value": 0.74
+    },
+    {
+      "name": "Bogot\u00e1, Distrito Especial",
+      "value": 4.43
+    },
+    {
+      "name": "Ja\u00e9n, Andalusia",
+      "value": 0.74
+    },
+    {
+      "name": "Santo Domingo, Distrito Nacional",
+      "value": 0.74
+    },
+    {
+      "name": "Gav\u00e1, Catalu\u00f1a",
+      "value": 0.74
+    },
+    {
+      "name": "Marbella, Andalusia",
+      "value": 0.74
+    },
+    {
+      "name": "Coll de Narg\u00f3, Catalu\u00f1a",
+      "value": 0.74
+    },
+    {
+      "name": "Vigo, Galicia",
+      "value": 1.48
+    },
+    {
+      "name": "Sant Cugat del Vall\u00e8s, Catalu\u00f1a",
+      "value": 1.11
+    },
+    {
+      "name": "Palma de Mallorca, Balearic Islands",
+      "value": 0.74
+    },
+    {
+      "name": "Manresa, Catalu\u00f1a",
+      "value": 1.11
+    },
+    {
+      "name": "Nezahualc\u00f3yotl, State of Mexico",
+      "value": 0.74
+    },
+    {
+      "name": "Hong Kong, Hong Kong",
+      "value": 0.74
+    },
+    {
+      "name": "Schoos, Luxembourg District",
+      "value": 0.74
+    },
+    {
+      "name": "Terrassa, Catalu\u00f1a",
+      "value": 0.74
+    },
+    {
+      "name": "T\u00e1rrega, Catalu\u00f1a",
+      "value": 0.74
+    },
+    {
+      "name": "Barcelona, Catalu\u00f1a",
+      "value": 33.58
+    },
+    {
+      "name": "Sant Vicen\u00e7 dels Horts, Catalu\u00f1a",
+      "value": 0.74
+    },
+    {
+      "name": "Tarragona, Catalu\u00f1a",
+      "value": 2.21
+    },
+    {
+      "name": "S\u00e3o Paulo, S\u00e3o Paulo (state)",
+      "value": 1.85
+    },
+    {
+      "name": "Sabadell, Catalu\u00f1a",
+      "value": 1.48
+    },
+    {
+      "name": "Ordino, Ordino",
+      "value": 1.11
+    },
+    {
+      "name": "Casas Vila, Encamp",
+      "value": 0.74
+    },
+    {
+      "name": "M\u00e1laga, Andalusia",
+      "value": 0.75
+    },
+    {
+      "name": "Castelldefels, Catalu\u00f1a",
+      "value": 0.75
+    },
+    {
+      "name": "Valencia, Comunidad Valenciana",
+      "value": 0.75
+    },
+    {
+      "name": "Gurb, Catalu\u00f1a",
+      "value": 0.75
+    },
+    {
+      "name": "Luxembourg, Luxembourg District",
+      "value": 0.75
+    },
+    {
+      "name": "L'Hospitalet de Llobregat, Catalu\u00f1a",
+      "value": 1.13
+    },
+    {
+      "name": "Sant Just Desvern, Catalu\u00f1a",
+      "value": 0.75
+    },
+    {
+      "name": "La Massana, La Massana",
+      "value": 0.75
+    },
+    {
+      "name": "Aubonne, Vaud",
+      "value": 0.75
+    },
+    {
+      "name": "Milan, Lombardia",
+      "value": 0.75
+    },
+    {
+      "name": "Mar\u00edn, Galicia",
+      "value": 0.75
+    },
+    {
+      "name": "Girona, Catalu\u00f1a",
+      "value": 0.75
+    },
+    {
+      "name": "Barber\u00e0 del Vall\u00e8s, Catalu\u00f1a",
+      "value": 0.75
+    },
+    {
+      "name": "El Tarter, Canillo",
+      "value": 0.75
+    },
+    {
+      "name": "Caldes de Montbui, Catalu\u00f1a",
+      "value": 0.75
+    },
+    {
+      "name": "London, England",
+      "value": 0.75
+    }
+  ],
+  "gender_age_distribution": [
+    {
+      "gender": "OTHER",
+      "age_range": "65-",
+      "value": 1.19
+    },
+    {
+      "gender": "OTHER",
+      "age_range": "55-64",
+      "value": 2.38
+    },
+    {
+      "gender": "OTHER",
+      "age_range": "45-54",
+      "value": 3.33
+    },
+    {
+      "gender": "OTHER",
+      "age_range": "35-44",
+      "value": 4.28
+    },
+    {
+      "gender": "OTHER",
+      "age_range": "25-34",
+      "value": 5.7
+    },
+    {
+      "gender": "OTHER",
+      "age_range": "18-24",
+      "value": 2.38
+    },
+    {
+      "gender": "MALE",
+      "age_range": "65-",
+      "value": 0.48
+    },
+    {
+      "gender": "MALE",
+      "age_range": "55-64",
+      "value": 4.04
+    },
+    {
+      "gender": "MALE",
+      "age_range": "45-54",
+      "value": 8.55
+    },
+    {
+      "gender": "MALE",
+      "age_range": "35-44",
+      "value": 15.2
+    },
+    {
+      "gender": "MALE",
+      "age_range": "25-34",
+      "value": 23.75
+    },
+    {
+      "gender": "MALE",
+      "age_range": "18-24",
+      "value": 2.38
+    },
+    {
+      "gender": "FEMALE",
+      "age_range": "65-",
+      "value": 0.95
+    },
+    {
+      "gender": "FEMALE",
+      "age_range": "55-64",
+      "value": 1.66
+    },
+    {
+      "gender": "FEMALE",
+      "age_range": "45-54",
+      "value": 2.38
+    },
+    {
+      "gender": "FEMALE",
+      "age_range": "35-44",
+      "value": 4.99
+    },
+    {
+      "gender": "FEMALE",
+      "age_range": "25-34",
+      "value": 14.01
+    },
+    {
+      "gender": "FEMALE",
+      "age_range": "18-24",
+      "value": 2.38
+    }
+  ]
+}

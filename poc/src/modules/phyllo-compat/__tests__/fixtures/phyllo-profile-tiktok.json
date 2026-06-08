@@ -1,0 +1,63 @@
+{
+  "id": "34b56250-73c6-4606-bf4b-b41431237d6b",
+  "created_at": "2026-03-10T12:07:09.029063",
+  "updated_at": "2026-06-05T14:39:19.840330",
+  "user": {
+    "id": "40f3d476-c6b3-422f-ae36-be85d5df8b4f",
+    "name": "1065_2"
+  },
+  "account": {
+    "id": "02473286-ac2c-4704-9e84-3845c7f61dfe",
+    "platform_username": "camaleonicanalytics",
+    "username": "camaleonicanalytics"
+  },
+  "work_platform": {
+    "id": "de55aeec-0dc8-4119-bf90-16b3d1f0c987",
+    "name": "TikTok",
+    "logo_url": "https://cdn.getphyllo.com/platforms_logo/logos/logo_tiktok.png"
+  },
+  "username": "camaleonicanalytics",
+  "platform_username": "camaleonicanalytics",
+  "full_name": "CamaleonicAnalytics",
+  "first_name": null,
+  "last_name": null,
+  "nick_name": null,
+  "url": "https://www.tiktok.com/@camaleonicanalytics",
+  "introduction": "Information Technology Company \ud83d\udd25\nhttps://linktr.ee/camaleonic",
+  "image_url": "https://p16-common-sign.tiktokcdn-eu.com/tos-maliva-avt-0068/d3c83be6a3702d286d89c6a7712bdb0b~tplv-tiktokx-cropcenter:1080:1080.jpeg?dr=10399&refresh_token=bcd7065a&x-expires=1780840800&x-signature=Sot8IJmablk87PgWdvQ7LB8VU2U%3D&t=4d5b0474&ps=13740610&shp=a5d48078&shcp=8aecc5ac&idc=no1a",
+  "date_of_birth": null,
+  "external_id": "ee77151f-3616-5b64-84eb-4737da52ca99",
+  "platform_account_type": null,
+  "category": null,
+  "website": "Information Technology Company \ud83d\udd25\nhttps://linktr.ee/camaleonic",
+  "reputation": {
+    "follower_count": 83,
+    "following_count": 11,
+    "subscriber_count": null,
+    "paid_subscriber_count": null,
+    "content_count": 78,
+    "content_group_count": null,
+    "watch_time_in_hours": null,
+    "average_open_rate": null,
+    "average_click_rate": null,
+    "like_count": 3090,
+    "connection_count": null
+  },
+  "emails": [],
+  "phone_numbers": [],
+  "addresses": [],
+  "gender": null,
+  "country": null,
+  "platform_profile_name": "CamaleonicAnalytics",
+  "platform_profile_id": "ee77151f-3616-5b64-84eb-4737da52ca99",
+  "platform_profile_published_at": null,
+  "is_verified": false,
+  "is_business": false,
+  "work_experiences": null,
+  "education": null,
+  "publications": null,
+  "certifications": null,
+  "volunteer_experiences": null,
+  "honors": null,
+  "projects": null
+}

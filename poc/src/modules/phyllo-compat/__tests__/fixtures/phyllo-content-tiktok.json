@@ -1,0 +1,72 @@
+{
+  "id": "cc4b5de5-4e22-4547-aed2-f79a31856781",
+  "created_at": "2026-06-01T14:39:23.964362",
+  "updated_at": "2026-06-05T14:39:19.772564",
+  "user": {
+    "id": "40f3d476-c6b3-422f-ae36-be85d5df8b4f",
+    "name": "1065_2"
+  },
+  "account": {
+    "id": "02473286-ac2c-4704-9e84-3845c7f61dfe",
+    "platform_username": "camaleonicanalytics",
+    "username": "camaleonicanalytics"
+  },
+  "work_platform": {
+    "id": "de55aeec-0dc8-4119-bf90-16b3d1f0c987",
+    "name": "TikTok",
+    "logo_url": "https://cdn.getphyllo.com/platforms_logo/logos/logo_tiktok.png"
+  },
+  "engagement": {
+    "like_count": 4,
+    "dislike_count": null,
+    "comment_count": 0,
+    "impression_organic_count": null,
+    "reach_organic_count": null,
+    "save_count": null,
+    "view_count": 222,
+    "replay_count": null,
+    "watch_time_in_hours": null,
+    "avg_watch_time_in_sec": null,
+    "share_count": 0,
+    "impression_paid_count": null,
+    "reach_paid_count": null,
+    "email_open_rate": null,
+    "email_click_rate": null,
+    "unsubscribe_count": null,
+    "spam_report_count": null,
+    "click_count": null,
+    "additional_info": null,
+    "repost_count": null
+  },
+  "authors": null,
+  "audience": null,
+  "platform": null,
+  "external_id": "7641673062030658838",
+  "title": "A great tennis match is all about reading the game. The same goes for sponsorship performance. \ud83e\udd16  During the @atptour in Shanghai, every camera angle, court transition, and replay created new opportunities for brands to capture attention. The challenge isn\u2019t just being present. It\u2019s knowing which placements truly delivered impact. Because the brands that win are the ones that understand the game beyond the scoreboard. \u23f1\ufe0f  Curious what your sponsorships are really delivering? \ud83d\udd17 Visit: camaleonicanalytics.com and request a demo. #ATPTour #SportsBusiness #SportsTech #AIAnalytics",
+  "format": "VIDEO",
+  "type": "VIDEO",
+  "url": "https://www.tiktok.com/@camaleonicanalytics/video/7641673062030658838?utm_campaign=tt4d_open_api&utm_source=awjooe755yeuzi46",
+  "media_url": "https://www.tiktok.com/player/v1/7641673062030658838?music_info=1&description=1&autoplay=1&loop=1&utm_campaign=tt4d_open_api&utm_source=awjooe755yeuzi46",
+  "duration": 26,
+  "description": "A great tennis match is all about reading the game. The same goes for sponsorship performance. \ud83e\udd16  During the @atptour in Shanghai, every camera angle, court transition, and replay created new opportunities for brands to capture attention. The challenge isn\u2019t just being present. It\u2019s knowing which placements truly delivered impact. Because the brands that win are the ones that understand the game beyond the scoreboard. \u23f1\ufe0f  Curious what your sponsorships are really delivering? \ud83d\udd17 Visit: camaleonicanalytics.com and request a demo. #ATPTour #SportsBusiness #SportsTech #AIAnalytics",
+  "visibility": "PUBLIC",
+  "thumbnail_url": "https://p16-common-sign.tiktokcdn-eu.com/tos-no1a-p-0037-no/ogErseQZkAatAzDFFAfiFpAIAoIGjA4fLVGUWE~tplv-tiktokx-cropcenter-q:300:400:q70.jpeg?dr=9232&refresh_token=bc07b4ee&x-expires=1780754400&x-signature=pkkluGVx9Wr9ny32LhojiTyHuj8%3D&t=bacd0480&ps=933b5bde&shp=d05b14bd&shcp=8aecc5ac&idc=no1a&s=TIKTOK_FOR_DEVELOPER&sc=cover&biz_tag=tt_video",
+  "persistent_thumbnail_url": "https://media-resources.getphyllo.com/public/acc_cont_cc4b5de5-4e22-4547-aed2-f79a31856781/thumbnail_url",
+  "published_at": "2026-06-01T11:00:00.000000",
+  "platform_profile_id": "ee77151f-3616-5b64-84eb-4737da52ca99",
+  "platform_profile_name": "CamaleonicAnalytics",
+  "sponsored": null,
+  "collaboration": null,
+  "is_owned_by_platform_user": true,
+  "hashtags": [
+    "#SportsBusiness",
+    "#SportsTech",
+    "#ATPTour",
+    "#AIAnalytics"
+  ],
+  "content_tags": null,
+  "mentions": [
+    "@atptour"
+  ],
+  "media_urls": []
+}

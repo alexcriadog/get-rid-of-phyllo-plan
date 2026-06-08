@@ -36,6 +36,10 @@ import {
 import { FacebookExtrasService } from '@modules/platforms/facebook/fetcher/facebook-extras.service';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 import { DataEventDispatcher } from '@modules/outbound-webhooks/data-event-dispatcher.service';
+import {
+  PhylloDualWriteService,
+  type DualWriteResult,
+} from './phyllo-dual-write.service';
 
 const SYNC_QUEUE_NAME = 'sync';
 const DEFAULT_CONCURRENCY = 4;
@@ -156,6 +160,7 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
     private readonly facebookExtras: FacebookExtrasService,
     private readonly lifecycle: TokenLifecycleEmitter,
     private readonly dataEvents: DataEventDispatcher,
+    private readonly phylloDualWrite: PhylloDualWriteService,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
 
@@ -347,6 +352,20 @@ export class SyncWorker implements OnApplicationBootstrap, OnApplicationShutdown
       }
 
       const delta = await this.persistToMongo(accountIdBig, account.platform, fetchResult);
+      // Phyllo-compatible projection (dual-write). Best-effort — the service
+      // swallows its own errors so a projection failure never breaks the sync.
+      await this.phylloDualWrite.write(
+        {
+          id: accountIdBig,
+          platform: account.platform,
+          canonicalUserId: account.canonicalUserId,
+          handle: account.handle,
+          endUserId: account.endUserId,
+          connectedAt: account.connectedAt,
+          createdAt: account.createdAt,
+        },
+        fetchResult as DualWriteResult,
+      );
       await this.emitEvent(accountIdBig, product, fetchResult);
       // Public-facing webhook for clients: fire data.<product>.updated.
       // Cadence (immediate / hourly / daily) is resolved per workspace
