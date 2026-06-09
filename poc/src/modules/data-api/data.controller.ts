@@ -113,6 +113,25 @@ export class DataController {
     });
   }
 
+  // InsightIQ-compatible: grouped content (carousels/albums). We don't model
+  // content groups separately, so return an empty list — individual items are
+  // served by social/contents. Consumers (e.g. the InsightIQ webhook adapter)
+  // query BOTH endpoints, so a missing route here 404s and breaks their
+  // `body.data.map(...)`. An empty envelope keeps that path happy.
+  @Get("social/content-groups")
+  async listContentGroups(
+    @Req() req: RequestWithApiWorkspace,
+    @Query("account_id") accountId: string | undefined,
+    @Query("offset") offsetRaw: string | undefined,
+    @Query("limit") limitRaw: string | undefined,
+  ): Promise<ApiListEnvelope<ApiContent>> {
+    if (!accountId)
+      throw badRequest("missing_account_id", "account_id is required");
+    const { offset, limit } = parseOffsetLimit(offsetRaw, limitRaw);
+    await this.requireAccountPk(req, accountId);
+    return listEnvelope([], { offset, limit, fromDate: null, toDate: null });
+  }
+
   @Get("social/contents/:id")
   async getContent(
     @Req() req: RequestWithApiWorkspace,
