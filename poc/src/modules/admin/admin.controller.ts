@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import { AdminService } from './admin.service';
+import { apiAccountId } from '@modules/data-schema/ids';
 import { ManualRefreshController } from '@modules/api/manual-refresh.controller';
 import { TokenHealthCronService } from '@modules/token-refresh/token-health.cron.service';
 import { ConnectToolGuard } from './connect-tool.guard';
@@ -560,7 +561,7 @@ export class AdminController {
       }
       accessToken = resolved;
     }
-    return this.admin.seedConnection({
+    const result = (await this.admin.seedConnection({
       platform: parsed.data.platform,
       accessToken: accessToken as string,
       refreshToken: parsed.data.refresh_token,
@@ -574,7 +575,11 @@ export class AdminController {
       workspaceSlug: parsed.data.workspace_slug,
       endUserId: parsed.data.end_user_id,
       isTest: parsed.data.is_test,
-    });
+    })) as { account_id: string } & Record<string, unknown>;
+    // Return the InsightIQ-compatible canonical account id (the same UUID used
+    // by /v1 and outbound webhooks), not the internal BigInt PK. Consumers
+    // persist this id and must be able to match it against later webhooks.
+    return { ...result, account_id: apiAccountId(String(result.account_id)) };
   }
 
   // YouTube OAuth helpers used to live here. They were the manual flow
