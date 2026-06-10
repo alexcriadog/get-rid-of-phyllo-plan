@@ -12,7 +12,13 @@ import type { GraphMedia } from '../instagram.types';
 
 export function mediaToContent(media: GraphMedia): ContentData {
   const metrics = extractMetrics(media);
-  const type = MEDIA_TYPE_MAP[media.media_type ?? ''] ?? 'other';
+  // Reels carry media_type=VIDEO + media_product_type=REELS, so keying only on
+  // media_type misclassifies them as plain 'video'. Prefer the product type so
+  // reels map to 'reel' (→ InsightIQ type REELS, shown as a Reel not a Video).
+  const type =
+    media.media_product_type === 'REELS'
+      ? 'reel'
+      : (MEDIA_TYPE_MAP[media.media_type ?? ''] ?? 'other');
   const serialized = JSON.stringify(media);
   const hash = createHash('sha256').update(serialized).digest('hex');
 
