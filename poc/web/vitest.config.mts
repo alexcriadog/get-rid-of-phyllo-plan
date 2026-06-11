@@ -12,6 +12,6 @@ export default defineConfig({
   },
   resolve: {
     // Mirror tsconfig "@/*" → "./*"
-    alias: { '@': path.resolve(__dirname, '.') },
+    alias: { '@': path.resolve(import.meta.dirname, '.') },
   },
 });
