@@ -84,7 +84,7 @@ const config: Config = {
         sm: 'calc(var(--radius-lg-tw) - 6px)',
       },
       fontFamily: {
-        display: ['var(--font-display)', 'Manrope', 'system-ui', 'sans-serif'],
+        display: ['var(--font-display, Manrope)', 'Manrope', 'system-ui', 'sans-serif'],
         sans: [
           '-apple-system',
           'BlinkMacSystemFont',
@@ -96,7 +96,7 @@ const config: Config = {
           'sans-serif',
         ],
         mono: [
-          'var(--font-mono)',
+          'var(--font-mono, ui-monospace)',
           'ui-monospace',
           'SFMono-Regular',
           'Menlo',
