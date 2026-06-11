@@ -85,13 +85,13 @@ export const PANEL_DEFS: Record<PanelId, PanelDef> = {
     title: 'System Vitals',
     component: lazy(() => import('./SystemVitalsPanel')),
   },
-  'needs-attention': { title: 'Needs Attention', component: placeholder('needs-attention') },
-  'live-activity': { title: 'Live Activity', component: placeholder('live-activity') },
-  schedule: { title: 'Schedule', component: placeholder('schedule') },
-  queues: { title: 'Queues & DLQ', component: placeholder('queues') },
+  'needs-attention': { title: 'Needs Attention', component: lazy(() => import('./NeedsAttentionPanel')) },
+  'live-activity': { title: 'Live Activity', component: lazy(() => import('./LiveActivityPanel')) },
+  schedule: { title: 'Schedule', component: lazy(() => import('./SchedulePanel')) },
+  queues: { title: 'Queues & DLQ', component: lazy(() => import('./QueuesPanel')) },
   cadence: { title: 'Cadence', component: placeholder('cadence') },
   'rate-limits': { title: 'Rate Limits & Locks', component: placeholder('rate-limits') },
-  'kpi-stats': { title: 'KPI Stats', component: placeholder('kpi-stats') },
+  'kpi-stats': { title: 'KPI Stats', component: lazy(() => import('./KpiStatsPanel')) },
   'tenant-directory': { title: 'Tenant Directory', component: placeholder('tenant-directory') },
   'tenant-inspector': { title: 'Tenant Inspector', component: placeholder('tenant-inspector') },
   'account-directory': { title: 'Account Directory', component: placeholder('account-directory') },
@@ -99,7 +99,7 @@ export const PANEL_DEFS: Record<PanelId, PanelDef> = {
   'capability-matrix': { title: 'Capability Matrix', component: placeholder('capability-matrix') },
   usage: { title: 'Usage & Storage', component: placeholder('usage') },
   'runtime-settings': { title: 'Runtime Settings', component: placeholder('runtime-settings') },
-  'raw-inspector': { title: 'Raw Inspector', component: placeholder('raw-inspector') },
+  'raw-inspector': { title: 'Raw Inspector', component: lazy(() => import('./RawInspectorPanel')) },
 };
 
 /** True when `id` is a known panel in the catalog. */

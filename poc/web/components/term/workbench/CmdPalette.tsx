@@ -1,10 +1,11 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/router';
 import { Command } from 'cmdk';
 import * as Dialog from '@radix-ui/react-dialog';
 import { DECKS, DECK_IDS, type DeckId } from '@/lib/term/decks';
 import { ALL_PANEL_IDS, panelTitle, type PanelId } from '@/components/term/panels/registry';
 import { useTheme } from '@/lib/theme';
+import { CONNECTOR_API_URL, adminPost } from '@/lib/api';
 
 /**
  * The ⌘K command palette (spec §2.4), Phase 2 scope: jump + open only.
@@ -28,9 +29,55 @@ interface CmdPaletteProps {
   actions: PaletteActions;
 }
 
+/** A queue name + failed count that has items to retry. */
+interface FailedQueue {
+  name: string;
+  failed: number;
+}
+
+type QueueStats = Record<string, { failed?: number }>;
+
 export default function CmdPalette({ open, onOpenChange, actions }: CmdPaletteProps) {
   const router = useRouter();
   const { toggle } = useTheme();
+
+  // DLQ state: queues with failed > 0, fetched once when the palette opens.
+  const [failedQueues, setFailedQueues] = useState<FailedQueue[]>([]);
+  const [dlqStatus, setDlqStatus] = useState<string | null>(null);
+
+  // Fetch /admin/queues once when the palette opens; populate failedQueues.
+  useEffect(() => {
+    if (!open) return;
+    setDlqStatus(null);
+
+    fetch(`${CONNECTOR_API_URL}/admin/queues`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json() as Promise<QueueStats>;
+      })
+      .then((data) => {
+        const failing = Object.entries(data)
+          .filter(([, counts]) => (counts.failed ?? 0) > 0)
+          .map(([name, counts]) => ({ name, failed: counts.failed ?? 0 }));
+        setFailedQueues(failing);
+      })
+      .catch(() => {
+        // API unreachable — silently hide the DLQ group.
+        setFailedQueues([]);
+      });
+  }, [open]);
+
+  // Fire retry for a queue; show a transient status message then close.
+  const retryDlq = async (queue: FailedQueue) => {
+    setDlqStatus(`retrying ${queue.failed} failed jobs in ${queue.name}…`);
+    try {
+      await adminPost(`/admin/queues/${queue.name}/retry-failed`, {});
+      setDlqStatus(`↺ ${queue.name}: retry queued`);
+      setTimeout(() => onOpenChange(false), 800);
+    } catch (e) {
+      setDlqStatus(`✗ ${(e as Error).message}`);
+    }
+  };
 
   // ⌘K / Ctrl+K toggles the palette globally. Esc-to-close is handled by the
   // Radix Dialog inside cmdk.
@@ -106,6 +153,32 @@ export default function CmdPalette({ open, onOpenChange, actions }: CmdPalettePr
             </PaletteItem>
           ))}
         </Command.Group>
+
+        {/* DLQ RETRY — only rendered when at least one queue has failed jobs */}
+        {failedQueues.length > 0 && (
+          <Command.Group heading="DLQ RETRY" className="term-cmdk-group">
+            {failedQueues.map((q) => (
+              <PaletteItem
+                key={`dlq:${q.name}`}
+                value={`retry dlq ${q.name} failed jobs dead letter queue`}
+                onSelect={() => { void retryDlq(q); }}
+              >
+                <span className="text-term-danger">↺</span>{' '}
+                retry DLQ: {q.name}{' '}
+                <span className="ml-auto text-[10px] text-term-danger tabular-nums">
+                  {q.failed}f
+                </span>
+              </PaletteItem>
+            ))}
+          </Command.Group>
+        )}
+
+        {/* Status line shown while a retry is in-flight or just completed */}
+        {dlqStatus && (
+          <div className="px-3 py-1 text-[10px] text-term-faint border-t border-term-line">
+            {dlqStatus}
+          </div>
+        )}
 
         <Command.Group heading="ACTIONS" className="term-cmdk-group">
           <PaletteItem value="toggle theme light dark" onSelect={() => run(toggle)}>
