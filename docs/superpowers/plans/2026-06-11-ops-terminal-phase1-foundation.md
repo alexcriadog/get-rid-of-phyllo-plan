@@ -676,15 +676,22 @@ git commit -m "feat(web): ActionChip term primitive"
 
 ```tsx
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { getDefaultNormalizer, render, screen } from '@testing-library/react';
 import StatBlock from '../StatBlock';
 import { fmtStatNumber } from '@/lib/format';
 
+// Testing-library's default normalizer collapses ALL whitespace (incl. U+202F)
+// in DOM text to ASCII spaces before string comparison, so the numeral must be
+// queried with a non-collapsing normalizer to match the real U+202F output.
 describe('StatBlock', () => {
   it('renders label and thin-space formatted numeral', () => {
     render(<StatBlock label="syncs / 24h" value={48204} />);
     expect(screen.getByText('syncs / 24h')).toBeInTheDocument();
-    expect(screen.getByText(fmtStatNumber(48204))).toBeInTheDocument();
+    expect(
+      screen.getByText(fmtStatNumber(48204), {
+        normalizer: getDefaultNormalizer({ collapseWhitespace: false }),
+      }),
+    ).toBeInTheDocument();
   });
   it('renders string values verbatim', () => {
     render(<StatBlock label="success" value="99.4%" />);
