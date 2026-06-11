@@ -10,6 +10,7 @@ describe('platformTag', () => {
   it('returns the spec for a known platform', () => {
     expect(platformTag('tiktok')).toEqual({ abbr: 'TT', label: 'tiktok', className: 'text-tag-tt' });
     expect(platformTag('instagram').abbr).toBe('IG');
+    expect(platformTag('TIKTOK').abbr).toBe('TT');
   });
   it('falls back gracefully for unknown platforms', () => {
     expect(platformTag('myspace')).toEqual({ abbr: 'MY', label: 'myspace', className: 'text-term-muted' });

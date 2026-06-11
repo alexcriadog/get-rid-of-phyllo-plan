@@ -19,5 +19,7 @@ describe('fmtStatNumber', () => {
     expect(fmtStatNumber(null)).toBe('—');
     expect(fmtStatNumber(undefined)).toBe('—');
     expect(fmtStatNumber(Number.NaN)).toBe('—');
+    expect(fmtStatNumber(Infinity)).toBe('—');
+    expect(fmtStatNumber(-Infinity)).toBe('—');
   });
 });

@@ -25,7 +25,7 @@ export const PLATFORM_TAGS: Record<PlatformId, PlatformTagSpec> = {
 };
 
 export function platformTag(platform: string): PlatformTagSpec {
-  const spec = PLATFORM_TAGS[platform as PlatformId];
+  const spec = PLATFORM_TAGS[platform.toLowerCase() as PlatformId];
   if (spec) return spec;
   return {
     abbr: platform ? platform.slice(0, 2).toUpperCase() : '??',
