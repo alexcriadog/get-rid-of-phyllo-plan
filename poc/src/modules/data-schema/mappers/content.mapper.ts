@@ -84,11 +84,15 @@ function buildAdditionalInfo(
   const profileVisits = has("profile_visits");
   const bioLink = has("bio_link_clicked");
   const followersGained = has("followers_gained") ?? has("follows");
+  const totalInteractions = has("total_interactions");
+  const reelsSkipRate = has("reels_skip_rate");
   if (
     !navHasAny &&
     profileVisits === null &&
     bioLink === null &&
-    followersGained === null
+    followersGained === null &&
+    totalInteractions === null &&
+    reelsSkipRate === null
   ) {
     return null;
   }
@@ -97,12 +101,20 @@ function buildAdditionalInfo(
     bio_link_clicked: bioLink,
     followers_gained: followersGained,
     story_navigation: navHasAny ? nav : null,
+    total_interactions: totalInteractions,
+    reels_skip_rate: reelsSkipRate,
   };
 }
 
 function buildEngagement(content: ContentData): ApiEngagement {
   const m = content.metrics ?? {};
   const extra = m.extra ?? {};
+  // IG reels watch-time metrics arrive in MILLISECONDS (Meta wire format,
+  // see instagram-insights.mapper.ts); the InsightIQ contract wants seconds
+  // (avg) and hours (total). TikTok's average_time_watched_s is already
+  // seconds — no conversion there.
+  const reelsAvgWatchMs = num(extra["ig_reels_avg_watch_time"]);
+  const reelsTotalWatchMs = num(extra["ig_reels_video_view_total_time"]);
   return {
     ...ENGAGEMENT_DEFAULT,
     like_count: num(m.likes),
@@ -113,7 +125,10 @@ function buildEngagement(content: ContentData): ApiEngagement {
     reach_organic_count: num(m.reach),
     avg_watch_time_in_sec:
       num(extra["average_time_watched_s"]) ??
-      num(extra["avg_watch_time_in_sec"]),
+      num(extra["avg_watch_time_in_sec"]) ??
+      (reelsAvgWatchMs !== null ? reelsAvgWatchMs / 1000 : null),
+    watch_time_in_hours:
+      reelsTotalWatchMs !== null ? reelsTotalWatchMs / 3_600_000 : null,
     additional_info: buildAdditionalInfo(extra),
   };
 }

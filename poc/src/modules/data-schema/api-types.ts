@@ -106,6 +106,13 @@ export interface ApiEngagementAdditionalInfo {
   bio_link_clicked: number | null;
   followers_gained: number | null;
   story_navigation: ApiStoryNavigation | null;
+  /**
+   * Superset extras (not in InsightIQ's contract — consumers that don't know
+   * them ignore them). total_interactions: Meta's aggregate interactions
+   * metric. reels_skip_rate: % of viewers who skipped the reel (0-100).
+   */
+  total_interactions?: number | null;
+  reels_skip_rate?: number | null;
 }
 
 export interface ApiEngagement {
