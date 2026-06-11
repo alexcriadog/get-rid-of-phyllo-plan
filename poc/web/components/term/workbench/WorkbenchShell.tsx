@@ -23,6 +23,8 @@ import {
   type DeckId,
 } from '@/lib/term/decks';
 import { PANEL_DEFS, isPanelId, type PanelId } from '@/components/term/panels/registry';
+import { selectWorkspace, selectAccount } from '@/lib/term/selection';
+import { extractQueryParam } from '@/pages/admin/terminal';
 import PanelChrome, { withPanelRegion } from './PanelChrome';
 import DeckTabs from './DeckTabs';
 import StatusBar from './StatusBar';
@@ -113,6 +115,14 @@ export default function WorkbenchShell() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router.isReady, router.query.deck]);
+
+  // ── Object permalink params (spec §2.3): ?workspace=<slug> / ?account=<id>
+  // Consumed once when the router is ready. We store pending permalink actions
+  // in a ref so they can be applied after the dockview board is ready. The
+  // openPanel callback is defined below; we use a stable ref to avoid a
+  // dependency cycle between the two useEffects.
+  const permalinkApplied = useRef(false);
+  const openPanelRef = useRef<((id: PanelId) => void) | null>(null);
 
   // ── dockview components map (one wrapped entry per registry panel) ──────
   const components = useMemo<IDockviewReactProps['components']>(() => {
@@ -222,6 +232,38 @@ export default function WorkbenchShell() {
         : {}),
     });
   }, []);
+
+  // Keep the openPanel ref in sync so the permalink effect can call it after it
+  // has been defined (the ref pattern avoids a stale-closure / ordering issue).
+  openPanelRef.current = openPanel;
+
+  // ── Apply permalink params once the router AND board are ready ─────────
+  // This effect fires on every router.isReady / router.query change (same dep
+  // list as the deck sync effect) but the `permalinkApplied` guard ensures it
+  // only acts once per page load. We use apiRef so we don't depend on board
+  // state at hook definition time.
+  useEffect(() => {
+    if (!router.isReady || permalinkApplied.current) return;
+    const workspaceSlug = extractQueryParam(router.query.workspace);
+    const accountId = extractQueryParam(router.query.account);
+    if (!workspaceSlug && !accountId) return;
+
+    permalinkApplied.current = true;
+
+    if (workspaceSlug) {
+      selectWorkspace(workspaceSlug);
+      openPanelRef.current?.('tenant-inspector');
+    }
+    if (accountId) {
+      selectAccount(accountId);
+      openPanelRef.current?.('account-inspector');
+    }
+
+    // Strip the permalink params without losing other query params.
+    const { workspace: _ws, account: _ac, ...rest } = router.query;
+    void router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady, router.query.workspace, router.query.account]);
 
   const paletteActions = useMemo<PaletteActions>(
     () => ({ switchDeck, openPanel }),

@@ -4,14 +4,18 @@ import { Command } from 'cmdk';
 import * as Dialog from '@radix-ui/react-dialog';
 import { DECKS, DECK_IDS, type DeckId } from '@/lib/term/decks';
 import { ALL_PANEL_IDS, panelTitle, type PanelId } from '@/components/term/panels/registry';
+import { selectWorkspace, selectAccount } from '@/lib/term/selection';
 import { useTheme } from '@/lib/theme';
 import { CONNECTOR_API_URL, adminPost } from '@/lib/api';
 
 /**
- * The ⌘K command palette (spec §2.4), Phase 2 scope: jump + open only.
- * Groups: DECKS (switch the 4 decks) · PANELS (open any registry panel into the
- * current deck) · ACTIONS (toggle theme, jump to legacy admin / specimen).
- * Real mutations (DLQ retry, queue pause, …) land in Phase 3.
+ * The ⌘K command palette (spec §2.4).
+ * Groups:
+ *   DECKS   — switch the 4 decks
+ *   PANELS  — open any registry panel into the current deck
+ *   JUMP    — jump to a workspace or account by slug/handle (spec §2.3)
+ *   DLQ RETRY — retry queues with failed jobs (Phase 3)
+ *   ACTIONS — toggle theme, legacy admin / specimen links
  *
  * Built on cmdk's `Command.Dialog`, which wraps a Radix Dialog — proper dialog
  * semantics, focus trap, and Esc-to-close are handled for us (spec §9). The
@@ -22,6 +26,36 @@ export interface PaletteActions {
   switchDeck: (id: DeckId) => void;
   openPanel: (id: PanelId) => void;
 }
+
+// ── Jump item types ──────────────────────────────────────────────────────────
+
+interface JumpAccount {
+  kind: 'account';
+  id: string;
+  handle: string | null;
+  platform: string;
+}
+
+interface JumpWorkspace {
+  kind: 'workspace';
+  slug: string;
+  name: string;
+}
+
+type JumpItem = JumpAccount | JumpWorkspace;
+
+type AccountsResponse = Array<{
+  id: string | number;
+  handle?: string | null;
+  platform: string;
+}>;
+
+type WorkspacesResponse = Array<{
+  slug: string;
+  name: string;
+}>;
+
+const MAX_JUMP = 50;
 
 interface CmdPaletteProps {
   open: boolean;
@@ -45,6 +79,9 @@ export default function CmdPalette({ open, onOpenChange, actions }: CmdPalettePr
   const [failedQueues, setFailedQueues] = useState<FailedQueue[]>([]);
   const [dlqStatus, setDlqStatus] = useState<string | null>(null);
 
+  // JUMP items: accounts + workspaces, fetched once when the palette opens.
+  const [jumpItems, setJumpItems] = useState<JumpItem[]>([]);
+
   // Fetch /admin/queues once when the palette opens; populate failedQueues.
   useEffect(() => {
     if (!open) return;
@@ -67,6 +104,37 @@ export default function CmdPalette({ open, onOpenChange, actions }: CmdPalettePr
       });
   }, [open]);
 
+  // Fetch accounts + workspaces once when the palette opens for the JUMP group.
+  useEffect(() => {
+    if (!open) return;
+    setJumpItems([]);
+
+    const fetchAccounts = fetch(`${CONNECTOR_API_URL}/admin/accounts?limit=${MAX_JUMP}`)
+      .then((r) => (r.ok ? (r.json() as Promise<AccountsResponse>) : Promise.resolve([])))
+      .catch(() => [] as AccountsResponse);
+
+    const fetchWorkspaces = fetch(`${CONNECTOR_API_URL}/admin/workspaces`)
+      .then((r) => (r.ok ? (r.json() as Promise<WorkspacesResponse>) : Promise.resolve([])))
+      .catch(() => [] as WorkspacesResponse);
+
+    void Promise.all([fetchAccounts, fetchWorkspaces]).then(([accounts, workspaces]) => {
+      const items: JumpItem[] = [
+        ...accounts.slice(0, MAX_JUMP).map((a): JumpItem => ({
+          kind: 'account',
+          id: String(a.id),
+          handle: a.handle ?? null,
+          platform: a.platform,
+        })),
+        ...workspaces.map((w): JumpItem => ({
+          kind: 'workspace',
+          slug: w.slug,
+          name: w.name,
+        })),
+      ];
+      setJumpItems(items);
+    });
+  }, [open]);
+
   // Fire retry for a queue; show a transient status message then close.
   const retryDlq = async (queue: FailedQueue) => {
     setDlqStatus(`retrying ${queue.failed} failed jobs in ${queue.name}…`);
@@ -77,6 +145,18 @@ export default function CmdPalette({ open, onOpenChange, actions }: CmdPalettePr
     } catch (e) {
       setDlqStatus(`✗ ${(e as Error).message}`);
     }
+  };
+
+  // Select a workspace or account and open its inspector panel, then close.
+  const jumpTo = (item: JumpItem) => {
+    if (item.kind === 'workspace') {
+      selectWorkspace(item.slug);
+      actions.openPanel('tenant-inspector');
+    } else {
+      selectAccount(item.id);
+      actions.openPanel('account-inspector');
+    }
+    onOpenChange(false);
   };
 
   // ⌘K / Ctrl+K toggles the palette globally. Esc-to-close is handled by the
@@ -153,6 +233,40 @@ export default function CmdPalette({ open, onOpenChange, actions }: CmdPalettePr
             </PaletteItem>
           ))}
         </Command.Group>
+
+        {/* JUMP — workspace / account quick-select; only rendered when items loaded */}
+        {jumpItems.length > 0 && (
+          <Command.Group heading="JUMP" className="term-cmdk-group">
+            {jumpItems.map((item) =>
+              item.kind === 'workspace' ? (
+                <PaletteItem
+                  key={`jump:ws:${item.slug}`}
+                  value={`jump workspace ${item.slug} ${item.name}`}
+                  onSelect={() => jumpTo(item)}
+                >
+                  <span className="text-term-mint">⊞</span>{' '}
+                  jump: workspace{' '}
+                  <span className="text-term-text">{item.slug}</span>
+                  {item.name !== item.slug && (
+                    <span className="ml-1 text-term-faint">{item.name}</span>
+                  )}
+                </PaletteItem>
+              ) : (
+                <PaletteItem
+                  key={`jump:acct:${item.id}`}
+                  value={`jump account @${item.handle ?? item.id} ${item.platform} ${item.id}`}
+                  onSelect={() => jumpTo(item)}
+                >
+                  <span className="text-term-uv-tint">@</span>{' '}
+                  jump: @{item.handle ?? item.id}{' '}
+                  <span className="ml-auto text-[10px] uppercase tracking-[0.06em] text-term-faint">
+                    {item.platform}
+                  </span>
+                </PaletteItem>
+              )
+            )}
+          </Command.Group>
+        )}
 
         {/* DLQ RETRY — only rendered when at least one queue has failed jobs */}
         {failedQueues.length > 0 && (
