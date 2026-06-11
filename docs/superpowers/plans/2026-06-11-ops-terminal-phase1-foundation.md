@@ -1512,6 +1512,7 @@ git commit -m "docs: check off ops-terminal phase 1 plan"
 
 ## Deferred to later phase plans (explicitly NOT here)
 
+- Phase 6/7: remove the legacy "Verge" CDN font link (Anton / Space Grotesk / Space Mono) from `pages/_document.tsx` when the `/account/[id]*` and public pages are redesigned. Until then both font systems intentionally coexist: legacy surfaces render the CDN families (`--v-display`/`--v-sans`/`--v-mono`), term surfaces render the next/font families — font binaries only download where their family is actually used, so this is not a per-page double-load. (Raised in Task 3 quality review; removal now would break account-explorer typography and violate the Phase 1 no-behavior-change constraint.)
 - Phase 2: dockview shell, `PanelChrome`, `DeckTabs`, `StatusBar`, `CmdPalette`, `Drawer`, deck/URL state, mobile stacked mode — needs the dockview spike first.
 - Phase 3+: panels, unified activity endpoint, palette actions, redirects/cutover, Data Inspector, client portal, showroom.
 - Playwright visual-regression harness (spec §10) — lands with Phase 2 when there are decks to screenshot.
