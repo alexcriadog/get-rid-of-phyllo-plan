@@ -42,6 +42,7 @@ export default function TermTable<T>({
           {columns.map((c) => (
             <th
               key={c.key}
+              scope="col"
               className={cn(
                 'px-2 py-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-term-faint',
                 c.align === 'right' ? 'text-right' : 'text-left',

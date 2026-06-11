@@ -36,7 +36,8 @@ const TABLE_COLUMNS: TermColumn<SpecimenRow>[] = [
     align: 'right',
     render: (r) => (
       <span className={r.status === 'live' ? 'text-term-mint' : 'text-term-danger'}>
-        ● {r.status}
+        <span aria-hidden="true">● </span>
+        {r.status}
       </span>
     ),
   },
