@@ -977,3 +977,73 @@ tr:hover td {
     padding: 20px 18px 50px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   dockview — Mint Terminal theme (Ops Terminal workbench, spec §2/§3).
+
+   dockview is CSS-variable themed; the `.dockview-theme-term` class is set on
+   the board root by the React theme object (components/term/workbench/theme.ts).
+   We override its `--dv-*` variables with term tokens so the tiling chrome
+   reads as the window manager: hairline #232323 borders, sharp corners, a
+   ~28px tab strip, the board background = --term-bg, panel surfaces = --term-
+   surface. The only glow is the mint active sash on the focused panel. All
+   colors reference the term tokens, so the theme flips light/dark for free
+   with the `.dark` class on <html>.
+   ─────────────────────────────────────────────────────────────────── */
+.dockview-theme-term {
+  --dv-paneview-active-outline-color: rgb(var(--term-mint));
+  --dv-tabs-and-actions-container-font-size: 10px;
+  --dv-tabs-and-actions-container-height: 28px;
+  --dv-tab-close-icon-size: 12px;
+
+  --dv-group-view-background-color: rgb(var(--term-bg));
+  --dv-tabs-and-actions-container-background-color: rgb(var(--term-bg));
+  --dv-activegroup-visiblepanel-tab-background-color: rgb(var(--term-surface));
+  --dv-activegroup-visiblepanel-tab-color: rgb(var(--term-mint));
+  --dv-activegroup-hiddenpanel-tab-background-color: rgb(var(--term-bg));
+  --dv-activegroup-hiddenpanel-tab-color: rgb(var(--term-muted));
+  --dv-inactivegroup-visiblepanel-tab-background-color: rgb(var(--term-surface));
+  --dv-inactivegroup-visiblepanel-tab-color: rgb(var(--term-text));
+  --dv-inactivegroup-hiddenpanel-tab-background-color: rgb(var(--term-bg));
+  --dv-inactivegroup-hiddenpanel-tab-color: rgb(var(--term-muted));
+
+  --dv-separator-border: rgb(var(--term-line));
+  --dv-tab-divider-color: rgb(var(--term-line));
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: rgb(var(--term-mint));
+
+  --dv-border-radius: 0px;
+  --dv-tab-border-radius: 0px;
+  --dv-sash-border-radius: 0px;
+
+  --dv-icon-hover-background-color: rgb(var(--term-raised));
+  --dv-drag-over-background-color: rgb(var(--term-mint) / 0.08);
+  --dv-drag-over-border-color: rgb(var(--term-mint));
+  --dv-scrollbar-background-color: rgb(var(--term-line-2));
+}
+
+/* Panel body surface + sharp corners — dockview's content host. */
+.dockview-theme-term .dv-content-container,
+.dockview-theme-term .dv-groupview {
+  background-color: rgb(var(--term-surface));
+  border-radius: 0;
+}
+
+/* Tab strip: bottom hairline so the focused tab's mint underline reads as the
+   active indicator rather than dockview's default rounded SVG chrome. */
+.dockview-theme-term .dv-tabs-and-actions-container {
+  border-bottom: 1px solid rgb(var(--term-line));
+}
+
+/* Our PanelChrome owns the active-tab accent; suppress dockview's default
+   active-tab underline SVG so the two don't fight. */
+.dockview-theme-term .dv-active-tab .dv-default-tab,
+.dockview-theme-term .dv-tab.dv-active-tab {
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dockview-theme-term * {
+    transition: none !important;
+  }
+}
