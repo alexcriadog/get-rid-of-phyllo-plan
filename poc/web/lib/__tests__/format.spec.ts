@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fmtStatNumber } from '../format';
 
-const NNBSP = ' ';
+const NNBSP = '\u202f';
 
 describe('fmtStatNumber', () => {
   it('groups thousands with narrow no-break space', () => {

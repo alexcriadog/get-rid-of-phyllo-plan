@@ -94,7 +94,7 @@ export function fmtStatNumber(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return '—';
   const sign = n < 0 ? '-' : '';
   const digits = Math.trunc(Math.abs(n)).toString();
-  return sign + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return sign + digits.replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f');
 }
 
 export type ProductKind = 'identity' | 'audience' | 'engagement_new' | 'stories';
