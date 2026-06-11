@@ -22,4 +22,14 @@ describe('FeedLine', () => {
     );
     expect(screen.getByText('ERR 429').className).toContain('text-term-danger');
   });
+  it('applies queued and warn tone classes', () => {
+    const { rerender } = render(
+      <FeedLine time="12:00:00" status={{ text: 'QUEUED', tone: 'queued' }}>a</FeedLine>,
+    );
+    expect(screen.getByText('QUEUED').className).toContain('text-term-uv-tint');
+    rerender(
+      <FeedLine time="12:00:00" status={{ text: 'SLOW', tone: 'warn' }}>a</FeedLine>,
+    );
+    expect(screen.getByText('SLOW').className).toContain('text-term-warn');
+  });
 });

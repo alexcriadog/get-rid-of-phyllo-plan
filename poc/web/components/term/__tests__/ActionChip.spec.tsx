@@ -18,4 +18,12 @@ describe('ActionChip', () => {
     render(<ActionChip disabled>noop</ActionChip>);
     expect(screen.getByRole('button', { name: 'noop' })).toBeDisabled();
   });
+  it('applies primary, action and ghost variant classes', () => {
+    const { rerender } = render(<ActionChip variant="primary">go</ActionChip>);
+    expect(screen.getByRole('button', { name: 'go' }).className).toContain('bg-term-mint');
+    rerender(<ActionChip>go</ActionChip>);
+    expect(screen.getByRole('button', { name: 'go' }).className).toContain('border-term-mint');
+    rerender(<ActionChip variant="ghost">go</ActionChip>);
+    expect(screen.getByRole('button', { name: 'go' }).className).toContain('border-term-line-2');
+  });
 });

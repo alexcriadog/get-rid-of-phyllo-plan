@@ -21,7 +21,7 @@ describe('StatBlock', () => {
     render(
       <StatBlock label="syncs" value={1} delta={{ text: '12% vs prev', tone: 'up' }} sub="stable" />,
     );
-    expect(screen.getByText('▲ 12% vs prev')).toBeInTheDocument();
+    expect(screen.getByText(/12% vs prev/)).toBeInTheDocument();
     expect(screen.getByText(/stable/)).toBeInTheDocument();
   });
 });

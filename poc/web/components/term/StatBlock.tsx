@@ -31,7 +31,8 @@ export default function StatBlock({ label, value, delta, sub, className }: StatB
         <div className="text-[11px] text-term-muted">
           {delta && (
             <span className={DELTA_CLASS[delta.tone]}>
-              {DELTA_ARROW[delta.tone]} {delta.text}
+              <span aria-hidden="true">{DELTA_ARROW[delta.tone]} </span>
+              {delta.text}
             </span>
           )}
           {delta && sub ? ' · ' : ''}
