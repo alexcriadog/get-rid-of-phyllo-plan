@@ -115,10 +115,95 @@ export function deckStorageKey(id: DeckId): string {
 }
 
 /**
- * Save a serialized dockview layout for a deck. Tolerates private-mode /
- * quota failures silently — a lost custom layout just falls back to default.
+ * Count the total number of panels referenced across all leaves of a
+ * serialized dockview grid. Returns 0 for an absent / malformed grid.
+ *
+ * Real dockview leaf shape: { type: 'leaf', data: { views: string[], ... } }
+ * Branch shape:             { type: 'branch', data: [...child nodes] }
+ */
+function countSerializedPanels(layout: SerializedDockview): number {
+  let count = 0;
+  function walk(node: unknown): void {
+    if (!node || typeof node !== 'object') return;
+    const n = node as Record<string, unknown>;
+    if (n.type === 'leaf') {
+      // data is a leaf-data object: { views: string[], activeView, id }
+      const leafData = n.data as Record<string, unknown> | null;
+      if (leafData && Array.isArray(leafData.views)) count += leafData.views.length;
+      return;
+    }
+    // branch: data is an array of child nodes
+    const data = n.data;
+    if (Array.isArray(data)) data.forEach(walk);
+  }
+  walk(layout.grid?.root);
+  return count;
+}
+
+/**
+ * Returns true when a serialized dockview layout is structurally valid and
+ * safe to restore:
+ *  (a) At least one panel overall.
+ *  (b) No leaf node with an empty `views` array.
+ *  (c) Every view id, after stripping the `<deck>:` namespace prefix, maps to
+ *      a known registry panel id (validated by the caller-supplied predicate).
+ *
+ * Invalid layouts should be discarded (remove from localStorage) and rebuilt
+ * from the default slot list.
+ */
+export function isValidSerializedLayout(
+  layout: SerializedDockview,
+  isValidPanelId: (id: string) => boolean,
+): boolean {
+  if (!layout || typeof layout !== 'object' || !layout.grid) return false;
+
+  let panelCount = 0;
+  let valid = true;
+
+  function walk(node: unknown): void {
+    if (!valid) return;
+    if (!node || typeof node !== 'object') return;
+    const n = node as Record<string, unknown>;
+
+    if (n.type === 'leaf') {
+      // Leaf data shape: { views: string[], activeView: string, id: string }
+      const leafData = n.data as Record<string, unknown> | null;
+      const views = leafData?.views;
+      if (!Array.isArray(views) || views.length === 0) {
+        // Leaf with empty views array — the corrupt artifact shape.
+        valid = false;
+        return;
+      }
+      for (const viewId of views) {
+        if (typeof viewId !== 'string') { valid = false; return; }
+        // Strip the deck namespace prefix (<deck>:<panelId>).
+        const colonIdx = viewId.indexOf(':');
+        const panelId = colonIdx !== -1 ? viewId.slice(colonIdx + 1) : viewId;
+        if (!isValidPanelId(panelId)) { valid = false; return; }
+        panelCount++;
+      }
+      return;
+    }
+
+    // Branch: data is an array of child nodes.
+    const data = n.data;
+    if (Array.isArray(data)) data.forEach(walk);
+  }
+
+  walk(layout.grid.root);
+
+  return valid && panelCount > 0;
+}
+
+/**
+ * Save a serialized dockview layout for a deck.
+ * Skips persisting layouts with zero panels (guards against saving a
+ * half-cleared board). Tolerates private-mode / quota failures silently —
+ * a lost custom layout just falls back to default.
  */
 export function saveDeckLayout(id: DeckId, layout: SerializedDockview): void {
+  // Never persist an empty board.
+  if (countSerializedPanels(layout) === 0) return;
   try {
     window.localStorage.setItem(deckStorageKey(id), JSON.stringify(layout));
   } catch {
@@ -153,22 +238,34 @@ export function resetDeck(id: DeckId): void {
 
 /**
  * Build a deck on a dockview board. Restores a saved custom layout when one
- * exists and is valid; otherwise replays the deck's default slot list.
+ * exists, is structurally valid, and all view ids resolve to known panels.
+ * Invalid saved layouts are discarded (self-healing for already-corrupted
+ * clients) and the default slot list is replayed instead.
  * Always clears the board first so deck switches don't accumulate panels.
+ *
+ * `isApplyingRef` must be set to `true` by the caller before invoking and
+ * reset to `false` after. The layout-change save handler no-ops while it is
+ * set so that intermediate clear/rebuild states are never persisted.
  */
-export function applyDeck(api: DockviewApi, id: DeckId): void {
+export function applyDeck(
+  api: DockviewApi,
+  id: DeckId,
+  isValidPanelId: (panelId: string) => boolean,
+): void {
   api.clear();
   const saved = loadDeckLayout(id);
   if (saved) {
-    try {
-      api.fromJSON(saved);
-      return;
-    } catch {
-      // Saved layout incompatible (e.g. references a removed panel) — fall
-      // through to the default so the deck still opens.
-      resetDeck(id);
-      api.clear();
+    if (isValidSerializedLayout(saved, isValidPanelId)) {
+      try {
+        api.fromJSON(saved);
+        return;
+      } catch {
+        // Saved layout incompatible (e.g. references a removed panel) — fall
+        // through to the default so the deck still opens.
+      }
     }
+    // Discard the invalid / failed layout so the client self-heals.
+    resetDeck(id);
   }
   applyDeckLayout(api, DECKS[id]);
 }

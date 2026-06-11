@@ -22,7 +22,7 @@ import {
   saveDeckLayout,
   type DeckId,
 } from '@/lib/term/decks';
-import { PANEL_DEFS, type PanelId } from '@/components/term/panels/registry';
+import { PANEL_DEFS, isPanelId, type PanelId } from '@/components/term/panels/registry';
 import PanelChrome, { withPanelRegion } from './PanelChrome';
 import DeckTabs from './DeckTabs';
 import StatusBar from './StatusBar';
@@ -67,6 +67,16 @@ export default function WorkbenchShell() {
   const apiRef = useRef<DockviewApi | null>(null);
   const saveTimer = useRef<number | null>(null);
   const deckRef = useRef<DeckId>(deckFromQuery(undefined));
+  /** True while applyDeck is rebuilding the board — saves must be suppressed. */
+  const isApplyingRef = useRef(false);
+  /**
+   * Tracks the last (api instance, deckId) pair that was applied. Used to
+   * prevent the double-apply that occurs when both onReady and the URL-sync
+   * effect fire for the same deck on the same board instance. Keyed on the
+   * API object reference so that React Strict Mode double-mount (which creates
+   * a new API instance) always gets a fresh apply.
+   */
+  const lastAppliedRef = useRef<{ api: DockviewApi; deckId: DeckId } | null>(null);
 
   const [deck, setDeck] = useState<DeckId>(() => deckFromQuery(undefined));
   const [panelCount, setPanelCount] = useState(0);
@@ -98,7 +108,7 @@ export default function WorkbenchShell() {
     const next = deckFromQuery(router.query.deck);
     setDeck(next);
     if (apiRef.current) {
-      applyDeck(apiRef.current, next);
+      applyDeckSafe(apiRef.current, next);
       setPanelCount(apiRef.current.panels.length);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -116,6 +126,9 @@ export default function WorkbenchShell() {
 
   // ── Persist layout (debounced) ─────────────────────────────────────────
   const persist = useCallback(() => {
+    // No-op while applyDeck is rebuilding — the board is mid-clear and any
+    // snapshot taken here would capture an empty or partially-built layout.
+    if (isApplyingRef.current) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
       const api = apiRef.current;
@@ -124,11 +137,41 @@ export default function WorkbenchShell() {
     }, SAVE_DEBOUNCE_MS);
   }, []);
 
+  /**
+   * Wrapper around the library's applyDeck that:
+   *  - Skips if the deck is already the last-applied one (prevents double-apply
+   *    that happens when both onReady and the URL-sync effect fire for the same
+   *    deck on initial load).
+   *  - Suspends the save handler while the board is being rebuilt.
+   *  - Cancels any pending debounced save before starting.
+   */
+  const applyDeckSafe = useCallback(
+    (api: DockviewApi, id: DeckId) => {
+      // Skip only when the SAME api instance already has this deck applied.
+      // Using the api object reference as the key means React Strict Mode's
+      // double-mount (new api instance) always gets a fresh apply.
+      if (lastAppliedRef.current?.api === api && lastAppliedRef.current?.deckId === id) return;
+      // Cancel any pending debounced save from the previous deck state.
+      if (saveTimer.current) {
+        window.clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      isApplyingRef.current = true;
+      try {
+        applyDeck(api, id, isPanelId);
+        lastAppliedRef.current = { api, deckId: id };
+      } finally {
+        isApplyingRef.current = false;
+      }
+    },
+    [],
+  );
+
   // ── dockview ready: apply deck + wire events ───────────────────────────
   const onReady = useCallback(
     (event: DockviewReadyEvent) => {
       apiRef.current = event.api;
-      applyDeck(event.api, deckRef.current);
+      applyDeckSafe(event.api, deckRef.current);
       setPanelCount(event.api.panels.length);
 
       const syncCount = () => setPanelCount(event.api.panels.length);
@@ -136,7 +179,7 @@ export default function WorkbenchShell() {
       event.api.onDidRemovePanel(syncCount);
       event.api.onDidLayoutChange(persist);
     },
-    [persist],
+    [persist, applyDeckSafe],
   );
 
   // ── Deck switch ────────────────────────────────────────────────────────
@@ -144,7 +187,11 @@ export default function WorkbenchShell() {
     (next: DeckId) => {
       setDeck(next);
       if (apiRef.current) {
-        applyDeck(apiRef.current, next);
+        // An explicit user switch must always re-apply even if the same deck
+        // id is active (e.g. the user hit "reset"). Clear the guard first so
+        // applyDeckSafe doesn't skip this call.
+        lastAppliedRef.current = null;
+        applyDeckSafe(apiRef.current, next);
         setPanelCount(apiRef.current.panels.length);
       }
       // Shallow URL update — no data refetch, no scroll reset.
@@ -152,7 +199,7 @@ export default function WorkbenchShell() {
         shallow: true,
       });
     },
-    [router],
+    [router, applyDeckSafe],
   );
 
   // ── Open a panel into the current deck (palette action) ────────────────
