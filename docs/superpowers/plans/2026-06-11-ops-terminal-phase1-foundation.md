@@ -24,12 +24,12 @@ poc/web has no test runner (repo backend uses ts-jest, which is too heavy — se
 - Create: `poc/web/test/setup.ts`
 - Test: `poc/web/test/__tests__/infra.spec.tsx`
 
-- [ ] **Step 1: Install dev dependencies**
+- [x] **Step 1: Install dev dependencies**
 
 Run: `npm i -D vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/jest-dom`
 Expected: package.json devDependencies gains all five; install exits 0.
 
-- [ ] **Step 2: Add npm scripts**
+- [x] **Step 2: Add npm scripts**
 
 In `package.json` `"scripts"`, add (keep existing scripts):
 
@@ -38,7 +38,7 @@ In `package.json` `"scripts"`, add (keep existing scripts):
 "test:watch": "vitest"
 ```
 
-- [ ] **Step 3: Create vitest config**
+- [x] **Step 3: Create vitest config**
 
 `vitest.config.mts`:
 
@@ -62,15 +62,21 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 4: Create test setup**
+- [x] **Step 4: Create test setup**
 
-`test/setup.ts`:
+`test/setup.ts` (explicit cleanup is required: testing-library's auto-cleanup
+only registers when `afterEach` exists as a global, and this config does not
+enable vitest globals — discovered in Task 10):
 
 ```ts
+import { afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+
+afterEach(() => cleanup());
 ```
 
-- [ ] **Step 5: Write the infra smoke test**
+- [x] **Step 5: Write the infra smoke test**
 
 `test/__tests__/infra.spec.tsx`:
 
@@ -86,17 +92,17 @@ describe('test infra', () => {
 });
 ```
 
-- [ ] **Step 6: Run the test**
+- [x] **Step 6: Run the test**
 
 Run: `npm test`
 Expected: 1 passed.
 
-- [ ] **Step 7: Verify the type gate still passes**
+- [x] **Step 7: Verify the type gate still passes**
 
 Run: `npx tsc --noEmit`
 Expected: 0 errors (vitest/jest-dom types resolve via the explicit imports).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add package.json package-lock.json vitest.config.mts test/
@@ -113,7 +119,7 @@ RGB triplets (not HSL) — derived 1:1 from the spec hex values, so no conversio
 - Modify: `poc/web/styles/globals.css` (append inside the existing `@layer base` block, after the `.dark` ruleset)
 - Modify: `poc/web/tailwind.config.ts`
 
-- [ ] **Step 1: Append term tokens to globals.css**
+- [x] **Step 1: Append term tokens to globals.css**
 
 Inside the existing `@layer base { ... }`, after the `.dark { ... }` ruleset, add:
 
@@ -171,7 +177,7 @@ Inside the existing `@layer base { ... }`, after the `.dark { ... }` ruleset, ad
   }
 ```
 
-- [ ] **Step 2: Wire Tailwind colors, display font slot, and blink keyframe**
+- [x] **Step 2: Wire Tailwind colors, display font slot, and blink keyframe**
 
 In `tailwind.config.ts` under `theme.extend.colors`, add after the existing `info` entry:
 
@@ -245,7 +251,7 @@ In `theme.extend.animation` add:
         'term-blink': 'term-blink 1.1s step-end infinite',
 ```
 
-- [ ] **Step 2b: Extend the reduced-motion guard to animations**
+- [x] **Step 2b: Extend the reduced-motion guard to animations**
 
 The existing guard in `styles/globals.css` (~line 207) only neutralizes transitions; spec §9 requires animations (blink, pulse) silenced too. Replace the media query body with:
 
@@ -259,12 +265,12 @@ The existing guard in `styles/globals.css` (~line 207) only neutralizes transiti
 }
 ```
 
-- [ ] **Step 3: Verify gates**
+- [x] **Step 3: Verify gates**
 
 Run: `npx tsc --noEmit && npm run build`
 Expected: 0 type errors; build completes (tokens are additive, no page changed).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add styles/globals.css tailwind.config.ts
@@ -278,7 +284,7 @@ git commit -m "feat(web): Mint Terminal --term-* tokens + tailwind wiring (Ops T
 **Files:**
 - Modify: `poc/web/pages/_app.tsx`
 
-- [ ] **Step 1: Load Space Grotesk + JetBrains Mono and expose as CSS variables on `<html>`**
+- [x] **Step 1: Load Space Grotesk + JetBrains Mono and expose as CSS variables on `<html>`**
 
 The variables go on `html` via a global style (not a wrapper div) so Radix portals — which mount on `<body>` — inherit them.
 
@@ -303,12 +309,12 @@ Inside the returned fragment, directly after `</Head>`, add:
       `}</style>
 ```
 
-- [ ] **Step 2: Verify gates**
+- [x] **Step 2: Verify gates**
 
 Run: `npx tsc --noEmit && npm run build`
 Expected: 0 errors; build downloads/inlines the two Google font subsets.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add pages/_app.tsx
@@ -325,7 +331,7 @@ Extends the existing `lib/format.ts` (do NOT create a parallel format module).
 - Modify: `poc/web/lib/format.ts` (append)
 - Test: `poc/web/lib/__tests__/format.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `lib/__tests__/format.spec.ts` (the group separator is U+202F — always written as the '\u202f' escape, never as a literal character):
 
@@ -355,12 +361,12 @@ describe('fmtStatNumber', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- lib/__tests__/format.spec.ts`
 Expected: FAIL — `fmtStatNumber` is not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Append to `lib/format.ts`:
 
@@ -378,12 +384,12 @@ export function fmtStatNumber(n: number | null | undefined): string {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm test -- lib/__tests__/format.spec.ts`
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/format.ts lib/__tests__/format.spec.ts
@@ -400,7 +406,7 @@ Canonical map of the 7 connector platforms (matches `poc/src/modules/platforms/`
 - Create: `poc/web/lib/term/platforms.ts`
 - Test: `poc/web/lib/term/__tests__/platforms.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `lib/term/__tests__/platforms.spec.ts`:
 
@@ -425,12 +431,12 @@ describe('platformTag', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- lib/term/__tests__/platforms.spec.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `lib/term/platforms.ts`:
 
@@ -472,12 +478,12 @@ export function platformTag(platform: string): PlatformTagSpec {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm test -- lib/term/__tests__/platforms.spec.ts`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/term/platforms.ts lib/term/__tests__/platforms.spec.ts
@@ -492,7 +498,7 @@ git commit -m "feat(web): platform tag registry for term primitives"
 - Create: `poc/web/components/term/PlatformTag.tsx`
 - Test: `poc/web/components/term/__tests__/PlatformTag.spec.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `components/term/__tests__/PlatformTag.spec.tsx`:
 
@@ -517,12 +523,12 @@ describe('PlatformTag', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- components/term/__tests__/PlatformTag.spec.tsx`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `components/term/PlatformTag.tsx`:
 
@@ -546,12 +552,12 @@ export default function PlatformTag({ platform, showLabel = false, className }: 
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm test -- components/term/__tests__/PlatformTag.spec.tsx`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/term/PlatformTag.tsx components/term/__tests__/PlatformTag.spec.tsx
@@ -568,7 +574,7 @@ The term-world button: uppercase mono, radius 0, four variants (spec §3.3 state
 - Create: `poc/web/components/term/ActionChip.tsx`
 - Test: `poc/web/components/term/__tests__/ActionChip.spec.tsx`
 
-- [ ] **Step 1: Install user-event, then write the failing test**
+- [x] **Step 1: Install user-event, then write the failing test**
 
 Run: `npm i -D @testing-library/user-event`
 
@@ -598,12 +604,12 @@ describe('ActionChip', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- components/term/__tests__/ActionChip.spec.tsx`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `components/term/ActionChip.tsx`:
 
@@ -650,12 +656,12 @@ ActionChip.displayName = 'ActionChip';
 export default ActionChip;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm test -- components/term/__tests__/ActionChip.spec.tsx`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/term/ActionChip.tsx components/term/__tests__/ActionChip.spec.tsx package.json package-lock.json
@@ -670,21 +676,28 @@ git commit -m "feat(web): ActionChip term primitive"
 - Create: `poc/web/components/term/StatBlock.tsx`
 - Test: `poc/web/components/term/__tests__/StatBlock.spec.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `components/term/__tests__/StatBlock.spec.tsx`:
 
 ```tsx
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { getDefaultNormalizer, render, screen } from '@testing-library/react';
 import StatBlock from '../StatBlock';
 import { fmtStatNumber } from '@/lib/format';
 
+// Testing-library's default normalizer collapses ALL whitespace (incl. U+202F)
+// in DOM text to ASCII spaces before string comparison, so the numeral must be
+// queried with a non-collapsing normalizer to match the real U+202F output.
 describe('StatBlock', () => {
   it('renders label and thin-space formatted numeral', () => {
     render(<StatBlock label="syncs / 24h" value={48204} />);
     expect(screen.getByText('syncs / 24h')).toBeInTheDocument();
-    expect(screen.getByText(fmtStatNumber(48204))).toBeInTheDocument();
+    expect(
+      screen.getByText(fmtStatNumber(48204), {
+        normalizer: getDefaultNormalizer({ collapseWhitespace: false }),
+      }),
+    ).toBeInTheDocument();
   });
   it('renders string values verbatim', () => {
     render(<StatBlock label="success" value="99.4%" />);
@@ -700,12 +713,12 @@ describe('StatBlock', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- components/term/__tests__/StatBlock.spec.tsx`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `components/term/StatBlock.tsx`:
 
@@ -755,12 +768,12 @@ export default function StatBlock({ label, value, delta, sub, className }: StatB
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm test -- components/term/__tests__/StatBlock.spec.tsx`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/term/StatBlock.tsx components/term/__tests__/StatBlock.spec.tsx
@@ -775,7 +788,7 @@ git commit -m "feat(web): StatBlock term primitive"
 - Create: `poc/web/components/term/FeedLine.tsx`
 - Test: `poc/web/components/term/__tests__/FeedLine.spec.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `components/term/__tests__/FeedLine.spec.tsx`:
 
@@ -807,12 +820,12 @@ describe('FeedLine', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- components/term/__tests__/FeedLine.spec.tsx`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `components/term/FeedLine.tsx`:
 
@@ -850,12 +863,12 @@ export default function FeedLine({ time, platform, status, children, className }
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm test -- components/term/__tests__/FeedLine.spec.tsx`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/term/FeedLine.tsx components/term/__tests__/FeedLine.spec.tsx
@@ -872,7 +885,7 @@ Dense generic table. Virtualization is deliberately NOT here (Phase 3 adds it wh
 - Create: `poc/web/components/term/TermTable.tsx`
 - Test: `poc/web/components/term/__tests__/TermTable.spec.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `components/term/__tests__/TermTable.spec.tsx`:
 
@@ -917,12 +930,12 @@ describe('TermTable', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- components/term/__tests__/TermTable.spec.tsx`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `components/term/TermTable.tsx`:
 
@@ -1012,12 +1025,12 @@ export default function TermTable<T>({
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm test -- components/term/__tests__/TermTable.spec.tsx`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/term/TermTable.tsx components/term/__tests__/TermTable.spec.tsx
@@ -1032,7 +1045,7 @@ git commit -m "feat(web): TermTable term primitive"
 - Create: `poc/web/components/term/charts.tsx`
 - Test: `poc/web/components/term/__tests__/charts.spec.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `components/term/__tests__/charts.spec.tsx`:
 
@@ -1078,12 +1091,12 @@ describe('Gauge', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- components/term/__tests__/charts.spec.tsx`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `components/term/charts.tsx`:
 
@@ -1196,12 +1209,12 @@ export function Gauge({
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm test -- components/term/__tests__/charts.spec.tsx`
 Expected: PASS (6 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/term/charts.tsx components/term/__tests__/charts.spec.tsx
@@ -1216,7 +1229,7 @@ git commit -m "feat(web): MiniBar/Sparkline/Gauge term chart primitives"
 - Create: `poc/web/components/term/TermInput.tsx`
 - Test: `poc/web/components/term/__tests__/TermInput.spec.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `components/term/__tests__/TermInput.spec.tsx`:
 
@@ -1237,12 +1250,12 @@ describe('TermInput', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- components/term/__tests__/TermInput.spec.tsx`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `components/term/TermInput.tsx`:
 
@@ -1276,12 +1289,12 @@ TermInput.displayName = 'TermInput';
 export default TermInput;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npm test -- components/term/__tests__/TermInput.spec.tsx`
 Expected: PASS (1 test).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/term/TermInput.tsx components/term/__tests__/TermInput.spec.tsx
@@ -1297,7 +1310,7 @@ A living styleguide at `/admin/term-specimen` exercising every primitive in real
 **Files:**
 - Create: `poc/web/pages/admin/term-specimen.tsx`
 
-- [ ] **Step 1: Create the page**
+- [x] **Step 1: Create the page**
 
 `pages/admin/term-specimen.tsx`:
 
@@ -1459,16 +1472,16 @@ export default function TermSpecimen() {
 }
 ```
 
-- [ ] **Step 2: Verify the route serves**
+- [x] **Step 2: Verify the route serves**
 
 Run: `npm run dev` (background), then `curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/admin/term-specimen`
 Expected: `200`.
 
-- [ ] **Step 3: Visual check, both themes**
+- [x] **Step 3: Visual check, both themes**
 
 Open `http://localhost:3001/admin/term-specimen`. Verify against spec §3: dark = near-black with mint/UV, sharp corners, hairlines; toggle theme → paper terminal with deepened mint; platform tags legible in BOTH themes; blink animation on cursors; Tab onto chips shows a mint focus ring. Stop the dev server after.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add pages/admin/term-specimen.tsx
@@ -1479,17 +1492,17 @@ git commit -m "feat(web): term-specimen styleguide page (phase 1 verification su
 
 ### Task 14: Final gates
 
-- [ ] **Step 1: Full test suite**
+- [x] **Step 1: Full test suite**
 
 Run: `npm test`
 Expected: all suites pass (infra + format + platforms + 7 component suites).
 
-- [ ] **Step 2: Type + build gates**
+- [x] **Step 2: Type + build gates**
 
 Run: `npx tsc --noEmit && npm run build`
 Expected: 0 type errors; production build clean; `/admin/term-specimen` in the route list.
 
-- [ ] **Step 3: Legacy regression spot-check**
+- [x] **Step 3: Legacy regression spot-check**
 
 Run: `npm run dev` (background), then:
 
@@ -1500,7 +1513,7 @@ for r in /admin /admin/queues /admin/accounts /admin/system-health; do
 
 Expected: all `200` — Phase 1 must not change any existing page's behavior (tokens are additive; the only shared-surface change is the mono font upgrade).
 
-- [ ] **Step 4: Commit the checked-off plan**
+- [x] **Step 4: Commit the checked-off plan**
 
 ```bash
 git status --short   # expect clean except this plan file
@@ -1512,6 +1525,7 @@ git commit -m "docs: check off ops-terminal phase 1 plan"
 
 ## Deferred to later phase plans (explicitly NOT here)
 
+- Phase 6/7: remove the legacy "Verge" CDN font link (Anton / Space Grotesk / Space Mono) from `pages/_document.tsx` when the `/account/[id]*` and public pages are redesigned. Until then both font systems intentionally coexist: legacy surfaces render the CDN families (`--v-display`/`--v-sans`/`--v-mono`), term surfaces render the next/font families — font binaries only download where their family is actually used, so this is not a per-page double-load. (Raised in Task 3 quality review; removal now would break account-explorer typography and violate the Phase 1 no-behavior-change constraint.)
 - Phase 2: dockview shell, `PanelChrome`, `DeckTabs`, `StatusBar`, `CmdPalette`, `Drawer`, deck/URL state, mobile stacked mode — needs the dockview spike first.
 - Phase 3+: panels, unified activity endpoint, palette actions, redirects/cutover, Data Inspector, client portal, showroom.
 - Playwright visual-regression harness (spec §10) — lands with Phase 2 when there are decks to screenshot.

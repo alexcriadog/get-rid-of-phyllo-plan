@@ -85,6 +85,18 @@ export function statusClass(code: number | null | undefined): 'ok' | 'warn' | 'd
   return '';
 }
 
+/**
+ * Stat-block numeral: integer grouped with U+202F narrow no-break space
+ * ("48 204") — the Mint Terminal signature numeral format. Decimals are
+ * truncated; stats are counts.
+ */
+export function fmtStatNumber(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  const sign = n < 0 ? '-' : '';
+  const digits = Math.trunc(Math.abs(n)).toString();
+  return sign + digits.replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f');
+}
+
 export type ProductKind = 'identity' | 'audience' | 'engagement_new' | 'stories';
 
 const KNOWN_PRODUCTS: ReadonlySet<ProductKind> = new Set([

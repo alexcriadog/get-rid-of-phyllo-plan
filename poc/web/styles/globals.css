@@ -123,6 +123,58 @@
 
     color-scheme: dark;
   }
+
+  /* ── Mint Terminal (--term-*) — Ops Terminal design system v2.
+     Spec: docs/superpowers/specs/2026-06-11-admin-ops-terminal-redesign-design.md §3.
+     Bare R G B triplets so Tailwind's `rgb(var(--x) / <alpha-value>)` works.
+     Light = "paper terminal"; .dark = "terminal" (the flagship). */
+  :root {
+    --term-bg: 244 242 236;        /* paper  #f4f2ec */
+    --term-surface: 252 251 248;   /* card   #fcfbf8 */
+    --term-raised: 255 255 255;
+    --term-line: 216 213 204;      /* #d8d5cc */
+    --term-line-2: 203 199 187;
+    --term-text: 26 26 26;         /* ink #1a1a1a */
+    --term-muted: 85 82 74;
+    --term-faint: 138 134 120;
+    --term-mint: 0 184 138;        /* #00b88a — AA on paper */
+    --term-mint-ink: 252 251 248;  /* text on mint */
+    --term-uv: 82 0 255;           /* #5200ff */
+    --term-uv-tint: 124 58 237;
+    --term-warn: 217 119 6;
+    --term-danger: 220 38 38;
+    --term-tag-ig: 214 31 134;
+    --term-tag-tt: 14 159 132;
+    --term-tag-yt: 217 38 38;
+    --term-tag-li: 37 99 235;
+    --term-tag-th: 180 83 9;
+    --term-tag-fb: 29 78 216;
+    --term-tag-tw: 124 58 237;
+  }
+
+  .dark {
+    --term-bg: 14 14 14;           /* #0e0e0e */
+    --term-surface: 18 18 18;      /* #121212 */
+    --term-raised: 26 26 26;       /* #1a1a1a */
+    --term-line: 35 35 35;         /* #232323 */
+    --term-line-2: 42 42 42;       /* #2a2a2a */
+    --term-text: 230 230 230;      /* #e6e6e6 */
+    --term-muted: 153 153 153;
+    --term-faint: 102 102 102;
+    --term-mint: 60 255 208;       /* #3cffd0 */
+    --term-mint-ink: 14 14 14;
+    --term-uv: 82 0 255;
+    --term-uv-tint: 183 148 255;   /* #b794ff */
+    --term-warn: 255 178 36;       /* #ffb224 */
+    --term-danger: 255 92 92;      /* #ff5c5c */
+    --term-tag-ig: 255 107 203;    /* #ff6bcb */
+    --term-tag-tt: 142 242 221;    /* #8ef2dd */
+    --term-tag-yt: 255 92 92;
+    --term-tag-li: 122 162 255;    /* #7aa2ff */
+    --term-tag-th: 255 178 36;
+    --term-tag-fb: 91 141 239;     /* #5b8def */
+    --term-tag-tw: 169 112 255;    /* #a970ff */
+  }
 }
 
 @layer base {
@@ -207,6 +259,8 @@ html.theme-ready table th {
 @media (prefers-reduced-motion: reduce) {
   html.theme-ready * {
     transition: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
 
