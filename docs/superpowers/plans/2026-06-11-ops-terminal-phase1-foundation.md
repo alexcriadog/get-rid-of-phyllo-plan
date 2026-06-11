@@ -64,10 +64,16 @@ export default defineConfig({
 
 - [ ] **Step 4: Create test setup**
 
-`test/setup.ts`:
+`test/setup.ts` (explicit cleanup is required: testing-library's auto-cleanup
+only registers when `afterEach` exists as a global, and this config does not
+enable vitest globals — discovered in Task 10):
 
 ```ts
+import { afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+
+afterEach(() => cleanup());
 ```
 
 - [ ] **Step 5: Write the infra smoke test**
