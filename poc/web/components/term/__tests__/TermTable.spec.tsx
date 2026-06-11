@@ -35,4 +35,16 @@ describe('TermTable', () => {
     await userEvent.click(screen.getByText('@nike'));
     expect(onRowClick).toHaveBeenCalledWith(rows[1]);
   });
+  it('activates a row with the keyboard', async () => {
+    const onRowClick = vi.fn();
+    render(<TermTable columns={columns} rows={rows} rowKey={(r) => r.id} onRowClick={onRowClick} />);
+    const row = screen.getByText('@glossier').closest('tr');
+    row?.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(onRowClick).toHaveBeenCalledWith(rows[0]);
+  });
+  it('applies the active accent to the highlighted row', () => {
+    render(<TermTable columns={columns} rows={rows} rowKey={(r) => r.id} activeKey="a" />);
+    expect(screen.getByText('@glossier').closest('tr')?.className).toContain('bg-term-mint/5');
+  });
 });

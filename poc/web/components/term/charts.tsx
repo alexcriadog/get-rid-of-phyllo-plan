@@ -20,17 +20,21 @@ export function MiniBar({
   value,
   max,
   tone = 'mint',
+  label,
   className,
 }: {
   value: number;
   max: number;
   tone?: ChartTone;
+  /** Accessible name for the meter — required when not wrapped in a labeled Gauge. */
+  label?: string;
   className?: string;
 }) {
   const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
   return (
     <span
       role="meter"
+      aria-label={label}
       aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={value}
@@ -100,7 +104,7 @@ export function Gauge({
           <span>{Math.round(pct * 100)}%</span>
         </div>
       )}
-      <MiniBar value={pct} max={1} tone={tone} className="w-full" />
+      <MiniBar value={pct} max={1} tone={tone} label={label} className="w-full" />
     </div>
   );
 }

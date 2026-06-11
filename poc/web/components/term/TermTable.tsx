@@ -60,10 +60,22 @@ export default function TermTable<T>({
             <tr
               key={key}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
+              onKeyDown={
+                onRowClick
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onRowClick(row);
+                      }
+                    }
+                  : undefined
+              }
+              tabIndex={onRowClick ? 0 : undefined}
               className={cn(
                 'border-b border-term-line/60 last:border-b-0',
-                onRowClick && 'cursor-pointer transition-colors duration-150 hover:bg-term-raised',
-                active && 'border-l-2 border-l-term-mint bg-term-mint/5',
+                onRowClick &&
+                  'cursor-pointer transition-colors duration-150 hover:bg-term-raised focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-term-mint',
+                active && 'bg-term-mint/5 shadow-[inset_2px_0_0_rgb(var(--term-mint))]',
               )}
             >
               {columns.map((c) => (

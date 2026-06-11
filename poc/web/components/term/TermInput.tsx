@@ -1,6 +1,10 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
+/**
+ * `className` styles the wrapper frame (the visible bordered "input");
+ * all other props spread onto the inner <input>.
+ */
 export type TermInputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
 const TermInput = React.forwardRef<HTMLInputElement, TermInputProps>(

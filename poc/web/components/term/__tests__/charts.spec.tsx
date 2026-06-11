@@ -13,6 +13,10 @@ describe('MiniBar', () => {
     render(<MiniBar value={5} max={0} />);
     expect((screen.getByRole('meter').firstChild as HTMLElement).style.width).toBe('0%');
   });
+  it('exposes an accessible name when label is provided', () => {
+    render(<MiniBar value={5} max={10} label="queue depth" />);
+    expect(screen.getByRole('meter', { name: 'queue depth' })).toBeInTheDocument();
+  });
 });
 
 describe('Sparkline', () => {
@@ -22,6 +26,10 @@ describe('Sparkline', () => {
   });
   it('renders nothing for fewer than 2 points', () => {
     const { container } = render(<Sparkline points={[1]} />);
+    expect(container.querySelector('svg')).toBeNull();
+  });
+  it('renders nothing for an empty series', () => {
+    const { container } = render(<Sparkline points={[]} />);
     expect(container.querySelector('svg')).toBeNull();
   });
 });
