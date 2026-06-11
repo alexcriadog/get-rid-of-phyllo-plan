@@ -38,7 +38,7 @@ export function MiniBar({
       aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={value}
-      className={cn('inline-block h-1 w-12 bg-term-raised align-middle', className)}
+      className={cn('inline-block h-1 w-12 bg-term-line/60 align-middle', className)}
     >
       <span className={cn('block h-1', FILL_CLASS[tone])} style={{ width: `${pct}%` }} />
     </span>
