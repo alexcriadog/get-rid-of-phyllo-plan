@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { getDefaultNormalizer, render, screen } from '@testing-library/react';
 import StatBlock from '../StatBlock';
 import { fmtStatNumber } from '@/lib/format';
 
@@ -7,7 +7,11 @@ describe('StatBlock', () => {
   it('renders label and thin-space formatted numeral', () => {
     render(<StatBlock label="syncs / 24h" value={48204} />);
     expect(screen.getByText('syncs / 24h')).toBeInTheDocument();
-    expect(screen.getByText(fmtStatNumber(48204))).toBeInTheDocument();
+    expect(
+      screen.getByText(fmtStatNumber(48204), {
+        normalizer: getDefaultNormalizer({ collapseWhitespace: false }),
+      }),
+    ).toBeInTheDocument();
   });
   it('renders string values verbatim', () => {
     render(<StatBlock label="success" value="99.4%" />);
