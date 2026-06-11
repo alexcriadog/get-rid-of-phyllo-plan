@@ -110,9 +110,16 @@ export interface ApiEngagementAdditionalInfo {
    * Superset extras (not in InsightIQ's contract — consumers that don't know
    * them ignore them). total_interactions: Meta's aggregate interactions
    * metric. reels_skip_rate: % of viewers who skipped the reel (0-100).
+   * completion_rate: TikTok full-video-watched rate (as reported by TikTok).
+   * story_replies / sticker_interactions / unique_media_views: FB story
+   * per-media metrics.
    */
   total_interactions?: number | null;
   reels_skip_rate?: number | null;
+  completion_rate?: number | null;
+  story_replies?: number | null;
+  sticker_interactions?: number | null;
+  unique_media_views?: number | null;
 }
 
 export interface ApiEngagement {

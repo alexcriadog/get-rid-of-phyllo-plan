@@ -81,18 +81,30 @@ function buildAdditionalInfo(
     automatic_forwards: has("automatic_forwards"),
   };
   const navHasAny = Object.values(nav).some((v) => v !== null);
-  const profileVisits = has("profile_visits");
-  const bioLink = has("bio_link_clicked");
-  const followersGained = has("followers_gained") ?? has("follows");
+  // Per-platform aliases for the same concept: IG `profile_visits`/`follows`,
+  // TikTok `profile_views`/`new_followers`/`website_clicks` (a click on the
+  // profile's website link = bio link click).
+  const profileVisits = has("profile_visits") ?? has("profile_views");
+  const bioLink = has("bio_link_clicked") ?? has("website_clicks");
+  const followersGained =
+    has("followers_gained") ?? has("follows") ?? has("new_followers");
   const totalInteractions = has("total_interactions");
   const reelsSkipRate = has("reels_skip_rate");
+  const completionRate = has("completion_rate");
+  const storyReplies = has("story_replies");
+  const stickerInteractions = has("sticker_interactions");
+  const uniqueMediaViews = has("unique_media_views");
   if (
     !navHasAny &&
     profileVisits === null &&
     bioLink === null &&
     followersGained === null &&
     totalInteractions === null &&
-    reelsSkipRate === null
+    reelsSkipRate === null &&
+    completionRate === null &&
+    storyReplies === null &&
+    stickerInteractions === null &&
+    uniqueMediaViews === null
   ) {
     return null;
   }
@@ -103,6 +115,10 @@ function buildAdditionalInfo(
     story_navigation: navHasAny ? nav : null,
     total_interactions: totalInteractions,
     reels_skip_rate: reelsSkipRate,
+    completion_rate: completionRate,
+    story_replies: storyReplies,
+    sticker_interactions: stickerInteractions,
+    unique_media_views: uniqueMediaViews,
   };
 }
 
@@ -111,10 +127,11 @@ function buildEngagement(content: ContentData): ApiEngagement {
   const extra = m.extra ?? {};
   // IG reels watch-time metrics arrive in MILLISECONDS (Meta wire format,
   // see instagram-insights.mapper.ts); the InsightIQ contract wants seconds
-  // (avg) and hours (total). TikTok's average_time_watched_s is already
-  // seconds — no conversion there.
+  // (avg) and hours (total). TikTok's *_time_watched_s keys are already
+  // seconds — only the total needs the s→h conversion.
   const reelsAvgWatchMs = num(extra["ig_reels_avg_watch_time"]);
   const reelsTotalWatchMs = num(extra["ig_reels_video_view_total_time"]);
+  const totalWatchS = num(extra["total_time_watched_s"]);
   return {
     ...ENGAGEMENT_DEFAULT,
     like_count: num(m.likes),
@@ -128,7 +145,14 @@ function buildEngagement(content: ContentData): ApiEngagement {
       num(extra["avg_watch_time_in_sec"]) ??
       (reelsAvgWatchMs !== null ? reelsAvgWatchMs / 1000 : null),
     watch_time_in_hours:
-      reelsTotalWatchMs !== null ? reelsTotalWatchMs / 3_600_000 : null,
+      totalWatchS !== null
+        ? totalWatchS / 3600
+        : reelsTotalWatchMs !== null
+          ? reelsTotalWatchMs / 3_600_000
+          : null,
+    // LinkedIn surfaces per-post click counts; Threads surfaces reposts.
+    click_count: num(extra["clicks"]),
+    repost_count: num(extra["reposts"]),
     additional_info: buildAdditionalInfo(extra),
   };
 }
