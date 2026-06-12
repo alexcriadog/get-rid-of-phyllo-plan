@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { extractQueryParam } from '@/pages/admin/terminal';
+import { extractQueryParam } from '@/pages/admin';
 import { isPanelId } from '@/components/term/panels/registry';
 
 /**
  * Unit tests for the permalink param-parsing helper exported from
- * pages/admin/terminal.tsx (spec §2.3 object permalinks).
+ * pages/admin/index.tsx (spec §2.3 object permalinks + Phase 5b ?panel).
  *
  * Placed outside pages/ so Next.js does not treat it as a route.
  */

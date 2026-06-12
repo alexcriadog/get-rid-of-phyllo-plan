@@ -24,7 +24,7 @@ import {
 } from '@/lib/term/decks';
 import { PANEL_DEFS, isPanelId, type PanelId } from '@/components/term/panels/registry';
 import { selectWorkspace, selectAccount } from '@/lib/term/selection';
-import { extractQueryParam } from '@/pages/admin/terminal';
+import { extractQueryParam } from '@/pages/admin';
 import PanelChrome, { withPanelRegion } from './PanelChrome';
 import DeckTabs from './DeckTabs';
 import StatusBar from './StatusBar';
