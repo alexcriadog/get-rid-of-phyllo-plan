@@ -10,6 +10,7 @@ import { TokenLifecycleEmitter } from './token-lifecycle-emitter.service';
 import { DataEventDispatcher } from './data-event-dispatcher.service';
 import { WebhooksDigestService } from './webhooks-digest.service';
 import { StandardWebhookEmitter } from './standard-webhook-emitter.service';
+import { RefreshCadenceService } from './refresh-cadence.service';
 
 @Module({
   imports: [SharedDatabaseModule, SharedRedisModule, ApiKeysModule],
@@ -20,6 +21,7 @@ import { StandardWebhookEmitter } from './standard-webhook-emitter.service';
     DataEventDispatcher,
     WebhooksDigestService,
     StandardWebhookEmitter,
+    RefreshCadenceService,
     RateLimitInterceptor,
   ],
   exports: [
