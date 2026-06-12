@@ -36,6 +36,7 @@ import {
 import { FacebookExtrasService } from "@modules/platforms/facebook/fetcher/facebook-extras.service";
 import { TokenLifecycleEmitter } from "@modules/outbound-webhooks/token-lifecycle-emitter.service";
 import { DataEventDispatcher } from "@modules/outbound-webhooks/data-event-dispatcher.service";
+import { RefreshCadenceService } from "@modules/outbound-webhooks/refresh-cadence.service";
 import {
   CanonicalWriteService,
   type DualWriteResult,
@@ -163,6 +164,7 @@ export class SyncWorker
     private readonly lifecycle: TokenLifecycleEmitter,
     private readonly dataEvents: DataEventDispatcher,
     private readonly canonicalWrite: CanonicalWriteService,
+    private readonly refreshCadence: RefreshCadenceService,
     @Inject(ADAPTER_REGISTRY) private readonly adapters: AdapterRegistry,
   ) {}
 
@@ -367,6 +369,16 @@ export class SyncWorker
         return;
       }
 
+      // Resolve the per-(platform, product) refresh window so the worker's
+      // engagement-change detection uses the SAME window the dispatcher stamps
+      // onto `window_start`. getConfig is memoized (60s) + deterministic, so
+      // detection (here) and reporting (dispatcher.fire) stay consistent even
+      // when an operator overrides refreshWindowDays.
+      const refreshCfg = await this.refreshCadence.getConfig(
+        account.platform,
+        product,
+      );
+
       // Single canonical persist: maps to the InsightIQ-standard shape and
       // stores it in the served collections (profiles/contents/audience/
       // comments). Returns the {itemsAdded, sampleIds} delta for webhooks.
@@ -381,6 +393,7 @@ export class SyncWorker
           createdAt: account.createdAt,
         },
         fetchResult as DualWriteResult,
+        refreshCfg.windowDays,
       );
       await this.emitEvent(accountIdBig, product, fetchResult);
       // Public-facing webhook for clients: fire data.<product>.updated.

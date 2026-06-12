@@ -8,7 +8,10 @@
 //   { id, account_pk, external_id?, content_external_id?, published_at?,
 //     doc: <exact API object>, created_at, updated_at }
 //
-// Returns a {itemsAdded, sampleIds} delta so the worker can fire data webhooks.
+// Returns a {itemsAdded, sampleIds, itemsUpdated, updatedSampleIds} delta so
+// the worker can fire data webhooks — `itemsAdded`/`sampleIds` cover newly
+// upserted items, `itemsUpdated`/`updatedSampleIds` cover in-window existing
+// items whose engagement metrics changed (drives data.<product>.updated).
 // Best-effort on the canonical write itself: a mapping failure is logged and
 // swallowed (returns a zero delta) so a projection bug never breaks the sync.
 
@@ -288,7 +291,11 @@ export class CanonicalWriteService {
       const publishedMs = item.publishedAt
         ? new Date(item.publishedAt).getTime()
         : 0;
-      if (prev && publishedMs >= cutoff && engagementChanged(prev, fresh)) {
+      // Compare against `doc` (the merged value we actually persist), NOT raw
+      // `fresh`: coalesceMerge keeps last-known-good when a fresh metric is
+      // null, so a partial fetch (e.g. rate-limited share-stats) must not
+      // register as a change just because `fresh` dropped a field to null.
+      if (prev && publishedMs >= cutoff && engagementChanged(prev, doc)) {
         if (updatedSampleIds.length < 20) updatedSampleIds.push(externalId);
         itemsUpdatedCount++;
       }

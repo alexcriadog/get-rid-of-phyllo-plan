@@ -36,6 +36,7 @@ import { EngagementRefreshService } from './engagement-refresh.service';
     TokenLifecycleEmitter,
     DataEventDispatcher,
     StandardWebhookEmitter,
+    RefreshCadenceService,
   ],
 })
 export class OutboundWebhooksModule {}

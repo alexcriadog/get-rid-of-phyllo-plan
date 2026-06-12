@@ -56,6 +56,12 @@ export class EngagementRefreshService {
       .map((r) => r.external_id)
       .filter((x): x is string => !!x);
 
+    // No in-window content → nothing meaningful to refresh. Skip both emits so
+    // we don't deliver an empty `data.<product>.updated` to subscribers.
+    if (ids.length === 0) {
+      return { sampleCount: 0 };
+    }
+
     // InsightIQ-compatible thin webhook (fires independently of native cadence).
     await this.standardWebhooks.fireData({
       accountId: account.id,
