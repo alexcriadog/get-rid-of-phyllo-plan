@@ -260,14 +260,14 @@ describe('NeedsAttentionPanel', () => {
       const link = screen.getByRole('link', {
         name: /@handle needs re-authentication/i,
       });
-      expect(link).toHaveAttribute('href', '/admin/accounts/abc-123');
+      expect(link).toHaveAttribute('href', '/admin?account=abc-123');
     });
 
-    it('renders deep-link href for DLQ row pointing to /admin/queues', () => {
+    it('renders deep-link href for DLQ row pointing to the pipeline deck', () => {
       setData({ dlq_depth: 1 }, []);
       render(<NeedsAttentionPanel />);
       const link = screen.getByRole('link', { name: /in dead-letter queue/i });
-      expect(link).toHaveAttribute('href', '/admin/queues');
+      expect(link).toHaveAttribute('href', '/admin?deck=pipeline');
     });
 
     it('caps rendered items at 8 even with many issues', () => {

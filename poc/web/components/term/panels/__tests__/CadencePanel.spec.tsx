@@ -247,10 +247,10 @@ describe('CadencePanel', () => {
 
   // ── Footer link ──────────────────────────────────────────────────────────
 
-  it('renders a link to /admin/cadence for schedule and overrides', () => {
+  it('renders a link to the pipeline deck for schedule and overrides', () => {
     mockLiveState = live(CADENCES_DEFAULT);
     render(<CadencePanel />);
-    const link = screen.getByRole('link', { name: /\/admin\/cadence/i });
-    expect(link).toHaveAttribute('href', '/admin/cadence');
+    const link = screen.getByRole('link', { name: /pipeline deck/i });
+    expect(link).toHaveAttribute('href', '/admin?deck=pipeline');
   });
 });

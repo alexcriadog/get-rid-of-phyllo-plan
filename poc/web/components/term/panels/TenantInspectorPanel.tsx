@@ -355,8 +355,18 @@ function HeaderRow({
       <span className="text-term-mint">{ws?.name ?? slug}</span>
       <span className="text-term-faint">·</span>
       <span className="text-term-muted">{slug}</span>
+      {/* Restore access to the mutation-heavy workspace config editor. The
+          inspector itself is read-only; this chip jumps to the surviving
+          ConfigLayout page where branding / products / keys / origins are
+          editable. */}
+      <a
+        href={`/admin/config/workspace/${slug}`}
+        className="ml-auto border border-term-line-2 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-term-muted transition-colors hover:border-term-mint hover:text-term-mint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-term-mint"
+      >
+        config →
+      </a>
       {ws?.plan_tier && (
-        <span className="ml-auto text-[10px] uppercase tracking-[0.08em] text-term-faint">
+        <span className="text-[10px] uppercase tracking-[0.08em] text-term-faint">
           {ws.plan_tier}
         </span>
       )}

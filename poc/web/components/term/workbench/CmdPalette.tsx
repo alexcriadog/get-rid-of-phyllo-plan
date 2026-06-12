@@ -299,10 +299,10 @@ export default function CmdPalette({ open, onOpenChange, actions }: CmdPalettePr
             <span className="text-term-warn">◐</span> toggle theme
           </PaletteItem>
           <PaletteItem
-            value="jump legacy admin console"
-            onSelect={() => run(() => router.push('/admin'))}
+            value="jump connect studio onboarding new account"
+            onSelect={() => run(() => router.push('/admin/connect'))}
           >
-            <span className="text-term-faint">↗</span> jump to legacy admin
+            <span className="text-term-faint">↗</span> jump to connect studio
           </PaletteItem>
           <PaletteItem
             value="jump term specimen styleguide"

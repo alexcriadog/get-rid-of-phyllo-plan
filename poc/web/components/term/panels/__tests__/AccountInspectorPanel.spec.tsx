@@ -383,7 +383,7 @@ describe('AccountInspectorPanel', () => {
 
   // ── SYNC tab deferred link ────────────────────────────────────────────────
 
-  it('shows legacy admin link on the SYNC tab pointing to sync-settings', async () => {
+  it('shows the SYNC tab link pointing to the config sync editor', async () => {
     selectAccount('42');
     mockAccountState = {
       data: ACCOUNT_DATA,
@@ -399,7 +399,7 @@ describe('AccountInspectorPanel', () => {
     expect(link).toBeInTheDocument();
     expect(link.closest('a')).toHaveAttribute(
       'href',
-      '/admin/accounts/42/sync-settings',
+      '/admin/config/sync/42',
     );
   });
 });

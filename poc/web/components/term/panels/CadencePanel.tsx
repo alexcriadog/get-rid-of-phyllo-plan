@@ -103,14 +103,14 @@ export default function CadencePanel() {
         )}
       </div>
 
-      {/* Footer link to full page for schedule + overrides */}
+      {/* Footer link to the pipeline deck for schedule + overrides */}
       <div className="border-t border-term-line pt-2 text-[10px] text-term-faint">
         schedule · overrides →{' '}
         <Link
-          href="/admin/cadence"
+          href="/admin?deck=pipeline"
           className="text-term-mint underline-offset-2 hover:underline"
         >
-          /admin/cadence
+          pipeline deck
         </Link>
       </div>
     </div>

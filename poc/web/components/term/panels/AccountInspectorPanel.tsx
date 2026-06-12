@@ -386,15 +386,15 @@ function SyncTab({
         </div>
       )}
 
-      {/* Deferred complex settings link */}
+      {/* Deferred complex settings link → surviving config editor */}
       <div className="mt-2 border-t border-term-line/50 pt-2">
         <a
-          href={`/admin/accounts/${accountId}/sync-settings`}
+          href={`/admin/config/sync/${accountId}`}
           target="_blank"
           rel="noreferrer"
           className="text-[10px] text-term-faint underline underline-offset-2 hover:text-term-text"
         >
-          edit cadence overrides + per-job knobs in legacy admin →
+          edit cadence overrides + per-job knobs →
         </a>
       </div>
     </div>
@@ -495,16 +495,14 @@ function ActionsTab({
       <Section label="SYNC">
         <div className="flex flex-col gap-2">
           <p className="text-term-faint">
-            Trigger via the risk-check dialog — reviews target and signals
-            before queueing.
+            Review scheduling, queues, and rate limits before triggering work
+            for this account.
           </p>
           <a
-            href={`/admin/next-runs?account=${accountId}`}
-            target="_blank"
-            rel="noreferrer"
+            href="/admin?deck=pipeline"
             className="text-[10px] text-term-faint underline underline-offset-2 hover:text-term-text"
           >
-            open trigger sync dialog →
+            open pipeline deck →
           </a>
         </div>
       </Section>

@@ -65,7 +65,7 @@ function buildIssues(accounts: AttentionAccount[], dlqDepth: number): Issue[] {
       tone: 'danger',
       label: `${dlqDepth} job${dlqDepth === 1 ? '' : 's'} in dead-letter queue`,
       detail: 'Failed jobs are not being retried automatically.',
-      href: '/admin/queues',
+      href: '/admin?deck=pipeline',
     });
   }
 
@@ -79,7 +79,7 @@ function buildIssues(accounts: AttentionAccount[], dlqDepth: number): Issue[] {
         tone: 'danger',
         label: `${name} needs re-authentication`,
         detail: `${a.platform} · token expired or revoked`,
-        href: `/admin/accounts/${a.id}`,
+        href: `/admin?account=${a.id}`,
       });
       continue;
     }
@@ -94,7 +94,7 @@ function buildIssues(accounts: AttentionAccount[], dlqDepth: number): Issue[] {
           tone: 'danger',
           label: `${name} — ${failing.length} failing product${failing.length === 1 ? '' : 's'}`,
           detail: `${a.platform} · ${failing.map((p) => p.product).join(', ')}`,
-          href: `/admin/accounts/${a.id}`,
+          href: `/admin?account=${a.id}`,
         });
       }
     }
@@ -110,7 +110,7 @@ function buildIssues(accounts: AttentionAccount[], dlqDepth: number): Issue[] {
       tone: 'warn',
       label: `${pausedAccounts.length} account${pausedAccounts.length === 1 ? '' : 's'} paused`,
       detail: 'Syncing is suspended for these accounts.',
-      href: '/admin/accounts',
+      href: '/admin?deck=tenant-service',
     });
   }
 
