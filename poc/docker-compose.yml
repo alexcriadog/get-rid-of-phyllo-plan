@@ -35,6 +35,13 @@ x-app-base: &app-base
     redis:
       condition: service_started
   restart: unless-stopped
+  # sm.demo (dev backend) resolves to a Netbird-only IP, but this connector EC2
+  # is not on the Netbird mesh — pin sm.demo to the dev backend's public IP so
+  # webhook deliveries don't time out (the dev backend SG already allows this
+  # connector's public IP on 443). 2026-06-12: deploy's `git reset --hard` was
+  # wiping the ephemeral host entry; committing it makes it survive deploys.
+  extra_hosts:
+    - "sm.demo.camaleonicanalytics.com:98.85.32.44"
 
 services:
   mysql:
