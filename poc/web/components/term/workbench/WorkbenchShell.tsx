@@ -246,7 +246,9 @@ export default function WorkbenchShell() {
     if (!router.isReady || permalinkApplied.current) return;
     const workspaceSlug = extractQueryParam(router.query.workspace);
     const accountId = extractQueryParam(router.query.account);
-    if (!workspaceSlug && !accountId) return;
+    const panelParam = extractQueryParam(router.query.panel);
+    const panelId = panelParam && isPanelId(panelParam) ? panelParam : null;
+    if (!workspaceSlug && !accountId && !panelId) return;
 
     permalinkApplied.current = true;
 
@@ -258,12 +260,19 @@ export default function WorkbenchShell() {
       selectAccount(accountId);
       openPanelRef.current?.('account-inspector');
     }
+    // ?panel=<id> opens/focuses an explicit panel in the current deck. The
+    // deck-sync effect (same dep list) has already applied the deck onto the
+    // board by the time this runs, so openPanel either focuses the existing
+    // instance or adds it beside the active panel.
+    if (panelId) {
+      openPanelRef.current?.(panelId);
+    }
 
     // Strip the permalink params without losing other query params.
-    const { workspace: _ws, account: _ac, ...rest } = router.query;
+    const { workspace: _ws, account: _ac, panel: _pn, ...rest } = router.query;
     void router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router.isReady, router.query.workspace, router.query.account]);
+  }, [router.isReady, router.query.workspace, router.query.account, router.query.panel]);
 
   const paletteActions = useMemo<PaletteActions>(
     () => ({ switchDeck, openPanel }),

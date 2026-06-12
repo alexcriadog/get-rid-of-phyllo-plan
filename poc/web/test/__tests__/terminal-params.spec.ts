@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { extractQueryParam } from '@/pages/admin/terminal';
+import { isPanelId } from '@/components/term/panels/registry';
 
 /**
  * Unit tests for the permalink param-parsing helper exported from
@@ -40,5 +41,51 @@ describe('extractQueryParam', () => {
 
   it('handles a workspace slug value', () => {
     expect(extractQueryParam('my-workspace')).toBe('my-workspace');
+  });
+});
+
+/**
+ * ?panel=<PanelId> permalink parsing (spec §1 cutover). The shell parses the
+ * raw query value with extractQueryParam, then validates it against the panel
+ * registry via isPanelId — only a known panel id opens. This mirrors the
+ * exact expression used in WorkbenchShell's permalink effect.
+ */
+function parsePanelParam(value: string | string[] | undefined): string | null {
+  const raw = extractQueryParam(value);
+  return raw && isPanelId(raw) ? raw : null;
+}
+
+describe('?panel= permalink parsing', () => {
+  it('resolves a known panel id', () => {
+    expect(parsePanelParam('live-activity')).toBe('live-activity');
+  });
+
+  it('resolves every shipped redirect-target panel id', () => {
+    for (const id of [
+      'live-activity',
+      'raw-inspector',
+      'usage',
+      'capability-matrix',
+      'runtime-settings',
+      'vitals',
+    ]) {
+      expect(parsePanelParam(id)).toBe(id);
+    }
+  });
+
+  it('resolves the first array element when it is a known panel id', () => {
+    expect(parsePanelParam(['vitals', 'usage'])).toBe('vitals');
+  });
+
+  it('returns null for an unknown panel id', () => {
+    expect(parsePanelParam('not-a-panel')).toBeNull();
+  });
+
+  it('returns null when the param is absent', () => {
+    expect(parsePanelParam(undefined)).toBeNull();
+  });
+
+  it('returns null for an empty string', () => {
+    expect(parsePanelParam('')).toBeNull();
   });
 });
