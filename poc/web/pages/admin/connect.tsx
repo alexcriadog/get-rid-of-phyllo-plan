@@ -1,110 +1,59 @@
-import { useState } from 'react';
+/**
+ * Connect Studio (Ops Terminal phase 5a) — full-screen Mint Terminal takeover
+ * for operator onboarding. Restyle-only rebuild of the legacy 974-line page:
+ * EVERY endpoint call, payload and conditional is preserved. The only real
+ * logic here is the two admin POSTs and the stage state machine; all rendering
+ * is delegated to <components/term/connect/*>.
+ *
+ * Endpoints (unchanged):
+ *   · POST /admin/connect/discover  { platform, access_token, [open_id] }
+ *   · POST /admin/connect/seed      SeedBody (+ workspace_slug when selected)
+ */
+
+import { useState, useCallback } from 'react';
+import Head from 'next/head';
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
-import AdminLayout from '../../components/AdminLayout';
-import { adminPost } from '../../lib/api';
-import { useWorkspaceFilter } from '../../lib/workspace-context';
-import { fmtNumber } from '../../lib/format';
-import { Section } from '@/components/admin/section';
-import { Empty } from '@/components/admin/empty';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import ThemeToggle from '@/components/ThemeToggle';
+import WorkspaceSelect from '@/components/WorkspaceSelect';
+import { adminPost } from '@/lib/api';
+import { useWorkspaceFilter } from '@/lib/workspace-context';
+import StageRail, { STAGES, type StageId } from '@/components/term/connect/StageRail';
+import PlatformGalleryStage from '@/components/term/connect/PlatformGalleryStage';
+import CredentialsStage from '@/components/term/connect/CredentialsStage';
+import DiscoveryStage from '@/components/term/connect/DiscoveryStage';
+import FirstSyncStage from '@/components/term/connect/FirstSyncStage';
+import ManualForm from '@/components/term/connect/ManualForm';
+import type {
+  DiscoverResponse,
+  SeedResponse,
+  SeedBody,
+  ConnectKey,
+  DiscoverPlatform,
+  ResultMap,
+} from '@/components/term/connect/types';
 
-type DiscoveredPage = {
-  page_id: string;
-  page_name: string;
-  // Sec C-3: discover no longer returns the live Page token; it returns a
-  // short-lived, single-use server-side ref we pass to /admin/connect/seed.
-  page_token_ref: string;
-  page_already_connected: boolean;
-  instagram?: {
-    ig_business_id: string;
-    username: string | null;
-    name: string | null;
-    followers_count: number | null;
-    profile_picture_url: string | null;
-    already_connected: boolean;
-  };
-};
+const ALL_STAGE_IDS: StageId[] = STAGES.map((s) => s.id);
 
-type TikTokDiscoveredAccount = {
-  open_id: string;
-  username: string | null;
-  display_name: string | null;
-  profile_image: string | null;
-  followers_count: number | null;
-  following_count: number | null;
-  videos_count: number | null;
-  total_likes: number | null;
-  is_verified: boolean | null;
-  already_connected: boolean;
-};
-
-type ThreadsDiscoveredAccount = {
-  user_id: string;
-  username: string | null;
-  name: string | null;
-  profile_picture_url: string | null;
-  biography: string | null;
-  is_verified: boolean | null;
-  already_connected: boolean;
-};
-
-type DiscoverResponse = {
-  me: { id: string | null; name: string | null };
-  token_type:
-    | 'user'
-    | 'page'
-    | 'unknown'
-    | 'tiktok-business'
-    | 'threads-user';
-  pages: DiscoveredPage[];
-  tiktok_account?: TikTokDiscoveredAccount;
-  threads_account?: ThreadsDiscoveredAccount;
-  warnings: string[];
-};
-
-type SeedResponse = {
-  account_id: string;
-  sync_jobs_created: string[];
-};
-
-type ConnectKey = string; // `${platform}:${id}`
-
-type SeedBody = {
-  platform: 'instagram' | 'facebook' | 'tiktok' | 'threads';
-  // Exactly one of these. FB/IG seeds from discover use a broker ref
-  // (Sec C-3); manual/tiktok/threads paste flows send the raw token.
-  access_token?: string;
-  page_token_ref?: string;
-  refresh_token?: string;
-  expires_at?: string; // ISO 8601 with offset
-  canonical_user_id: string;
-  handle?: string;
-  metadata?: Record<string, unknown>;
-  workspace_slug?: string;
-};
-
-type DiscoverPlatform = 'facebook' | 'tiktok' | 'threads';
-
-export default function ConnectPage() {
+export default function ConnectStudioPage() {
   const { slug: wsSlug } = useWorkspaceFilter();
+
+  // ── Stage machine ───────────────────────────────────────────────────────────
+  const [stage, setStage] = useState<StageId>('platform');
+  const [reachable, setReachable] = useState<Set<StageId>>(
+    () => new Set<StageId>(['platform']),
+  );
+  const [manualOpen, setManualOpen] = useState(false);
+
+  const goStage = useCallback((next: StageId) => {
+    setStage(next);
+    setReachable((prev) => {
+      const merged = new Set(prev);
+      merged.add(next);
+      return merged;
+    });
+  }, []);
+
+  // ── Discover state (ported verbatim) ─────────────────────────────────────────
   const [platform, setPlatform] = useState<DiscoverPlatform>('facebook');
   const [token, setToken] = useState('');
   const [openId, setOpenId] = useState('');
@@ -115,9 +64,10 @@ export default function ConnectPage() {
   const [discoverErr, setDiscoverErr] = useState<string | null>(null);
 
   const [busy, setBusy] = useState<ConnectKey | null>(null);
-  const [results, setResults] = useState<Record<ConnectKey, SeedResponse | string>>({});
+  const [results, setResults] = useState<ResultMap>({});
 
-  const onDiscover = async () => {
+  // ── Discover — POST /admin/connect/discover (verbatim) ────────────────────────
+  const onDiscover = useCallback(async () => {
     if (!token.trim()) return;
     if (platform === 'tiktok' && !openId.trim()) {
       setDiscoverErr(
@@ -138,837 +88,230 @@ export default function ConnectPage() {
           : {}),
       });
       setDiscovery(res);
+      goStage('connect');
     } catch (e) {
       setDiscoverErr((e as Error).message);
     } finally {
       setDiscovering(false);
     }
-  };
+  }, [token, platform, openId, goStage]);
 
-  const connect = async (key: ConnectKey, body: SeedBody) => {
-    setBusy(key);
-    try {
-      // Attach the workspace selected in the topbar so the new account
-      // lands in the right tenant. Backend resolves slug → id.
-      const enrichedBody: SeedBody = wsSlug
-        ? { ...body, workspace_slug: wsSlug }
-        : body;
-      const res = await adminPost<SeedResponse>(
-        '/admin/connect/seed',
-        enrichedBody,
-      );
-      setResults((prev) => ({ ...prev, [key]: res }));
-    } catch (e) {
-      setResults((prev) => ({ ...prev, [key]: (e as Error).message }));
-    } finally {
-      setBusy(null);
-    }
-  };
+  // ── Seed — POST /admin/connect/seed (verbatim) ────────────────────────────────
+  const connect = useCallback(
+    async (key: ConnectKey, body: SeedBody) => {
+      setBusy(key);
+      try {
+        // Attach the workspace selected in the header so the new account lands
+        // in the right tenant. Backend resolves slug → id.
+        const enrichedBody: SeedBody = wsSlug
+          ? { ...body, workspace_slug: wsSlug }
+          : body;
+        const res = await adminPost<SeedResponse>(
+          '/admin/connect/seed',
+          enrichedBody,
+        );
+        setResults((prev) => ({ ...prev, [key]: res }));
+        // Advance to the first-sync view once at least one seed lands.
+        setReachable((prev) => {
+          const merged = new Set(prev);
+          merged.add('sync');
+          return merged;
+        });
+      } catch (e) {
+        setResults((prev) => ({ ...prev, [key]: (e as Error).message }));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [wsSlug],
+  );
+
+  const resetFlow = useCallback(() => {
+    setToken('');
+    setOpenId('');
+    setRefreshToken('');
+    setExpiresInS('');
+    setDiscovery(null);
+    setDiscoverErr(null);
+    setResults({});
+    setReachable(new Set<StageId>(['platform']));
+    setStage('platform');
+  }, []);
 
   const connectToolUrl =
     process.env.NEXT_PUBLIC_CONNECT_TOOL_URL ?? 'http://localhost:3002';
 
   return (
-    <AdminLayout title="Connect new accounts">
+    <div className="flex h-screen flex-col bg-term-bg font-mono text-term-text">
+      <Head>
+        <title>Connect Studio — Camaleonic Connect</title>
+      </Head>
+
+      {/* Header */}
+      <header className="flex h-11 shrink-0 items-center gap-4 border-b border-term-line bg-term-bg px-3">
+        <div className="flex items-center gap-2.5">
+          <span
+            aria-hidden="true"
+            className="grid h-4 w-4 place-items-center border-[1.5px] border-term-mint"
+          />
+          <div className="flex flex-col leading-none">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-term-mint">
+              Connect Studio
+            </span>
+            <span className="text-[9px] uppercase tracking-[0.2em] text-term-faint">
+              Operator onboarding
+            </span>
+          </div>
+        </div>
+
+        <Link
+          href="/admin/terminal"
+          className="ml-2 inline-flex h-7 items-center gap-1.5 border border-term-line-2 px-2 text-[11px] uppercase tracking-[0.08em] text-term-muted transition-colors duration-150 hover:border-term-faint hover:text-term-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-term-mint"
+        >
+          ← terminal
+        </Link>
+
+        <div className="ml-auto flex items-center gap-2">
+          <WorkspaceSelect />
+          <ThemeToggle />
+        </div>
+      </header>
+
+      {/* Workspace gate banner */}
       {wsSlug ? (
         <div
           role="note"
-          className="mb-4 flex items-start gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-[12px] text-foreground"
+          className="flex shrink-0 flex-wrap items-center gap-2 border-b border-term-mint/40 bg-term-mint/10 px-3 py-1.5 text-[11px]"
         >
-          <span className="font-semibold">Target workspace:</span>
-          <code className="rounded bg-card/60 px-1.5 py-0.5 font-mono text-[11px]">
+          <span className="font-bold uppercase tracking-[0.12em] text-term-mint">
+            target workspace
+          </span>
+          <code className="border border-term-line-2 bg-term-bg px-1.5 py-0.5 text-term-text">
             {wsSlug}
           </code>
-          <span className="text-muted-foreground">
-            — every account seeded here lands in this workspace. Change it
-            from the topbar.
+          <span className="text-term-muted">
+            — every account seeded here lands in this workspace. Change it from
+            the header.
           </span>
         </div>
       ) : (
         <div
           role="alert"
-          className="mb-4 flex items-start gap-2 rounded-md border border-warn/50 bg-warn/10 px-3 py-2 text-[12px] text-foreground"
+          className="flex shrink-0 flex-wrap items-center gap-2 border-b border-term-warn/50 bg-term-warn/10 px-3 py-1.5 text-[11px]"
         >
-          <span className="font-semibold">Pick a workspace</span>
-          <span className="text-muted-foreground">
-            from the topbar before connecting. Without one the seed step is
-            disabled so accounts don't accidentally land in{' '}
-            <code className="rounded bg-card/60 px-1.5 py-0.5 font-mono text-[11px]">
+          <span className="font-bold uppercase tracking-[0.12em] text-term-warn">
+            pick a workspace
+          </span>
+          <span className="text-term-muted">
+            from the header before connecting. Without one the seed step is
+            disabled so accounts don&apos;t accidentally land in{' '}
+            <code className="border border-term-line-2 bg-term-bg px-1 py-0.5 text-term-text">
               demo
             </code>
             .
           </span>
         </div>
       )}
-      {/* connect-tool CTA — primary path. The paste-token UI below is the
-          fallback for emergencies or scripts. */}
-      <Section
-        title={
-          <span className="flex items-center gap-2">
-            <Badge variant="ok">Recommended</Badge>
-            <span>Use connect-tool</span>
-          </span>
-        }
-        description="Click a platform, approve the OAuth dialog, done. The paste-token form below is kept as a fallback."
-        actions={
-          <Button asChild>
-            <a href={connectToolUrl} target="_blank" rel="noopener noreferrer">
-              Open connect-tool ↗
-            </a>
-          </Button>
-        }
-      >
-        <p className="text-sm text-muted-foreground">
-          The transient OAuth helper at <code>{connectToolUrl}</code> handles
-          Facebook, Instagram, TikTok, Threads and YouTube end-to-end and POSTs
-          the resulting tokens to <code>/admin/connect/seed</code> with the
-          configured bearer token. See <code>connect-tool/README.md</code> for
-          the kill-switch.
-        </p>
-      </Section>
-      <Section
-        title="1. Discover"
-        description={
-          platform === 'tiktok' ? (
-            <>
-              Paste a TikTok <strong>Business Center</strong> access token plus
-              the <code>open_id</code> returned by the BC OAuth callback.
-              We&apos;ll call <code>/business/get/</code> to validate and fetch
-              the basic profile.
-            </>
-          ) : platform === 'threads' ? (
-            <>
-              Paste a long-lived <strong>Threads</strong> user token (scopes{' '}
-              <code>threads_basic</code> + <code>threads_manage_insights</code>{' '}
-              + <code>threads_read_replies</code> +{' '}
-              <code>threads_manage_mentions</code>). We&apos;ll call{' '}
-              <code>graph.threads.net/v1.0/me</code> to validate and fetch the
-              connected user.
-            </>
-          ) : (
-            <>
-              Paste a Meta <strong>User</strong> or <strong>Page</strong>{' '}
-              access token. We&apos;ll enumerate Pages this token can manage
-              and (when present) the Instagram Business account linked to each
-              Page.
-            </>
-          )
-        }
-      >
-        <div className="mb-3 flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-            Platform
-          </span>
-          <Select
-            value={platform}
-            onValueChange={(v) => {
-              setPlatform(v as DiscoverPlatform);
-              setDiscovery(null);
-              setDiscoverErr(null);
-            }}
-          >
-            <SelectTrigger className="w-[180px] font-mono text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="facebook" className="font-mono text-xs">
-                Meta (FB + IG)
-              </SelectItem>
-              <SelectItem value="tiktok" className="font-mono text-xs">
-                TikTok
-              </SelectItem>
-              <SelectItem value="threads" className="font-mono text-xs">
-                Threads
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-          <textarea
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder={
-              platform === 'tiktok'
-                ? 'act.zI317…'
-                : platform === 'threads'
-                  ? 'THAAxxxxxxxx…'
-                  : 'EAAxxxxxxxx…'
-            }
-            spellCheck={false}
-            rows={3}
-            className="flex-1 resize-y rounded-md border border-input bg-card px-3 py-2 font-mono text-xs text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <Button
-            onClick={onDiscover}
-            disabled={
-              discovering ||
-              !token.trim() ||
-              (platform === 'tiktok' && !openId.trim()) ||
-              !wsSlug
-            }
-            className="min-w-[140px] sm:self-stretch"
-          >
-            {discovering ? 'Discovering…' : 'Discover'}
-          </Button>
-        </div>
-        {platform === 'tiktok' && (
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                open_id (required)
-              </span>
-              <Input
-                value={openId}
-                onChange={(e) => setOpenId(e.target.value)}
-                placeholder="-000ZwowuI7N…"
-                className="font-mono text-xs"
-                spellCheck={false}
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                refresh_token (recommended)
-              </span>
-              <Input
-                value={refreshToken}
-                onChange={(e) => setRefreshToken(e.target.value)}
-                placeholder="rft.6KRK…"
-                className="font-mono text-xs"
-                spellCheck={false}
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                expires_in seconds (optional)
-              </span>
-              <Input
-                value={expiresInS}
-                onChange={(e) => setExpiresInS(e.target.value)}
-                placeholder="86400"
-                inputMode="numeric"
-                className="font-mono text-xs"
-                spellCheck={false}
-              />
-            </label>
-          </div>
-        )}
-        {discoverErr && (
-          <div className="mt-3 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
-            {discoverErr}
-          </div>
-        )}
-      </Section>
 
-      {discovery && (
-        <>
-          <Section
-            title={
-              <span className="flex items-center gap-2">
-                Authenticated as
-                <Badge
-                  variant={
-                    discovery.token_type === 'user'
-                      ? 'ok'
-                      : discovery.token_type === 'page'
-                        ? 'primary'
-                        : 'default'
-                  }
-                >
-                  {discovery.token_type} token
-                </Badge>
-              </span>
-            }
-          >
-            <div className="font-mono text-sm">
-              {discovery.me.name ?? '—'}{' '}
-              <span className="text-muted-foreground">
-                ({discovery.me.id ?? '—'})
-              </span>
-            </div>
-            {discovery.warnings.length > 0 && (
-              <div className="mt-3 flex flex-col gap-2">
-                {discovery.warnings.map((w, i) => (
-                  <div
-                    key={i}
-                    className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn"
+      {/* Body: stage rail + stage canvas */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <StageRail active={stage} reachable={reachable} onSelect={goStage} />
+
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-4xl px-4 py-6 lg:px-8 lg:py-10">
+            {stage === 'platform' && (
+              <PlatformGalleryStage
+                selected={platform}
+                onSelect={(p) => {
+                  setPlatform(p);
+                  setDiscovery(null);
+                  setDiscoverErr(null);
+                }}
+                onContinue={() => goStage('credentials')}
+                onManual={() => {
+                  setManualOpen(true);
+                  goStage('credentials');
+                }}
+                connectToolUrl={connectToolUrl}
+              />
+            )}
+
+            {stage === 'credentials' && (
+              <div className="flex flex-col gap-6">
+                <CredentialsStage
+                  platform={platform}
+                  token={token}
+                  openId={openId}
+                  refreshToken={refreshToken}
+                  expiresInS={expiresInS}
+                  discovering={discovering}
+                  discoverErr={discoverErr}
+                  hasWorkspace={!!wsSlug}
+                  onTokenChange={setToken}
+                  onOpenIdChange={setOpenId}
+                  onRefreshTokenChange={setRefreshToken}
+                  onExpiresInChange={setExpiresInS}
+                  onDiscover={onDiscover}
+                  onBack={() => goStage('platform')}
+                />
+
+                {/* Manual connect — bypass discovery (collapsible). */}
+                <section className="border border-term-line bg-term-surface">
+                  <button
+                    type="button"
+                    aria-expanded={manualOpen}
+                    onClick={() => setManualOpen((v) => !v)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.12em] text-term-muted transition-colors hover:text-term-text"
                   >
-                    {w}
-                  </div>
-                ))}
+                    <span aria-hidden="true" className="text-term-mint">
+                      {manualOpen ? '▾' : '▸'}
+                    </span>
+                    manual connect (bypass discovery)
+                  </button>
+                  {manualOpen && (
+                    <div className="border-t border-term-line px-3 py-4">
+                      <ManualForm
+                        onConnect={connect}
+                        busy={busy}
+                        results={results}
+                      />
+                    </div>
+                  )}
+                </section>
               </div>
             )}
-          </Section>
 
-          {discovery.token_type !== 'tiktok-business' &&
-            discovery.token_type !== 'threads-user' && (
-            <Section
-              title={`2. Pages found (${discovery.pages.length})`}
-              description="Each Page can be connected as Facebook, and (when present) as the linked Instagram Business account."
-            >
-              {discovery.pages.length === 0 ? (
-                <Empty message="No pages returned. The token may lack pages_show_list or no Pages are managed by this user." />
+            {stage === 'connect' &&
+              (discovery ? (
+                <DiscoveryStage
+                  discovery={discovery}
+                  token={token}
+                  refreshToken={refreshToken}
+                  expiresInS={expiresInS}
+                  busy={busy}
+                  results={results}
+                  onConnect={connect}
+                  onBack={() => goStage('credentials')}
+                />
               ) : (
-                <div className="flex flex-col gap-3">
-                  {discovery.pages.map((p) => (
-                    <PageCard
-                      key={p.page_id}
-                      page={p}
-                      busy={busy}
-                      results={results}
-                      onConnect={connect}
-                    />
-                  ))}
+                <div className="font-mono text-xs text-term-faint">
+                  — discover a token first —
                 </div>
-              )}
-            </Section>
-          )}
+              ))}
 
-          {discovery.threads_account && (
-            <Section
-              title="2. Threads account"
-              description="Verified by graph.threads.net/v1.0/me. Click Connect to seed it with the long-lived user token above."
-            >
-              <ThreadsAccountCard
-                account={discovery.threads_account}
-                busy={busy === `threads:${discovery.threads_account.user_id}`}
-                result={
-                  results[`threads:${discovery.threads_account.user_id}`]
-                }
-                onConnect={() => {
-                  const acc = discovery.threads_account;
-                  if (!acc) return;
-                  return connect(`threads:${acc.user_id}`, {
-                    platform: 'threads',
-                    access_token: token.trim(),
-                    canonical_user_id: acc.user_id,
-                    handle: acc.username
-                      ? `@${acc.username}`
-                      : acc.name ?? undefined,
-                    metadata: {
-                      user_id: acc.user_id,
-                    },
-                  });
-                }}
+            {stage === 'sync' && (
+              <FirstSyncStage
+                results={results}
+                onBack={() => goStage('connect')}
+                onReset={resetFlow}
               />
-            </Section>
-          )}
-
-          {discovery.tiktok_account && (
-            <Section
-              title="2. TikTok account"
-              description="Verified by /business/get/. Click Connect to seed it with the access + refresh tokens you provided above."
-            >
-              <TikTokAccountCard
-                account={discovery.tiktok_account}
-                busy={busy === `tiktok:${discovery.tiktok_account.open_id}`}
-                result={
-                  results[`tiktok:${discovery.tiktok_account.open_id}`]
-                }
-                onConnect={() => {
-                  const acc = discovery.tiktok_account;
-                  if (!acc) return;
-                  const expiresAt = (() => {
-                    const n = Number(expiresInS);
-                    if (!Number.isFinite(n) || n <= 0) return undefined;
-                    return new Date(Date.now() + n * 1000).toISOString();
-                  })();
-                  return connect(`tiktok:${acc.open_id}`, {
-                    platform: 'tiktok',
-                    access_token: token.trim(),
-                    refresh_token: refreshToken.trim() || undefined,
-                    expires_at: expiresAt,
-                    canonical_user_id: acc.open_id,
-                    handle: acc.username
-                      ? `@${acc.username}`
-                      : acc.display_name ?? undefined,
-                    metadata: {
-                      business_id: acc.open_id,
-                      open_id: acc.open_id,
-                    },
-                  });
-                }}
-              />
-            </Section>
-          )}
-        </>
-      )}
-
-      <Card className="mb-5">
-        <details>
-          <summary className="cursor-pointer select-none px-6 py-4 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            Manual connect (bypass discovery)
-          </summary>
-          <div className="border-t border-border px-6 py-5">
-            <ManualForm onConnect={connect} busy={busy} results={results} />
-          </div>
-        </details>
-      </Card>
-    </AdminLayout>
-  );
-}
-
-function TikTokAccountCard({
-  account,
-  busy,
-  result,
-  onConnect,
-}: {
-  account: TikTokDiscoveredAccount;
-  busy: boolean;
-  result?: SeedResponse | string;
-  onConnect: () => Promise<void> | void;
-}) {
-  const handle = account.username ? `@${account.username}` : account.display_name ?? '—';
-  const ok =
-    result && typeof result === 'object' && 'account_id' in result
-      ? result
-      : null;
-  const errMsg = result && typeof result === 'string' ? result : null;
-
-  return (
-    <Card className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
-      <div className="flex items-center gap-4">
-        {account.profile_image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={account.profile_image}
-            alt={`${handle} avatar`}
-            referrerPolicy="no-referrer"
-            className="h-14 w-14 rounded-full border border-border object-cover"
-          />
-        ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-muted font-mono text-sm text-muted-foreground">
-            tt
-          </div>
-        )}
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-semibold">{handle}</span>
-            {account.is_verified && <Badge variant="primary">verified</Badge>}
-            {account.already_connected && (
-              <Badge variant="ok">already connected</Badge>
             )}
           </div>
-          <div className="font-mono text-[11px] text-muted-foreground">
-            {account.display_name && account.username
-              ? `${account.display_name} · `
-              : ''}
-            {fmtNumber(account.followers_count ?? 0)} followers
-            {account.videos_count != null && (
-              <> · {fmtNumber(account.videos_count)} videos</>
-            )}
-            {account.total_likes != null && (
-              <> · {fmtNumber(account.total_likes)} ♥ lifetime</>
-            )}
-          </div>
-          <div className="font-mono text-[10px] text-muted-foreground/70">
-            open_id {account.open_id.slice(0, 14)}…
-          </div>
-        </div>
-      </div>
-      <div className="flex flex-col items-end gap-2">
-        <Button onClick={onConnect} disabled={busy}>
-          {busy ? 'Connecting…' : ok ? 'Reseed' : 'Connect'}
-          {!busy && !ok && <ArrowRight className="ml-1 h-3.5 w-3.5" />}
-        </Button>
-        {ok && (
-          <span className="font-mono text-[10px] text-ok">
-            ✓ acc #{ok.account_id} · {ok.sync_jobs_created.length} sync_jobs
-          </span>
-        )}
-        {errMsg && (
-          <span className="font-mono text-[10px] text-danger">{errMsg}</span>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function ThreadsAccountCard({
-  account,
-  busy,
-  result,
-  onConnect,
-}: {
-  account: ThreadsDiscoveredAccount;
-  busy: boolean;
-  result?: SeedResponse | string;
-  onConnect: () => Promise<void> | void;
-}) {
-  const handle = account.username ? `@${account.username}` : account.name ?? '—';
-  const ok =
-    result && typeof result === 'object' && 'account_id' in result
-      ? result
-      : null;
-  const errMsg = result && typeof result === 'string' ? result : null;
-
-  return (
-    <Card className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
-      <div className="flex items-center gap-4">
-        {account.profile_picture_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={account.profile_picture_url}
-            alt={`${handle} avatar`}
-            referrerPolicy="no-referrer"
-            className="h-14 w-14 rounded-full border border-border object-cover"
-          />
-        ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-muted font-mono text-sm text-muted-foreground">
-            th
-          </div>
-        )}
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-semibold">{handle}</span>
-            {account.is_verified && <Badge variant="primary">verified</Badge>}
-            {account.already_connected && (
-              <Badge variant="ok">already connected</Badge>
-            )}
-          </div>
-          <div className="font-mono text-[11px] text-muted-foreground">
-            {account.name && account.username ? `${account.name} · ` : ''}
-            user_id {account.user_id}
-          </div>
-          {account.biography && (
-            <div className="line-clamp-2 max-w-[480px] text-[11px] text-muted-foreground/80">
-              {account.biography}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="flex flex-col items-end gap-2">
-        <Button onClick={onConnect} disabled={busy}>
-          {busy ? 'Connecting…' : ok ? 'Reseed' : 'Connect'}
-          {!busy && !ok && <ArrowRight className="ml-1 h-3.5 w-3.5" />}
-        </Button>
-        {ok && (
-          <span className="font-mono text-[10px] text-ok">
-            ✓ acc #{ok.account_id} · {ok.sync_jobs_created.length} sync_jobs
-          </span>
-        )}
-        {errMsg && (
-          <span className="font-mono text-[10px] text-danger">{errMsg}</span>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function PageCard({
-  page,
-  busy,
-  results,
-  onConnect,
-}: {
-  page: DiscoveredPage;
-  busy: ConnectKey | null;
-  results: Record<ConnectKey, SeedResponse | string>;
-  onConnect: (key: ConnectKey, body: SeedBody) => Promise<void>;
-}) {
-  const fbKey: ConnectKey = `facebook:${page.page_id}`;
-  const igKey: ConnectKey | null = page.instagram
-    ? `instagram:${page.instagram.ig_business_id}`
-    : null;
-
-  return (
-    <Card className="grid gap-4 p-5 md:grid-cols-2">
-      <ConnectableCell
-        platform="facebook"
-        title="Facebook Page"
-        primary={page.page_name}
-        secondary={`Page ID · ${page.page_id}`}
-        avatar={null}
-        connected={page.page_already_connected}
-        busy={busy === fbKey}
-        result={results[fbKey]}
-        onClick={() =>
-          onConnect(fbKey, {
-            platform: 'facebook',
-            page_token_ref: page.page_token_ref,
-            canonical_user_id: page.page_id,
-            handle: page.page_name,
-            metadata: { page_id: page.page_id },
-          })
-        }
-      />
-
-      {igKey && page.instagram ? (
-        <ConnectableCell
-          platform="instagram"
-          title="Instagram Business"
-          primary={
-            page.instagram.username
-              ? `@${page.instagram.username}`
-              : page.instagram.name ?? '—'
-          }
-          secondary={
-            page.instagram.followers_count != null
-              ? `${fmtNumber(page.instagram.followers_count)} followers · IG ${page.instagram.ig_business_id}`
-              : `IG ${page.instagram.ig_business_id}`
-          }
-          avatar={page.instagram.profile_picture_url}
-          connected={page.instagram.already_connected}
-          busy={busy === igKey}
-          result={results[igKey]}
-          onClick={() =>
-            onConnect(igKey, {
-              platform: 'instagram',
-              page_token_ref: page.page_token_ref,
-              canonical_user_id: page.instagram!.ig_business_id,
-              handle:
-                page.instagram!.username ?? page.instagram!.name ?? undefined,
-              metadata: { page_id: page.page_id },
-            })
-          }
-        />
-      ) : (
-        <div className="flex items-center justify-center rounded-md border border-dashed border-border/70 bg-card/40 p-5 text-center text-xs text-muted-foreground">
-          No Instagram Business account linked to this Page.
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function ConnectableCell({
-  platform,
-  title,
-  primary,
-  secondary,
-  avatar,
-  connected,
-  busy,
-  result,
-  onClick,
-}: {
-  platform: 'facebook' | 'instagram';
-  title: string;
-  primary: string;
-  secondary: string;
-  avatar: string | null;
-  connected: boolean;
-  busy: boolean;
-  result: SeedResponse | string | undefined;
-  onClick: () => void;
-}) {
-  const succeeded = !!result && typeof result !== 'string';
-  const failed = typeof result === 'string';
-  const titleTone =
-    platform === 'instagram' ? 'text-primary' : 'text-info';
-
-  return (
-    <div
-      className={cn(
-        'flex flex-col gap-3 rounded-md border bg-secondary/30 p-4',
-        connected || succeeded
-          ? 'border-ok/40 bg-ok/5'
-          : 'border-border',
-      )}
-    >
-      <div
-        className={cn(
-          'font-mono text-[10.5px] font-semibold uppercase tracking-[0.16em]',
-          titleTone,
-        )}
-      >
-        {title}
-      </div>
-
-      <div className="flex items-center gap-3">
-        {avatar ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={avatar}
-            alt={primary}
-            referrerPolicy="no-referrer"
-            width={42}
-            height={42}
-            className="h-[42px] w-[42px] flex-shrink-0 rounded-full object-cover"
-          />
-        ) : (
-          <div
-            className={cn(
-              'flex h-[42px] w-[42px] flex-shrink-0 items-center justify-center rounded-full border border-border bg-card font-bold',
-              titleTone,
-            )}
-          >
-            {primary.replace(/^@/, '').charAt(0).toUpperCase()}
-          </div>
-        )}
-        <div className="min-w-0">
-          <div className="truncate font-semibold text-foreground">{primary}</div>
-          <div className="font-mono text-[11px] text-muted-foreground">
-            {secondary}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-auto space-y-2">
-        {connected && !succeeded && (
-          <Badge variant="ok">already connected</Badge>
-        )}
-        {succeeded && typeof result !== 'string' && result && (
-          <div className="space-y-1.5 text-xs leading-relaxed">
-            <Badge variant="ok">connected</Badge>
-            <div className="font-mono text-muted-foreground">
-              account #{result.account_id} ·{' '}
-              {result.sync_jobs_created.length} jobs queued
-            </div>
-            <Link
-              href={`/account/${result.account_id}`}
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-            >
-              View account <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
-        )}
-        {failed && (
-          <div className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-[11px] text-danger">
-            {result as string}
-          </div>
-        )}
-        {!connected && !succeeded && !failed && (
-          <Button
-            onClick={onClick}
-            disabled={busy}
-            className="w-full"
-          >
-            {busy
-              ? 'Connecting…'
-              : `Connect ${platform === 'instagram' ? 'Instagram' : 'Facebook'}`}
-          </Button>
-        )}
-        {(connected || succeeded || failed) && (
-          <Button
-            onClick={onClick}
-            disabled={busy}
-            variant="outline"
-            size="sm"
-            className="w-full"
-          >
-            {busy
-              ? '…'
-              : connected && !succeeded
-                ? 'Reconnect / refresh token'
-                : 'Re-run'}
-          </Button>
-        )}
+        </main>
       </div>
     </div>
   );
 }
 
-function ManualForm({
-  onConnect,
-  busy,
-  results,
-}: {
-  onConnect: (key: ConnectKey, body: SeedBody) => Promise<void>;
-  busy: ConnectKey | null;
-  results: Record<ConnectKey, SeedResponse | string>;
-}) {
-  const [platform, setPlatform] = useState<'instagram' | 'facebook'>('instagram');
-  const [accessToken, setAccessToken] = useState('');
-  const [canonicalId, setCanonicalId] = useState('');
-  const [handle, setHandle] = useState('');
-  const [pageId, setPageId] = useState('');
-
-  const key: ConnectKey = `${platform}:${canonicalId}`;
-  const result = results[key];
-
-  return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium">Platform</label>
-        <Select
-          value={platform}
-          onValueChange={(v) => setPlatform(v as 'instagram' | 'facebook')}
-        >
-          <SelectTrigger className="w-[220px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="instagram">instagram</SelectItem>
-            <SelectItem value="facebook">facebook</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium">Canonical user ID</label>
-        <Input
-          value={canonicalId}
-          onChange={(e) => setCanonicalId(e.target.value)}
-          placeholder={platform === 'instagram' ? '17841401234567890' : '105...'}
-          className="font-mono text-xs"
-        />
-        <p className="text-[11px] text-muted-foreground">
-          {platform === 'instagram'
-            ? 'IG Business account id (e.g. 17841401234567890)'
-            : 'Facebook Page id'}
-        </p>
-      </div>
-
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium">Access token</label>
-        <textarea
-          rows={2}
-          value={accessToken}
-          onChange={(e) => setAccessToken(e.target.value)}
-          placeholder="EAA…"
-          className="w-full resize-y rounded-md border border-input bg-card px-3 py-2 font-mono text-xs text-foreground shadow-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium">Handle (optional)</label>
-        <Input
-          value={handle}
-          onChange={(e) => setHandle(e.target.value)}
-          placeholder="@brand"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium">
-          Page ID (optional, recommended for IG)
-        </label>
-        <Input
-          value={pageId}
-          onChange={(e) => setPageId(e.target.value)}
-          placeholder="105..."
-          className="font-mono text-xs"
-        />
-      </div>
-
-      <Button
-        disabled={!accessToken || !canonicalId || busy === key}
-        onClick={() =>
-          onConnect(key, {
-            platform,
-            access_token: accessToken.trim(),
-            canonical_user_id: canonicalId.trim(),
-            handle: handle.trim() || undefined,
-            metadata: pageId.trim() ? { page_id: pageId.trim() } : undefined,
-          })
-        }
-        className="min-w-[160px]"
-      >
-        {busy === key ? 'Connecting…' : 'Connect manually'}
-      </Button>
-
-      {result && typeof result !== 'string' && (
-        <div className="font-mono text-xs text-ok">
-          ✓ account #{result.account_id} ·{' '}
-          {result.sync_jobs_created.length} jobs queued
-        </div>
-      )}
-      {typeof result === 'string' && (
-        <div className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
-          {result}
-        </div>
-      )}
-    </div>
-  );
-}
+// Re-exported for tests / external stage references.
+export { ALL_STAGE_IDS };
