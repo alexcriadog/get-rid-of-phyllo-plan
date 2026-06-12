@@ -116,6 +116,7 @@ export class CanonicalWriteService {
   async persist(
     account: DualWriteAccount,
     result: DualWriteResult,
+    windowDays = 90,
   ): Promise<PersistDelta> {
     if (!KNOWN_PLATFORMS.has(account.platform)) return ZERO_DELTA;
     try {
@@ -128,7 +129,11 @@ export class CanonicalWriteService {
           await this.writeAudience(ctx, result.data as AudienceData);
           return SNAPSHOT_DELTA;
         case "content":
-          return this.writeContents(ctx, result.data as ContentData[]);
+          return this.writeContents(
+            ctx,
+            result.data as ContentData[],
+            windowDays,
+          );
         case "comments":
           return this.writeComments(ctx, result.data as CommentData[]);
         case "engagement_deep":
@@ -245,6 +250,7 @@ export class CanonicalWriteService {
   private async writeContents(
     ctx: SchemaContext,
     items: ContentData[],
+    windowDays = 90,
   ): Promise<PersistDelta> {
     if (!Array.isArray(items) || items.length === 0) return ZERO_DELTA;
     const now = new Date();
@@ -264,6 +270,12 @@ export class CanonicalWriteService {
     for (const d of existingDocs) {
       if (d.external_id) prevByExt.set(d.external_id, d.doc);
     }
+    // Engagement-update delta (window-scoped): an existing post within the
+    // recent window whose engagement metrics changed counts as "updated" so
+    // the worker can fire a data.<product>.updated webhook for refreshed stats.
+    const updatedSampleIds: string[] = [];
+    let itemsUpdatedCount = 0;
+    const cutoff = Date.now() - windowDays * 86_400_000;
     const ops: AnyBulkWriteOperation[] = [];
     const idByOpIndex: string[] = [];
     for (const item of items) {
@@ -273,6 +285,13 @@ export class CanonicalWriteService {
       const fresh = toApiContent(ctx, item);
       const prev = prevByExt.get(externalId);
       const doc = prev ? coalesceMerge(prev, fresh) : fresh;
+      const publishedMs = item.publishedAt
+        ? new Date(item.publishedAt).getTime()
+        : 0;
+      if (prev && publishedMs >= cutoff && engagementChanged(prev, fresh)) {
+        if (updatedSampleIds.length < 20) updatedSampleIds.push(externalId);
+        itemsUpdatedCount++;
+      }
       ops.push({
         updateOne: {
           filter: { account_pk: ctx.accountPk, external_id: externalId },
@@ -293,7 +312,8 @@ export class CanonicalWriteService {
     }
     if (ops.length === 0) return ZERO_DELTA;
     const res = await col.bulkWrite(ops, { ordered: false });
-    return this.deltaFromBulk(res, idByOpIndex);
+    const base = this.deltaFromBulk(res, idByOpIndex);
+    return { ...base, itemsUpdated: itemsUpdatedCount, updatedSampleIds };
   }
 
   private async writeComments(
