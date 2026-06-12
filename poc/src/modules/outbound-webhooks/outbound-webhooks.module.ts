@@ -6,15 +6,21 @@ import { RateLimitInterceptor } from '@/common/interceptors/rate-limit.intercept
 import { OutboundWebhooksService } from './outbound-webhooks.service';
 import { OutboundWebhooksController } from './outbound-webhooks.controller';
 import { WebhookDeliveriesController } from './webhook-deliveries.controller';
+import { RefreshController } from './refresh.controller';
 import { TokenLifecycleEmitter } from './token-lifecycle-emitter.service';
 import { DataEventDispatcher } from './data-event-dispatcher.service';
 import { WebhooksDigestService } from './webhooks-digest.service';
 import { StandardWebhookEmitter } from './standard-webhook-emitter.service';
 import { RefreshCadenceService } from './refresh-cadence.service';
+import { EngagementRefreshService } from './engagement-refresh.service';
 
 @Module({
   imports: [SharedDatabaseModule, SharedRedisModule, ApiKeysModule],
-  controllers: [OutboundWebhooksController, WebhookDeliveriesController],
+  controllers: [
+    OutboundWebhooksController,
+    WebhookDeliveriesController,
+    RefreshController,
+  ],
   providers: [
     OutboundWebhooksService,
     TokenLifecycleEmitter,
@@ -22,6 +28,7 @@ import { RefreshCadenceService } from './refresh-cadence.service';
     WebhooksDigestService,
     StandardWebhookEmitter,
     RefreshCadenceService,
+    EngagementRefreshService,
     RateLimitInterceptor,
   ],
   exports: [
