@@ -64,4 +64,24 @@ describe("writeContents itemsUpdated", () => {
     );
     expect(d.itemsUpdated).toBe(0);
   });
+  it("does not flag a partial fetch that drops a metric to null (compares merged doc)", async () => {
+    // Stored doc has like_count=10. The fresh item carries NO likes metric
+    // (metrics: {}), so toApiContent yields like_count=null. coalesceMerge
+    // keeps the stored 10, so the persisted doc is unchanged → not "updated".
+    const svc = new CanonicalWriteService(
+      mockMongo([{ external_id: "a", doc: { engagement: { like_count: 10 } } }]),
+    );
+    const partial = {
+      platformContentId: "a",
+      publishedAt: recent,
+      metrics: {},
+    } as any;
+    const d = await (svc as any).writeContents(
+      (svc as any).buildContext(acct),
+      [partial],
+      90,
+    );
+    expect(d.itemsUpdated).toBe(0);
+    expect(d.updatedSampleIds).not.toContain("a");
+  });
 });

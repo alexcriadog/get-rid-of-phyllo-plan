@@ -5,14 +5,26 @@ import { RedisService } from '@shared/redis/redis.service';
 export const DEFAULT_REFRESH_INTERVAL_SECONDS = 21_600; // 6h
 export const DEFAULT_REFRESH_WINDOW_DAYS = 90;
 
+// Memoize cadence rows for 60 s. getConfig() is now read on the worker's hot
+// path (detection window) AND the dispatcher's reporting path (window_start);
+// caching keeps both deterministic + identical within the window without a DB
+// round-trip per sync. Mirrors DataEventDispatcher.loadWorkspaceCadence.
+const CONFIG_CACHE_TTL_MS = 60_000;
+
 export interface RefreshConfig {
   intervalSeconds: number;
   windowDays: number;
 }
 
+interface CachedConfig {
+  value: RefreshConfig;
+  expiresAt: number;
+}
+
 @Injectable()
 export class RefreshCadenceService {
   private readonly logger = new Logger(RefreshCadenceService.name);
+  private readonly configCache = new Map<string, CachedConfig>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -20,14 +32,29 @@ export class RefreshCadenceService {
   ) {}
 
   async getConfig(platform: string, product: string): Promise<RefreshConfig> {
+    const cacheKey = `${platform}:${product}`;
+    const now = Date.now();
+    const cached = this.configCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) return cached.value;
+
     const row = await this.prisma.cadence.findUnique({
       where: { platform_product: { platform, product } },
     });
-    return {
+    const value: RefreshConfig = {
       intervalSeconds:
         row?.refreshIntervalSeconds ?? DEFAULT_REFRESH_INTERVAL_SECONDS,
       windowDays: row?.refreshWindowDays ?? DEFAULT_REFRESH_WINDOW_DAYS,
     };
+    this.configCache.set(cacheKey, {
+      value,
+      expiresAt: now + CONFIG_CACHE_TTL_MS,
+    });
+    return value;
+  }
+
+  /** Test helper — drops the config cache so the next call refetches. */
+  clearCacheForTests(): void {
+    this.configCache.clear();
   }
 
   /**

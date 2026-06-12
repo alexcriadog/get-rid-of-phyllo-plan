@@ -83,6 +83,9 @@ export class DataEventDispatcher {
     updatedSampleIds?: string[];
   }): Promise<void> {
     const isAdd = args.itemsAdded > 0;
+    // Add and refresh are mutually exclusive: an add webhook already signals
+    // the consumer to re-fetch, so we only emit a refresh when nothing new
+    // landed but existing items' metrics changed.
     const isRefresh = !isAdd && (args.itemsUpdated ?? 0) > 0;
     if (!isAdd && !isRefresh) return;
 

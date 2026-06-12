@@ -27,25 +27,25 @@ describe('EngagementRefreshService', () => {
     );
     const r = await svc.emitForAccount(
       { id: 1n, workspaceId: 'w', platform: 'tiktok' } as any,
-      'content',
+      'engagement_new',
       90,
     );
     expect(r.sampleCount).toBe(2);
     expect(standardWebhooks.fireData).toHaveBeenCalledWith(
       expect.objectContaining({
         accountId: 1n,
-        product: 'content',
+        product: 'engagement_new',
         sampleIds: ['a', 'b'],
       }),
     );
     expect(webhooks.emit).toHaveBeenCalledWith(
       'w',
-      'data.content.updated',
+      'data.engagement_new.updated',
       expect.objectContaining({ reason: 'manual' }),
     );
   });
 
-  it('returns sampleCount 0 without throwing when no in-window content', async () => {
+  it('returns sampleCount 0 WITHOUT emitting when no in-window content', async () => {
     const standardWebhooks = {
       fireData: jest.fn().mockResolvedValue(undefined),
     } as any;
@@ -57,9 +57,11 @@ describe('EngagementRefreshService', () => {
     );
     const r = await svc.emitForAccount(
       { id: 1n, workspaceId: 'w', platform: 'tiktok' } as any,
-      'content',
+      'engagement_new',
       90,
     );
     expect(r.sampleCount).toBe(0);
+    expect(standardWebhooks.fireData).not.toHaveBeenCalled();
+    expect(webhooks.emit).not.toHaveBeenCalled();
   });
 });
