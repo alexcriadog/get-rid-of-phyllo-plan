@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import AdminLayout from '../../../../components/AdminLayout';
+import ConfigLayout from '@/components/term/ConfigLayout';
 import {
   adminPost,
   adminPatch,
@@ -90,14 +90,14 @@ export default function AccountSyncSettingsAdminPage() {
     };
   }, [id, tick]);
 
-  if (!id) return <AdminLayout title="Sync settings">Loading…</AdminLayout>;
+  if (!id) return <ConfigLayout title="Sync settings">Loading…</ConfigLayout>;
 
   return (
-    <AdminLayout
+    <ConfigLayout
       title={`Sync settings · #${id}`}
       actions={
         <Button asChild variant="ghost" size="sm">
-          <Link href={`/admin/accounts/${id}`}>
+          <Link href={`/admin?account=${id}`}>
             <ArrowLeft className="h-3.5 w-3.5" />
             Account
           </Link>
@@ -132,7 +132,7 @@ export default function AccountSyncSettingsAdminPage() {
           </div>
         </Section>
       )}
-    </AdminLayout>
+    </ConfigLayout>
   );
 }
 
@@ -291,7 +291,7 @@ function SyncJobSettingsCard({
               Set override
             </Button>
             <span className="font-mono text-[10px] text-muted-foreground">
-              (use /admin/cadence to clear or change defaults)
+              (use the Pipeline deck to clear or change defaults)
             </span>
           </div>
         </div>

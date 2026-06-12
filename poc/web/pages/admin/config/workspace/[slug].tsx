@@ -3,22 +3,21 @@ import type { GetServerSideProps } from 'next';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { ArrowLeft, Copy, KeyRound, Plus, Trash2, Webhook } from 'lucide-react';
-import AdminLayout from '../../../components/AdminLayout';
-import { useLive } from '../../../lib/useLive';
+import ConfigLayout from '@/components/term/ConfigLayout';
+import { useLive } from '@/lib/useLive';
 import {
   adminPatch,
   adminPost,
   adminDelete,
   CONNECTOR_API_URL,
-} from '../../../lib/api';
-import { fmtRelative } from '../../../lib/format';
+} from '@/lib/api';
+import { fmtRelative } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Empty } from '@/components/admin/empty';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import ScopeBadge from '../../../components/ScopeBadge';
 
 type ProductDef = {
   id: string;
@@ -94,20 +93,19 @@ export default function WorkspaceDetail({ catalog }: PageProps) {
     5000,
   );
 
-  if (!slug) return <AdminLayout title="Workspace">Loading…</AdminLayout>;
+  if (!slug) return <ConfigLayout title="Workspace">Loading…</ConfigLayout>;
 
   return (
-    <AdminLayout
+    <ConfigLayout
       title={ws.data?.name ?? slug}
       actions={
-        <Link href="/admin/workspaces">
+        <Link href="/admin?deck=tenant-service">
           <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back
+            <ArrowLeft className="h-3.5 w-3.5" /> Directory
           </Button>
         </Link>
       }
     >
-      <ScopeBadge scope="tenant" tenant={slug} />
       {/* Tenant object hub: everything about one workspace under one route,
           organized as tabs instead of a flat stack of cards. Overview leads
           with the summary; the rest are the per-concern config surfaces. */}
@@ -148,7 +146,7 @@ export default function WorkspaceDetail({ catalog }: PageProps) {
           <AllowedOriginsSection slug={slug} ws={ws.data} onSaved={ws.refresh} />
         </TabsContent>
       </Tabs>
-    </AdminLayout>
+    </ConfigLayout>
   );
 }
 
@@ -161,6 +159,8 @@ export default function WorkspaceDetail({ catalog }: PageProps) {
 // time), which points at the public domain. SSR runs inside the docker
 // network and should hit api:3000 directly, so we prefer the server-only
 // CONNECTOR_API_URL env (set on the web service to `http://api:3000`).
+const EMPTY_CATALOG: CatalogResponse = { platforms: [], products: [], catalog: {} };
+
 export const getServerSideProps: GetServerSideProps<PageProps> = async () => {
   const baseUrl =
     process.env.CONNECTOR_API_URL ||
@@ -170,19 +170,31 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async () => {
   // /internal/* is a guarded service zone — present the shared service
   // bearer. SSR runs server-side so the secret never reaches the browser.
   const internalSecret = process.env.CONNECT_TOOL_SECRET;
-  const res = await fetch(url, {
-    headers: {
-      accept: 'application/json',
-      ...(internalSecret ? { authorization: `Bearer ${internalSecret}` } : {}),
-    },
-  });
-  if (!res.ok) {
-    throw new Error(
-      `Failed to load products catalog from ${url}: ${res.status} ${res.statusText}`,
-    );
+  // Fail soft post-cutover: the page's primary job is the mutation surfaces
+  // (branding/api-keys/webhooks/security), which don't need the catalog. If the
+  // catalog is unreachable we still render the ConfigLayout shell with an empty
+  // catalog (Products/Cadence tabs degrade to empty grids) rather than 500.
+  try {
+    const res = await fetch(url, {
+      headers: {
+        accept: 'application/json',
+        ...(internalSecret ? { authorization: `Bearer ${internalSecret}` } : {}),
+      },
+    });
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[config/workspace] products catalog ${res.status} from ${url} — rendering with empty catalog`,
+      );
+      return { props: { catalog: EMPTY_CATALOG } };
+    }
+    const catalog = (await res.json()) as CatalogResponse;
+    return { props: { catalog } };
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(`[config/workspace] products catalog fetch failed: ${(e as Error).message}`);
+    return { props: { catalog: EMPTY_CATALOG } };
   }
-  const catalog = (await res.json()) as CatalogResponse;
-  return { props: { catalog } };
 };
 
 // ─── Summary ───────────────────────────────────────────────────────────────
