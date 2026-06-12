@@ -37,14 +37,47 @@ import {
 } from "@modules/data-schema";
 import { deepToContentParts } from "@modules/data-schema/mappers/content.mapper";
 
-/** {itemsAdded, sampleIds} delta used to fire data.<product>.updated webhooks. */
+const ENGAGEMENT_KEYS = [
+  "like_count",
+  "comment_count",
+  "view_count",
+  "share_count",
+  "save_count",
+  "dislike_count",
+] as const;
+
+/** True if any engagement metric differs between the stored doc and the fresh doc. */
+export function engagementChanged(prev: unknown, fresh: unknown): boolean {
+  const p =
+    (prev as { engagement?: Record<string, unknown> } | null)?.engagement ?? {};
+  const f =
+    (fresh as { engagement?: Record<string, unknown> } | null)?.engagement ?? {};
+  for (const k of ENGAGEMENT_KEYS) {
+    if ((p[k] ?? null) !== (f[k] ?? null)) return true;
+  }
+  return false;
+}
+
+/** Delta used to fire data.<product>.updated webhooks (added + engagement-updated). */
 export interface PersistDelta {
   itemsAdded: number;
   sampleIds: string[];
+  itemsUpdated: number;
+  updatedSampleIds: string[];
 }
 
-const ZERO_DELTA: PersistDelta = { itemsAdded: 0, sampleIds: [] };
-const SNAPSHOT_DELTA: PersistDelta = { itemsAdded: 1, sampleIds: [] };
+const ZERO_DELTA: PersistDelta = {
+  itemsAdded: 0,
+  sampleIds: [],
+  itemsUpdated: 0,
+  updatedSampleIds: [],
+};
+const SNAPSHOT_DELTA: PersistDelta = {
+  itemsAdded: 1,
+  sampleIds: [],
+  itemsUpdated: 0,
+  updatedSampleIds: [],
+};
 
 /** Minimal account shape the persist path needs (subset of the Prisma row). */
 export interface DualWriteAccount {
@@ -149,6 +182,8 @@ export class CanonicalWriteService {
     return {
       itemsAdded: res.upsertedCount ?? upsertedIndices.length,
       sampleIds,
+      itemsUpdated: 0,
+      updatedSampleIds: [],
     };
   }
 
