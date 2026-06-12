@@ -15,6 +15,9 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/database/prisma.service';
 import { OutboundWebhooksService } from './outbound-webhooks.service';
 import { StandardWebhookEmitter } from './standard-webhook-emitter.service';
+import { RefreshCadenceService } from './refresh-cadence.service';
+
+const DAY_MS = 86_400_000;
 
 type Cadence = 'immediate' | 'hourly' | 'daily';
 
@@ -50,25 +53,38 @@ export class DataEventDispatcher {
     private readonly prisma: PrismaService,
     private readonly webhooks: OutboundWebhooksService,
     private readonly standardWebhooks: StandardWebhookEmitter,
+    private readonly refresh: RefreshCadenceService,
   ) {}
 
   /**
    * Called from sync.worker after a successful persistToMongo.
    *
-   * Short-circuits when there's nothing to report (itemsAdded === 0),
-   * the account is missing, or the account is test-mode. Otherwise:
+   * Two mutually exclusive paths:
    *
-   *   cadence === 'immediate' → emit the webhook event now.
-   *   cadence === 'hourly|daily' → upsert one row in pending_webhook_events
-   *     per subscribed endpoint, accumulating items_added and sampleIds.
+   *   ADD (itemsAdded > 0) — new items landed. Behaves as before:
+   *     cadence === 'immediate' → emit the webhook event now.
+   *     cadence === 'hourly|daily' → upsert one row in pending_webhook_events
+   *       per subscribed endpoint, accumulating items_added and sampleIds.
+   *
+   *   REFRESH (itemsAdded === 0 && itemsUpdated > 0) — no new items, but
+   *     existing items had their metrics updated. Emits a throttled
+   *     `data.<product>.updated` (reason: 'refresh') at most once per the
+   *     per-(platform, product) refresh interval, guarded by a Redis lock.
+   *
+   * Short-circuits when nothing changed, the account is missing, or the
+   * account is test-mode.
    */
   async fire(args: {
     accountId: bigint;
     product: string;
     itemsAdded: number;
     sampleIds: string[];
+    itemsUpdated?: number;
+    updatedSampleIds?: string[];
   }): Promise<void> {
-    if (args.itemsAdded === 0) return;
+    const isAdd = args.itemsAdded > 0;
+    const isRefresh = !isAdd && (args.itemsUpdated ?? 0) > 0;
+    if (!isAdd && !isRefresh) return;
 
     const account = await this.prisma.account.findUnique({
       where: { id: args.accountId },
@@ -86,6 +102,47 @@ export class DataEventDispatcher {
       return;
     }
     if (account.isTest) return;
+
+    if (isRefresh) {
+      // Refresh path: existing items had their metrics updated but nothing
+      // new landed. Throttle to at most one emit per (account, product)
+      // refresh interval so a churny metric stream doesn't spam clients.
+      const cfg = await this.refresh.getConfig(account.platform, args.product);
+      const ok = await this.refresh.tryAcquire(
+        args.accountId,
+        args.product,
+        cfg.intervalSeconds,
+      );
+      if (!ok) return;
+      const ids = (args.updatedSampleIds ?? []).slice(0, SAMPLE_ID_CAP);
+      // InsightIQ-compatible thin webhook (independent of native cadence).
+      await this.standardWebhooks.fireData({
+        accountId: args.accountId,
+        product: args.product,
+        sampleIds: ids,
+      });
+      const now = new Date();
+      await this.webhooks.emit(
+        account.workspaceId,
+        `data.${args.product}.updated`,
+        {
+          account_id: account.id.toString(),
+          platform: account.platform,
+          workspace_id: account.workspaceId,
+          product: args.product,
+          items_added: 0,
+          sample_ids: ids,
+          reason: 'refresh',
+          window_start: new Date(
+            now.getTime() - cfg.windowDays * DAY_MS,
+          ).toISOString(),
+          window_end: now.toISOString(),
+          cadence: 'immediate',
+          occurred_at: now.toISOString(),
+        },
+      );
+      return;
+    }
 
     // InsightIQ-compatible thin webhooks fire immediately and independently of
     // the native cadence/digest logic below (InsightIQ has no digest concept).

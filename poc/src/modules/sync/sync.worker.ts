@@ -391,6 +391,8 @@ export class SyncWorker
         product,
         itemsAdded: delta.itemsAdded,
         sampleIds: delta.sampleIds,
+        itemsUpdated: delta.itemsUpdated,
+        updatedSampleIds: delta.updatedSampleIds,
       });
       await this.scheduleNextRun(syncJobId, accountIdBig, product, now, true);
 
