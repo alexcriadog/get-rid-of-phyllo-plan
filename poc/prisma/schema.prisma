@@ -98,6 +98,8 @@ model Cadence {
   platform               String
   product                String
   defaultIntervalSeconds Int     @map("default_interval_seconds")
+  refreshIntervalSeconds Int?     @map("refresh_interval_seconds")
+  refreshWindowDays      Int?     @map("refresh_window_days")
   updatedAt              DateTime @updatedAt @map("updated_at")
   @@id([platform, product])
   @@map("cadences")
