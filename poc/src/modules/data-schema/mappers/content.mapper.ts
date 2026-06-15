@@ -331,7 +331,13 @@ export function toApiContent(
     format,
     type,
     url: content.permalink,
-    media_url: mediaUrls[0] ?? null,
+    // Phyllo parity: when the platform exposes no downloadable media URL (TikTok
+    // BC v1.3, YouTube, Twitch) it still surfaces the official embeddable player
+    // URL here. Consumers derive a media count from `media_url` (media_url ? 1 : 0)
+    // and gate rendering on it, so leaving this null made those posts look
+    // media-less. The binary is still fetched out-of-band (TikAPI / yt-dlp) via
+    // `external_id`, independent of this field.
+    media_url: mediaUrls[0] ?? content.embedUrl ?? null,
     duration: durationToSeconds(content.duration),
     description: content.caption,
     visibility: visibilityOf(content.privacyStatus, undefined),
