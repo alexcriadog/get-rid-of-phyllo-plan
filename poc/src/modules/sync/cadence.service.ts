@@ -15,7 +15,9 @@ const TIER_MULTIPLIERS: Readonly<Record<string, number>> = {
 
 const MIN_INTERVAL_SECONDS = 60;
 const MAX_INTERVAL_SECONDS = 7 * 24 * 60 * 60; // 7 days
-const DEFAULT_FALLBACK_SECONDS = 24 * 60 * 60; // 24h — used if no cadences row exists
+// 24h — used if no cadences row exists. Exported so the admin cadence editor
+// can show the same effective default for an unconfigured (platform, product).
+export const DEFAULT_FALLBACK_SECONDS = 24 * 60 * 60;
 
 /**
  * ±10% jitter applied to every scheduled interval so that accounts whose

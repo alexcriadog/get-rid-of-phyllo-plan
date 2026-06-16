@@ -40,9 +40,28 @@ const CadenceOverrideBodySchema = z
 
 const CadencePatchSchema = z
   .object({
-    interval_seconds: z.number().int().min(60).max(30 * 86_400),
+    // Sync poll cadence.
+    interval_seconds: z.number().int().min(60).max(30 * 86_400).optional(),
+    // Engagement-refresh emit throttle + look-back window.
+    refresh_interval_seconds: z
+      .number()
+      .int()
+      .min(60)
+      .max(30 * 86_400)
+      .optional(),
+    refresh_window_days: z.number().int().min(1).max(365).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (v) =>
+      v.interval_seconds !== undefined ||
+      v.refresh_interval_seconds !== undefined ||
+      v.refresh_window_days !== undefined,
+    {
+      message:
+        'Provide at least one of interval_seconds, refresh_interval_seconds, refresh_window_days',
+    },
+  );
 
 const ThrottleReleaseSchema = z
   .object({
@@ -408,7 +427,11 @@ export class AdminController {
         issues: parsed.error.issues,
       });
     }
-    return this.admin.updateCadence(platform, product, parsed.data.interval_seconds);
+    return this.admin.updateCadence(platform, product, {
+      intervalSeconds: parsed.data.interval_seconds,
+      refreshIntervalSeconds: parsed.data.refresh_interval_seconds,
+      refreshWindowDays: parsed.data.refresh_window_days,
+    });
   }
 
   // ─── Throttle locks ────────────────────────────────────────────────────

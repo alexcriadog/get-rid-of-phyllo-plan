@@ -20,7 +20,11 @@ import {
   SyncJobPayload,
 } from '@shared/redis/bullmq.service';
 import { MetricsService } from '@shared/metrics/metrics.service';
-import { CadenceService } from '@modules/sync/cadence.service';
+import {
+  CadenceService,
+  DEFAULT_FALLBACK_SECONDS,
+} from '@modules/sync/cadence.service';
+import { buildCadenceMatrix } from './cadence-matrix';
 import { ThrottleLockService } from '@modules/sync/throttle-lock.service';
 import {
   ADAPTER_REGISTRY,
@@ -1198,47 +1202,73 @@ export class AdminService {
   // ──────────────────────────────────────────────────────────────────────────
 
   async listCadences(): Promise<Record<string, unknown>> {
-    const rows = await this.prisma.cadence.findMany({
-      orderBy: [{ platform: 'asc' }, { product: 'asc' }],
-    });
-    return {
-      items: rows.map((r) => ({
-        platform: r.platform,
-        product: r.product,
-        default_interval_seconds: r.defaultIntervalSeconds,
-        updated_at: r.updatedAt.toISOString(),
-      })),
-    };
+    // Overlay persisted rows onto the full adapter-derived (platform × product)
+    // matrix so unconfigured combos (e.g. threads) still surface — editable at
+    // their effective fallback cadence instead of being invisible.
+    const rows = await this.prisma.cadence.findMany();
+    return { items: buildCadenceMatrix(this.adapters, rows) };
   }
 
+  /**
+   * Upsert the cadence for a (platform, product). Any subset of the three
+   * knobs may be supplied: `intervalSeconds` (sync poll cadence),
+   * `refreshIntervalSeconds` (engagement-refresh emit throttle) and
+   * `refreshWindowDays` (engagement-refresh look-back). Only the sync interval
+   * affects already-scheduled jobs, so the background nextRunAt recompute runs
+   * only when it changes — refresh fields are read live (with a 60s cache).
+   */
   async updateCadence(
     platform: string,
     product: string,
-    intervalSeconds: number,
+    fields: {
+      intervalSeconds?: number;
+      refreshIntervalSeconds?: number;
+      refreshWindowDays?: number;
+    },
   ): Promise<Record<string, unknown>> {
+    const { intervalSeconds, refreshIntervalSeconds, refreshWindowDays } =
+      fields;
+
     await this.prisma.cadence.upsert({
       where: { platform_product: { platform, product } },
       create: {
         platform,
         product,
-        defaultIntervalSeconds: intervalSeconds,
+        // A new row needs a NOT-NULL sync default. Use the provided interval,
+        // else the canonical 24h fallback so a refresh-only edit still creates
+        // a valid row at the cadence the combo was already running.
+        defaultIntervalSeconds: intervalSeconds ?? DEFAULT_FALLBACK_SECONDS,
+        refreshIntervalSeconds: refreshIntervalSeconds ?? null,
+        refreshWindowDays: refreshWindowDays ?? null,
       },
-      update: { defaultIntervalSeconds: intervalSeconds },
+      update: {
+        ...(intervalSeconds !== undefined
+          ? { defaultIntervalSeconds: intervalSeconds }
+          : {}),
+        ...(refreshIntervalSeconds !== undefined
+          ? { refreshIntervalSeconds }
+          : {}),
+        ...(refreshWindowDays !== undefined ? { refreshWindowDays } : {}),
+      },
     });
 
-    const affected = await this.prisma.syncJob.count({
-      where: { product, account: { platform } },
-    });
-    const jobId = `cadence-recompute-${platform}-${product}-${Date.now()}`;
-
-    // Recompute in background — return immediately.
-    void this.recomputeCadenceBatch(platform, product).catch((err: unknown) => {
-      this.logger.warn(
-        `cadence recompute failed (${platform}/${product}): ${err instanceof Error ? err.message : String(err)}`,
+    const recomputed = intervalSeconds !== undefined;
+    let affected = 0;
+    if (recomputed) {
+      affected = await this.prisma.syncJob.count({
+        where: { product, account: { platform } },
+      });
+      // Recompute in background — return immediately.
+      void this.recomputeCadenceBatch(platform, product).catch(
+        (err: unknown) => {
+          this.logger.warn(
+            `cadence recompute failed (${platform}/${product}): ${err instanceof Error ? err.message : String(err)}`,
+          );
+        },
       );
-    });
+    }
 
-    return { affected, job_id: jobId };
+    return { affected, recomputed };
   }
 
   async cadenceProjection(): Promise<Record<string, unknown>> {
