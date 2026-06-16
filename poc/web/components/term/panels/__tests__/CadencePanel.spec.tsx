@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 
@@ -63,18 +63,40 @@ vi.mock('@/lib/term/platforms', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Canned data — all synthetic, no production values.
+// Canned data — all synthetic, no production values. `cad` fills the full
+// matrix shape the backend now returns (sync + refresh + configured flags).
 // ---------------------------------------------------------------------------
+type CadenceInput = {
+  platform: string;
+  product: string;
+  default_interval_seconds: number;
+  sync_configured?: boolean;
+  refresh_interval_seconds?: number;
+  refresh_window_days?: number;
+  refresh_configured?: boolean;
+  updated_at?: string | null;
+};
 
-// Two rows: instagram identity @ 1h, facebook audience @ 2h
+function cad(o: CadenceInput) {
+  return {
+    sync_configured: true,
+    refresh_interval_seconds: 21600,
+    refresh_window_days: 90,
+    refresh_configured: false,
+    updated_at: null,
+    ...o,
+  };
+}
+
+// instagram identity @ 1h, facebook audience @ 2h
 const CADENCES_DEFAULT = [
-  { platform: 'instagram', product: 'identity', default_interval_seconds: 3600 },
-  { platform: 'facebook', product: 'audience', default_interval_seconds: 7200 },
+  cad({ platform: 'instagram', product: 'identity', default_interval_seconds: 3600 }),
+  cad({ platform: 'facebook', product: 'audience', default_interval_seconds: 7200 }),
 ];
 
-// Single row: tiktok engagement_new @ 30m
+// Single row: tiktok engagement_new, sync 30m, refresh 6h, window 90d.
 const CADENCES_SINGLE = [
-  { platform: 'tiktok', product: 'engagement_new', default_interval_seconds: 1800 },
+  cad({ platform: 'tiktok', product: 'engagement_new', default_interval_seconds: 1800 }),
 ];
 
 // ---------------------------------------------------------------------------
@@ -83,6 +105,8 @@ import CadencePanel from '../CadencePanel';
 function live<T>(data: T, overrides: Partial<LiveState<T>> = {}): LiveState<T> {
   return { data, error: null, loading: false, refresh: mockRefresh, ...overrides };
 }
+
+const applyName = /apply cadence for tiktok engagement_new/i;
 
 // ---------------------------------------------------------------------------
 
@@ -104,7 +128,7 @@ describe('CadencePanel', () => {
 
   // ── Data rendering ───────────────────────────────────────────────────────
 
-  it('renders cadence rows from data', () => {
+  it('renders cadence rows grouped by platform', () => {
     mockLiveState = live(CADENCES_DEFAULT);
     render(<CadencePanel />);
     // Platform abbreviations from mock (first 2 chars upper-cased)
@@ -118,17 +142,42 @@ describe('CadencePanel', () => {
   it('renders human-readable interval labels', () => {
     mockLiveState = live(CADENCES_DEFAULT);
     render(<CadencePanel />);
-    // instagram: 3600s → 1h (label span + possibly a preset chip)
+    // instagram sync 3600s → 1h
     expect(screen.getAllByText('1h').length).toBeGreaterThanOrEqual(1);
-    // facebook: 7200s → 2h
+    // facebook sync 7200s → 2h
     expect(screen.getAllByText('2h').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders preset chips for each cadence row', () => {
+  it('renders sync and refresh preset chips for each row', () => {
     mockLiveState = live(CADENCES_SINGLE);
     render(<CadencePanel />);
-    expect(screen.getByRole('button', { name: /set interval to 30m/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /set interval to 24h/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /set sync interval to 30m/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /set refresh interval to 15m/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('marks an unconfigured row "default" and a configured row "custom"', () => {
+    mockLiveState = live([
+      cad({
+        platform: 'threads',
+        product: 'engagement_new',
+        default_interval_seconds: 86400,
+        sync_configured: false,
+        refresh_configured: false,
+      }),
+      cad({
+        platform: 'tiktok',
+        product: 'identity',
+        default_interval_seconds: 1800,
+        sync_configured: true,
+      }),
+    ]);
+    render(<CadencePanel />);
+    expect(screen.getByText('default')).toBeInTheDocument();
+    expect(screen.getByText('custom')).toBeInTheDocument();
   });
 
   it('renders empty state when cadences array is empty', () => {
@@ -164,44 +213,65 @@ describe('CadencePanel', () => {
 
   // ── Preset chip interaction ───────────────────────────────────────────────
 
-  it('marks the matching preset chip as active (primary variant) when its value matches the interval', () => {
-    // tiktok default = 1800 = 30m → the "30m" preset chip should have primary variant (bg-term-mint)
+  it('marks the matching sync preset chip as active when its value matches', () => {
+    // tiktok sync default = 1800 = 30m → the sync "30m" chip is primary.
     mockLiveState = live(CADENCES_SINGLE);
     render(<CadencePanel />);
-    // With a single row there is exactly one "set interval to 30m" button
-    const thirtyMinBtn = screen.getByRole('button', { name: /set interval to 30m/i });
-    expect(thirtyMinBtn.className).toContain('bg-term-mint');
-  });
-
-  it('updates the displayed interval label when a preset chip is clicked', async () => {
-    mockLiveState = live(CADENCES_SINGLE); // tiktok: 1800s = 30m
-    render(<CadencePanel />);
-
-    // Click the 6h preset (21600s)
-    await userEvent.click(screen.getByRole('button', { name: /set interval to 6h/i }));
-
-    // The human-interval label for this row should now show 6h
-    expect(screen.getAllByText('6h').length).toBeGreaterThanOrEqual(1);
-  });
-
-  // ── Edit path: APPLY fires API ────────────────────────────────────────────
-
-  it('fires adminPatch with correct endpoint and body when APPLY is clicked after a preset change', async () => {
-    mockLiveState = live(CADENCES_SINGLE); // tiktok:engagement_new default=1800
-    render(<CadencePanel />);
-
-    // Change to 6h (21600s) using preset chip
-    await userEvent.click(screen.getByRole('button', { name: /set interval to 6h/i }));
-
-    // APPLY should now be enabled — click it
-    const applyBtn = screen.getByRole('button', {
-      name: /apply cadence for tiktok engagement_new/i,
+    const thirtyMin = screen.getByRole('button', {
+      name: /set sync interval to 30m/i,
     });
-    await userEvent.click(applyBtn);
+    expect(thirtyMin.className).toContain('bg-term-mint');
+  });
+
+  // ── Edit path: sync interval ───────────────────────────────────────────────
+
+  it('PATCHes only interval_seconds when the sync interval changes', async () => {
+    mockLiveState = live(CADENCES_SINGLE);
+    render(<CadencePanel />);
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /set sync interval to 6h/i }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: applyName }));
 
     expect(mockAdminPatch).toHaveBeenCalledWith(
       '/admin/cadences/tiktok/engagement_new',
       { interval_seconds: 21600 },
+    );
+  });
+
+  // ── Edit path: refresh interval ────────────────────────────────────────────
+
+  it('PATCHes only refresh_interval_seconds when the refresh interval changes', async () => {
+    mockLiveState = live(CADENCES_SINGLE);
+    render(<CadencePanel />);
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /set refresh interval to 15m/i }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: applyName }));
+
+    expect(mockAdminPatch).toHaveBeenCalledWith(
+      '/admin/cadences/tiktok/engagement_new',
+      { refresh_interval_seconds: 900 },
+    );
+  });
+
+  // ── Edit path: refresh window ──────────────────────────────────────────────
+
+  it('PATCHes only refresh_window_days when the window changes', async () => {
+    mockLiveState = live(CADENCES_SINGLE);
+    render(<CadencePanel />);
+
+    const windowInput = screen.getByLabelText(
+      /tiktok engagement_new refresh window in days/i,
+    );
+    fireEvent.change(windowInput, { target: { value: '30' } });
+    await userEvent.click(screen.getByRole('button', { name: applyName }));
+
+    expect(mockAdminPatch).toHaveBeenCalledWith(
+      '/admin/cadences/tiktok/engagement_new',
+      { refresh_window_days: 30 },
     );
   });
 
@@ -210,10 +280,10 @@ describe('CadencePanel', () => {
     mockLiveState = live(CADENCES_SINGLE);
     render(<CadencePanel />);
 
-    await userEvent.click(screen.getByRole('button', { name: /set interval to 6h/i }));
     await userEvent.click(
-      screen.getByRole('button', { name: /apply cadence for tiktok engagement_new/i }),
+      screen.getByRole('button', { name: /set sync interval to 6h/i }),
     );
+    await userEvent.click(screen.getByRole('button', { name: applyName }));
 
     await waitFor(() => {
       expect(mockRefresh).toHaveBeenCalledOnce();
@@ -225,24 +295,20 @@ describe('CadencePanel', () => {
     mockLiveState = live(CADENCES_SINGLE);
     render(<CadencePanel />);
 
-    await userEvent.click(screen.getByRole('button', { name: /set interval to 6h/i }));
     await userEvent.click(
-      screen.getByRole('button', { name: /apply cadence for tiktok engagement_new/i }),
+      screen.getByRole('button', { name: /set sync interval to 6h/i }),
     );
+    await userEvent.click(screen.getByRole('button', { name: applyName }));
 
     await waitFor(() => {
       expect(screen.getByText(/422 Validation Failed/)).toBeInTheDocument();
     });
   });
 
-  it('APPLY button is disabled when value has not changed from the server value', () => {
-    // CADENCES_SINGLE: tiktok default = 1800 = 30m. No preset click → value unchanged.
+  it('APPLY button is disabled when nothing has changed from server values', () => {
     mockLiveState = live(CADENCES_SINGLE);
     render(<CadencePanel />);
-    const applyBtn = screen.getByRole('button', {
-      name: /apply cadence for tiktok engagement_new/i,
-    });
-    expect(applyBtn).toBeDisabled();
+    expect(screen.getByRole('button', { name: applyName })).toBeDisabled();
   });
 
   // ── Footer link ──────────────────────────────────────────────────────────

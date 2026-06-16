@@ -1,29 +1,27 @@
 /**
- * CadencePanel — Phase 4 workbench panel (id: "cadence").
+ * CadencePanel — workbench panel (id: "cadence").
  *
- * Ports `pages/admin/cadence.tsx` into the Mint Terminal idiom.
+ * Per-platform cadence editor. Lists EVERY supported (platform × product)
+ * combination — including ones with no DB row yet (e.g. threads), which show
+ * their effective fallback cadence so they're editable instead of invisible.
  *
- * Data sources:
- *   GET /admin/cadences              — default interval per (platform × product)
- *   PATCH /admin/cadences/:p/:prod   — update default interval
+ * Two knobs per row:
+ *   · sync interval   (default_interval_seconds) — how often we poll the API.
+ *   · refresh cadence (refresh_interval_seconds + refresh_window_days) — the
+ *     engagement-refresh emit throttle + look-back window.
  *
- * The legacy page has three tabs (Defaults, Upcoming Schedule, Active Overrides).
- * The schedule tab renders a Heatmap that is not a Phase 1 term primitive and
- * is too wide/complex for a panel tile; it is omitted here.
- * The overrides tab requires /admin/accounts (heavy payload). Both heavy tabs
- * are left out and a footer link routes to the full legacy page.
- *
- * Edit affordance: the legacy page edits via a simple PATCH endpoint, so
- * inline editing is fully supported here with TermInput + APPLY ActionChip per
- * row. Errors surface inline. Presets (30m / 1h / 2h / 6h / 24h) are rendered
- * as small ghost chips.
- *
- * Global scope — cadences apply across all workspaces; no workspace filter.
+ * Data:
+ *   GET   /admin/cadences                 — full matrix + effective values
+ *   PATCH /admin/cadences/:plat/:product  — { interval_seconds?,
+ *                                             refresh_interval_seconds?,
+ *                                             refresh_window_days? }
+ * Only changed fields are sent. Global scope — cadences apply across all
+ * workspaces, so no workspace filter.
  */
 
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useLive, POLL } from '@/lib/useLive';
 import { adminPatch } from '@/lib/api';
@@ -38,17 +36,35 @@ type Cadence = {
   platform: string;
   product: string;
   default_interval_seconds: number;
+  sync_configured: boolean;
+  refresh_interval_seconds: number;
+  refresh_window_days: number;
+  refresh_configured: boolean;
+  updated_at: string | null;
 };
+
+type CadencePatch = {
+  interval_seconds?: number;
+  refresh_interval_seconds?: number;
+  refresh_window_days?: number;
+};
+
+type MutState = { busy: boolean; error: string | null };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const PRESETS: Array<{ label: string; s: number }> = [
+const INTERVAL_PRESETS: Array<{ label: string; s: number }> = [
+  { label: '15m', s: 900 },
   { label: '30m', s: 1800 },
   { label: '1h', s: 3600 },
-  { label: '2h', s: 7200 },
   { label: '6h', s: 21600 },
   { label: '24h', s: 86400 },
 ];
+
+const MIN_INTERVAL = 60;
+const MAX_INTERVAL = 30 * 86400;
+const MIN_WINDOW_DAYS = 1;
+const MAX_WINDOW_DAYS = 365;
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -58,21 +74,17 @@ export default function CadencePanel() {
   const apiDown = !!cadencesLive.error && !cadencesLive.data;
   const loading = cadencesLive.loading && !cadencesLive.data;
 
-  const [mutState, setMutState] = useState<
-    Record<string, { busy: boolean; error: string | null }>
-  >({});
+  const [mutState, setMutState] = useState<Record<string, MutState>>({});
 
-  const updateInterval = async (
+  const saveCadence = async (
     platform: string,
     product: string,
-    intervalSeconds: number,
+    patch: CadencePatch,
   ) => {
     const k = `${platform}:${product}`;
     setMutState((s) => ({ ...s, [k]: { busy: true, error: null } }));
     try {
-      await adminPatch(`/admin/cadences/${platform}/${product}`, {
-        interval_seconds: intervalSeconds,
-      });
+      await adminPatch(`/admin/cadences/${platform}/${product}`, patch);
       setMutState((s) => ({ ...s, [k]: { busy: false, error: null } }));
       cadencesLive.refresh();
     } catch (e) {
@@ -83,23 +95,35 @@ export default function CadencePanel() {
     }
   };
 
+  // Backend already sorts platform asc → product asc; group consecutively.
+  const groups = useMemo(() => groupByPlatform(cadences), [cadences]);
+
   return (
     <div className="flex h-full flex-col gap-2 p-3 font-mono text-xs">
-      {/* Header */}
-      <HeaderRow apiDown={apiDown} loading={loading} />
+      <HeaderRow apiDown={apiDown} loading={loading} total={cadences.length} />
 
-      {/* Table */}
       <div className="flex-1 overflow-y-auto">
         {apiDown ? (
           <div className="py-4 text-center text-term-danger">
             <span className="animate-term-blink">▮</span> endpoint unreachable
           </div>
+        ) : groups.length === 0 ? (
+          <div className="py-6 text-center text-term-faint">
+            &gt; no cadences registered{' '}
+            <span className="animate-term-blink">▮</span>
+          </div>
         ) : (
-          <CadenceTable
-            cadences={cadences}
-            mutState={mutState}
-            onSave={updateInterval}
-          />
+          <div className="space-y-3">
+            {groups.map((g) => (
+              <PlatformGroup
+                key={g.platform}
+                platform={g.platform}
+                rows={g.rows}
+                mutState={mutState}
+                onSave={saveCadence}
+              />
+            ))}
+          </div>
         )}
       </div>
 
@@ -119,7 +143,15 @@ export default function CadencePanel() {
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
-function HeaderRow({ apiDown, loading }: { apiDown: boolean; loading: boolean }) {
+function HeaderRow({
+  apiDown,
+  loading,
+  total,
+}: {
+  apiDown: boolean;
+  loading: boolean;
+  total: number;
+}) {
   if (apiDown) {
     return (
       <div className="flex items-center gap-2 border-b border-term-line pb-2 text-term-danger">
@@ -138,116 +170,146 @@ function HeaderRow({ apiDown, loading }: { apiDown: boolean; loading: boolean })
   }
   return (
     <div className="flex items-center gap-2 border-b border-term-line pb-2">
-      <span aria-hidden="true" className="text-term-mint">●</span>
+      <span aria-hidden="true" className="text-term-mint">
+        ●
+      </span>
       <span className="uppercase tracking-[0.12em] text-term-mint">CADENCE</span>
-      <span className="text-term-faint">· default intervals · global</span>
+      <span className="text-term-faint">· sync + refresh · {total} · global</span>
     </div>
   );
 }
 
-// ── Table ─────────────────────────────────────────────────────────────────────
+// ── Platform group ──────────────────────────────────────────────────────────────
 
-/**
- * Each row tracks its own local interval value so the user can type a new
- * value without committing immediately. The APPLY chip becomes active only
- * when the value is dirty (different from server state).
- */
-function CadenceTable({
-  cadences,
+function PlatformGroup({
+  platform,
+  rows,
   mutState,
   onSave,
 }: {
-  cadences: Cadence[];
-  mutState: Record<string, { busy: boolean; error: string | null }>;
-  onSave: (platform: string, product: string, s: number) => Promise<void>;
+  platform: string;
+  rows: Cadence[];
+  mutState: Record<string, MutState>;
+  onSave: (p: string, prod: string, patch: CadencePatch) => Promise<void>;
 }) {
-  if (cadences.length === 0) {
-    return (
-      <div className="py-6 text-center text-term-faint">
-        &gt; no cadences registered <span className="animate-term-blink">▮</span>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-0">
-      {cadences.map((c) => (
-        <CadenceRow
-          key={`${c.platform}:${c.product}`}
-          cadence={c}
-          mut={mutState[`${c.platform}:${c.product}`] ?? { busy: false, error: null }}
-          onSave={onSave}
-        />
-      ))}
-    </div>
+    <section aria-label={`${platform} cadences`}>
+      <div className="mb-1 flex items-center gap-2 border-b border-term-line/40 pb-1">
+        <PlatformTag platform={platform} />
+        <span className="text-[10px] text-term-faint">{rows.length} products</span>
+      </div>
+      <div>
+        {rows.map((c) => (
+          <CadenceRow
+            key={`${c.platform}:${c.product}`}
+            cadence={c}
+            mut={
+              mutState[`${c.platform}:${c.product}`] ?? {
+                busy: false,
+                error: null,
+              }
+            }
+            onSave={onSave}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
+// ── Row ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Each row tracks its own local sync interval, refresh interval and refresh
+ * window so values can be typed without committing. APPLY sends only the
+ * fields that differ from server state.
+ */
 function CadenceRow({
   cadence,
   mut,
   onSave,
 }: {
   cadence: Cadence;
-  mut: { busy: boolean; error: string | null };
-  onSave: (platform: string, product: string, s: number) => Promise<void>;
+  mut: MutState;
+  onSave: (p: string, prod: string, patch: CadencePatch) => Promise<void>;
 }) {
-  const [value, setValue] = useState(cadence.default_interval_seconds);
-  const dirty = value !== cadence.default_interval_seconds;
+  const [sync, setSync] = useState(cadence.default_interval_seconds);
+  const [refresh, setRefresh] = useState(cadence.refresh_interval_seconds);
+  const [windowDays, setWindowDays] = useState(cadence.refresh_window_days);
+
+  const patch = useMemo<CadencePatch>(() => {
+    const p: CadencePatch = {};
+    if (sync !== cadence.default_interval_seconds) p.interval_seconds = sync;
+    if (refresh !== cadence.refresh_interval_seconds)
+      p.refresh_interval_seconds = refresh;
+    if (windowDays !== cadence.refresh_window_days)
+      p.refresh_window_days = windowDays;
+    return p;
+  }, [sync, refresh, windowDays, cadence]);
+
+  const dirty = Object.keys(patch).length > 0;
+  const configured = cadence.sync_configured || cadence.refresh_configured;
 
   const handleApply = () => {
     if (dirty && !mut.busy) {
-      void onSave(cadence.platform, cadence.product, value);
+      void onSave(cadence.platform, cadence.product, patch);
     }
   };
 
   return (
-    <div className="border-b border-term-line/60 py-2 last:border-0">
-      {/* Row header: platform + product + human label */}
+    <div className="border-b border-term-line/40 py-2 last:border-0">
+      {/* Product + configured/default tag */}
       <div className="mb-1.5 flex items-center gap-2">
-        <PlatformTag platform={cadence.platform} />
         <span className="text-term-text">{cadence.product}</span>
-        <span className="ml-auto text-[10px] text-term-faint">
-          {humanInterval(value)}
+        <span
+          className={cn(
+            'rounded px-1 text-[9px] uppercase tracking-wide',
+            configured ? 'text-term-mint' : 'text-term-faint',
+          )}
+        >
+          {configured ? 'custom' : 'default'}
         </span>
-      </div>
-
-      {/* Preset chips */}
-      <div className="mb-1.5 flex flex-wrap gap-1" role="group" aria-label={`Presets for ${cadence.platform} ${cadence.product}`}>
-        {PRESETS.map((p) => (
-          <ActionChip
-            key={p.label}
-            size="sm"
-            variant={value === p.s ? 'primary' : 'ghost'}
-            onClick={() => setValue(p.s)}
-            aria-label={`Set interval to ${p.label}`}
-          >
-            {p.label}
-          </ActionChip>
-        ))}
-      </div>
-
-      {/* Custom input + apply */}
-      <div className="flex items-center gap-2">
-        <TermInput
-          type="number"
-          value={value}
-          min={60}
-          max={30 * 86400}
-          onChange={(e) => setValue(Number(e.target.value))}
-          aria-label={`${cadence.platform} ${cadence.product} interval in seconds`}
-          className="flex-1"
-        />
         <ActionChip
           size="sm"
           variant={dirty ? 'action' : 'ghost'}
           disabled={!dirty || mut.busy}
           onClick={handleApply}
           aria-label={`Apply cadence for ${cadence.platform} ${cadence.product}`}
-          className={cn(!dirty && 'opacity-50')}
+          className={cn('ml-auto', !dirty && 'opacity-50')}
         >
           {mut.busy ? '…' : 'APPLY'}
         </ActionChip>
+      </div>
+
+      {/* Sync interval */}
+      <IntervalField
+        label="sync"
+        idPrefix={`${cadence.platform}-${cadence.product}-sync`}
+        value={sync}
+        onChange={setSync}
+      />
+
+      {/* Refresh interval + window */}
+      <div className="mt-1.5">
+        <IntervalField
+          label="refresh"
+          idPrefix={`${cadence.platform}-${cadence.product}-refresh`}
+          value={refresh}
+          onChange={setRefresh}
+        />
+        <div className="mt-1 flex items-center gap-2">
+          <span className="w-12 shrink-0 text-[10px] text-term-faint">window</span>
+          <TermInput
+            type="number"
+            value={windowDays}
+            min={MIN_WINDOW_DAYS}
+            max={MAX_WINDOW_DAYS}
+            onChange={(e) => setWindowDays(Number(e.target.value))}
+            aria-label={`${cadence.platform} ${cadence.product} refresh window in days`}
+            className="w-24"
+          />
+          <span className="text-[10px] text-term-faint">days</span>
+        </div>
       </div>
 
       {/* Inline error */}
@@ -260,9 +322,71 @@ function CadenceRow({
   );
 }
 
+/** A labelled interval editor: presets + numeric seconds input + human label. */
+function IntervalField({
+  label,
+  idPrefix,
+  value,
+  onChange,
+}: {
+  label: string;
+  idPrefix: string;
+  value: number;
+  onChange: (s: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <span className="w-12 shrink-0 text-[10px] text-term-faint">{label}</span>
+      <div
+        className="flex flex-wrap gap-1"
+        role="group"
+        aria-label={`${label} presets`}
+      >
+        {INTERVAL_PRESETS.map((p) => (
+          <ActionChip
+            key={p.label}
+            size="sm"
+            variant={value === p.s ? 'primary' : 'ghost'}
+            onClick={() => onChange(p.s)}
+            aria-label={`Set ${label} interval to ${p.label}`}
+          >
+            {p.label}
+          </ActionChip>
+        ))}
+      </div>
+      <TermInput
+        type="number"
+        value={value}
+        min={MIN_INTERVAL}
+        max={MAX_INTERVAL}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label={`${idPrefix} interval in seconds`}
+        className="w-28"
+      />
+      <span className="text-[10px] text-term-faint">{humanInterval(value)}</span>
+    </div>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function groupByPlatform(
+  cadences: Cadence[],
+): Array<{ platform: string; rows: Cadence[] }> {
+  const groups: Array<{ platform: string; rows: Cadence[] }> = [];
+  for (const c of cadences) {
+    const last = groups[groups.length - 1];
+    if (last && last.platform === c.platform) {
+      last.rows.push(c);
+    } else {
+      groups.push({ platform: c.platform, rows: [c] });
+    }
+  }
+  return groups;
+}
+
 function humanInterval(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
   if (seconds < 60) return `${seconds}s`;
   const m = seconds / 60;
   if (m < 60) return `${Math.round(m)}m`;
