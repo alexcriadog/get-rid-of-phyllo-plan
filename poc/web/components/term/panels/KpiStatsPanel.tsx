@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { useLive, POLL } from '@/lib/useLive';
-import { useWorkspaceFilter } from '@/lib/workspace-context';
+import { POLL } from '@/lib/useLive';
+import { useScopedLive } from '@/lib/workspace-context';
 import StatBlock from '@/components/term/StatBlock';
 import { Sparkline } from '@/components/term/charts';
 
@@ -110,11 +110,9 @@ function successTone(rateStr: string): 'up' | 'down' | 'flat' {
 // ── Panel ─────────────────────────────────────────────────────────────────
 
 export default function KpiStatsPanel() {
-  const { withQuery } = useWorkspaceFilter();
-
-  const overviewLive = useLive<Overview>(withQuery('/admin/overview'), POLL.live);
-  const callsLive = useLive<ApiCall[]>(
-    withQuery('/admin/api-calls?limit=500'),
+  const overviewLive = useScopedLive<Overview>('/admin/overview', POLL.live);
+  const callsLive = useScopedLive<ApiCall[]>(
+    '/admin/api-calls?limit=500',
     POLL.live,
   );
 

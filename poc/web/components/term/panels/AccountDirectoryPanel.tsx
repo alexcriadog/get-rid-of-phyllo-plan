@@ -13,8 +13,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useLive, POLL } from '@/lib/useLive';
-import { useWorkspaceFilter } from '@/lib/workspace-context';
+import { POLL } from '@/lib/useLive';
+import { useScopedLive, useWorkspaceFilter } from '@/lib/workspace-context';
 import { fmtRelative } from '@/lib/format';
 import { useTermSelection, selectAccount } from '@/lib/term/selection';
 import TermTable, { type TermColumn } from '@/components/term/TermTable';
@@ -131,11 +131,8 @@ function buildColumns(showWorkspace: boolean): TermColumn<AdminAccount>[] {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function AccountDirectoryPanel() {
-  const { slug: wsSlug, withQuery } = useWorkspaceFilter();
-  const accounts = useLive<AdminAccount[]>(
-    withQuery('/admin/accounts'),
-    POLL.list,
-  );
+  const { slug: wsSlug } = useWorkspaceFilter();
+  const accounts = useScopedLive<AdminAccount[]>('/admin/accounts', POLL.list);
   const { accountId: selectedId } = useTermSelection();
 
   const [filterText, setFilterText] = useState('');

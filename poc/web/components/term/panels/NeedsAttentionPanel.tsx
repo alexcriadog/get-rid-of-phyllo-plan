@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { useLive, POLL } from '@/lib/useLive';
-import { useWorkspaceFilter } from '@/lib/workspace-context';
+import { POLL } from '@/lib/useLive';
+import { useScopedLive } from '@/lib/workspace-context';
 
 /**
  * Phase 3 workbench panel: "Needs Attention"
@@ -129,10 +129,8 @@ const DOT_CLASS: Record<'danger' | 'warn', string> = {
 // ── Panel ─────────────────────────────────────────────────────────────────
 
 export default function NeedsAttentionPanel() {
-  const { withQuery } = useWorkspaceFilter();
-
-  const overviewLive = useLive<Overview>(withQuery('/admin/overview'), POLL.list);
-  const accountsLive = useLive<AttentionAccount[]>(withQuery('/admin/accounts'), POLL.list);
+  const overviewLive = useScopedLive<Overview>('/admin/overview', POLL.list);
+  const accountsLive = useScopedLive<AttentionAccount[]>('/admin/accounts', POLL.list);
 
   const apiDown =
     (!!overviewLive.error && !overviewLive.data) ||

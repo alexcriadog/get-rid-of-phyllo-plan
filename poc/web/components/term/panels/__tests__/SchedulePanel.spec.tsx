@@ -28,13 +28,20 @@ vi.mock('@/lib/useLive', () => ({
 // ---------------------------------------------------------------------------
 // Mock workspace-context — no-op withQuery (no workspace selected by default)
 // ---------------------------------------------------------------------------
-vi.mock('@/lib/workspace-context', () => ({
-  useWorkspaceFilter: () => ({
-    slug: null,
-    set: vi.fn(),
-    withQuery: (url: string) => url,
-  }),
-}));
+vi.mock('@/lib/workspace-context', async () => {
+  // useScopedLive delegates to the (mocked) useLive so the panel renders the
+  // same canned state; hydrated:true so the gate lets the fetch through.
+  const { useLive } = await import('@/lib/useLive');
+  return {
+    useWorkspaceFilter: () => ({
+      slug: null,
+      set: vi.fn(),
+      withQuery: (url: string) => url,
+      hydrated: true,
+    }),
+    useScopedLive: (path: string, interval: number) => useLive(path, interval),
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Canned data — timestamps computed at module load time from real Date.now()

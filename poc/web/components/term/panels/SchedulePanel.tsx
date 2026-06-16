@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useLive, POLL } from '@/lib/useLive';
-import { useWorkspaceFilter } from '@/lib/workspace-context';
+import { POLL } from '@/lib/useLive';
+import { useScopedLive } from '@/lib/workspace-context';
 import { fmtRelative, fmtTime } from '@/lib/format';
 import { MiniBar } from '@/components/term/charts';
 import PlatformTag from '@/components/term/PlatformTag';
@@ -80,9 +80,13 @@ function progressToRun(nextRunAt: string): number {
 }
 
 export default function SchedulePanel() {
-  const { withQuery } = useWorkspaceFilter();
-  const url = withQuery(`/admin/next-runs?horizon_hours=${HORIZON_HOURS}`);
-  const { data, error, loading } = useLive<NextRun[]>(url, POLL.list);
+  // useScopedLive appends the topbar workspace filter AND waits for the
+  // persisted selection to hydrate, so a refresh never flashes other
+  // workspaces' runs before the filtered fetch lands.
+  const { data, error, loading } = useScopedLive<NextRun[]>(
+    `/admin/next-runs?horizon_hours=${HORIZON_HOURS}`,
+    POLL.list,
+  );
   const apiDown = !!error && !data;
 
   const [filter, setFilter] = useState('');

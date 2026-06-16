@@ -14,8 +14,8 @@
 'use client';
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { useLive, POLL } from '@/lib/useLive';
-import { useWorkspaceFilter } from '@/lib/workspace-context';
+import { POLL } from '@/lib/useLive';
+import { useScopedLive } from '@/lib/workspace-context';
 import { fmtTime } from '@/lib/format';
 import TermInput from '@/components/term/TermInput';
 import ActionChip from '@/components/term/ActionChip';
@@ -50,9 +50,8 @@ function fmtBytes(n: number): string {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function RawInspectorPanel() {
-  const { withQuery } = useWorkspaceFilter();
-  const { data, error } = useLive<RawResponse[]>(
-    withQuery('/admin/raw-responses?limit=200'),
+  const { data, error } = useScopedLive<RawResponse[]>(
+    '/admin/raw-responses?limit=200',
     POLL.list,
   );
 

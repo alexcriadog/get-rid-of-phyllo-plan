@@ -28,13 +28,18 @@ vi.mock('@/lib/useLive', () => ({
 // ---------------------------------------------------------------------------
 // Mock workspace-context — no workspace selected by default
 // ---------------------------------------------------------------------------
-vi.mock('@/lib/workspace-context', () => ({
-  useWorkspaceFilter: () => ({
-    slug: null,
-    set: vi.fn(),
-    withQuery: (url: string) => url,
-  }),
-}));
+vi.mock('@/lib/workspace-context', async () => {
+  const { useLive } = await import('@/lib/useLive');
+  return {
+    useWorkspaceFilter: () => ({
+      slug: null,
+      set: vi.fn(),
+      withQuery: (url: string) => url,
+      hydrated: true,
+    }),
+    useScopedLive: (path: string, interval: number) => useLive(path, interval),
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Real selection store so selectAccount wires up correctly

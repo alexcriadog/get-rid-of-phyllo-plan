@@ -17,7 +17,7 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import { useLive, POLL } from '@/lib/useLive';
-import { useWorkspaceFilter } from '@/lib/workspace-context';
+import { useScopedLive } from '@/lib/workspace-context';
 import { fmtTime } from '@/lib/format';
 import FeedLine from '@/components/term/FeedLine';
 import TermInput from '@/components/term/TermInput';
@@ -51,14 +51,12 @@ const FACETS: { id: FacetKind; label: string }[] = [
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function LiveActivityPanel() {
-  const { withQuery } = useWorkspaceFilter();
-
-  const callsLive = useLive<ApiCallRaw[]>(
-    withQuery('/admin/api-calls?limit=500'),
+  const callsLive = useScopedLive<ApiCallRaw[]>(
+    '/admin/api-calls?limit=500',
     POLL.live,
   );
-  const eventsLive = useLive<EventRaw[]>(
-    withQuery('/admin/events?limit=300'),
+  const eventsLive = useScopedLive<EventRaw[]>(
+    '/admin/events?limit=300',
     POLL.list,
   );
   const webhooksLive = useLive<WebhookInRaw[]>(

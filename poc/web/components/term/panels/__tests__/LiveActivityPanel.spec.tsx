@@ -9,9 +9,18 @@ vi.mock('@/lib/useLive', () => ({
   useLive: vi.fn(),
 }));
 
-vi.mock('@/lib/workspace-context', () => ({
-  useWorkspaceFilter: () => ({ slug: null, set: vi.fn(), withQuery: (u: string) => u }),
-}));
+vi.mock('@/lib/workspace-context', async () => {
+  const { useLive } = await import('@/lib/useLive');
+  return {
+    useWorkspaceFilter: () => ({
+      slug: null,
+      set: vi.fn(),
+      withQuery: (u: string) => u,
+      hydrated: true,
+    }),
+    useScopedLive: (path: string, interval: number) => useLive(path, interval),
+  };
+});
 
 import { useLive } from '@/lib/useLive';
 const mockUseLive = vi.mocked(useLive);
