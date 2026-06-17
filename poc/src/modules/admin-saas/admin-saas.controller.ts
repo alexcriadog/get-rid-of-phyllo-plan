@@ -44,8 +44,22 @@ import {
   parseLimit,
   type Paginated,
 } from '@shared/pagination/cursor';
+import { apiAccountId } from '@modules/data-schema/ids';
 
 const CADENCE_VALUES = ['immediate', 'hourly', 'daily'] as const;
+
+/**
+ * Safely pull the v1 account uuid from an outbound webhook delivery payload
+ * (`{ data: { account_id } }`). Returns null for malformed / non-account
+ * payloads so the deliveries list never throws on an unexpected shape.
+ */
+function accountUuidFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const data = (payload as { data?: unknown }).data;
+  if (!data || typeof data !== 'object') return null;
+  const id = (data as { account_id?: unknown }).account_id;
+  return typeof id === 'string' ? id : null;
+}
 
 // Snapshot products always emit immediately (no items_added delta to digest).
 // The schema accepts hourly/daily on these too but the dispatcher coerces them
@@ -646,6 +660,11 @@ export class AdminSaasController {
       next_retry_at: string | null;
       created_at: string;
       delivered_at: string | null;
+      // Resolved from the delivery payload's `data.account_id` (a v1 uuid) so
+      // operators can see which platform/account a delivery is for at a glance.
+      platform: string | null;
+      account: string | null;
+      account_id: string | null;
     }>
   > {
     const limit = parseLimit(limitRaw, 100, 1, 500);
@@ -653,6 +672,26 @@ export class AdminSaasController {
     const workspaceId = workspaceSlug
       ? (await this.workspaces.findBySlug(workspaceSlug)).id
       : undefined;
+
+    // The webhook payload references the account by its v1 uuid only. Build a
+    // uuid → {platform, handle} lookup up-front (scoped to the workspace when
+    // one is selected) so the sync row mapper can enrich each delivery without
+    // an N+1. apiAccountId is the same deterministic id used by the /v1 API.
+    const accounts = await this.prisma.account.findMany({
+      where: workspaceId ? { workspaceId } : undefined,
+      select: { id: true, platform: true, handle: true },
+    });
+    const accountByUuid = new Map<
+      string,
+      { platform: string; handle: string | null }
+    >();
+    for (const a of accounts) {
+      accountByUuid.set(apiAccountId(a.id.toString()), {
+        platform: a.platform,
+        handle: a.handle,
+      });
+    }
+
     return paginate(
       limit,
       (take) =>
@@ -683,20 +722,27 @@ export class AdminSaasController {
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take,
         }),
-      (r) => ({
-        id: r.id,
-        endpoint_id: r.endpointId,
-        endpoint_url: r.endpoint.url,
-        workspace_slug: r.endpoint.workspace.slug,
-        event: r.event,
-        status: r.status,
-        attempts: r.attempts,
-        last_response_code: r.lastResponseCode,
-        last_error: r.lastError,
-        next_retry_at: r.nextRetryAt ? r.nextRetryAt.toISOString() : null,
-        created_at: r.createdAt.toISOString(),
-        delivered_at: r.deliveredAt ? r.deliveredAt.toISOString() : null,
-      }),
+      (r) => {
+        const accountUuid = accountUuidFromPayload(r.payload);
+        const account = accountUuid ? accountByUuid.get(accountUuid) : undefined;
+        return {
+          id: r.id,
+          endpoint_id: r.endpointId,
+          endpoint_url: r.endpoint.url,
+          workspace_slug: r.endpoint.workspace.slug,
+          event: r.event,
+          status: r.status,
+          attempts: r.attempts,
+          last_response_code: r.lastResponseCode,
+          last_error: r.lastError,
+          next_retry_at: r.nextRetryAt ? r.nextRetryAt.toISOString() : null,
+          created_at: r.createdAt.toISOString(),
+          delivered_at: r.deliveredAt ? r.deliveredAt.toISOString() : null,
+          platform: account?.platform ?? null,
+          account: account?.handle ?? null,
+          account_id: accountUuid,
+        };
+      },
       (r) => encodeCompositeCursor(r.createdAt, r.id),
     );
   }
