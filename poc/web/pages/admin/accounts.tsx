@@ -37,6 +37,7 @@ type ProductHealth = {
 type AdminAccount = {
   id: number | string;
   platform: string;
+  connection_flow?: string | null;
   handle?: string | null;
   display_name?: string | null;
   sync_tier?: string;
@@ -283,6 +284,19 @@ function AccountCard({
           </Link>
           <div className="font-mono text-[10.5px] text-muted-foreground/70">
             {account.platform} · #{id}
+            {(account.connection_flow === 'ig_direct' ||
+              account.connection_flow === 'fb_login') && (
+              <span
+                title={
+                  account.connection_flow === 'ig_direct'
+                    ? 'Instagram Login (IG-direct)'
+                    : 'Facebook Login'
+                }
+                className="ml-2 inline-flex items-center rounded-full border border-border/80 bg-card/60 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-muted-foreground"
+              >
+                {account.connection_flow === 'ig_direct' ? 'IG Login' : 'FB Login'}
+              </span>
+            )}
             {showWorkspace && account.workspace_slug && (
               <span className="ml-2 inline-flex items-center rounded-full border border-border/80 bg-card/60 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-muted-foreground">
                 {account.workspace_slug}

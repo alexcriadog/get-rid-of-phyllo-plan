@@ -21,6 +21,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveBackfillProducts } from '../src/modules/accounts/backfill-products';
+import { connectionFlowFor } from '../src/modules/accounts/connection-flow';
 
 // Load .env manually (no external dep); ignore if missing.
 function loadDotenv(): void {
@@ -184,29 +185,33 @@ async function seedAccount(input: SeedAccountInput): Promise<{
   // Seed script always lands on the auto-created "demo" workspace. Real
   // multi-tenant seeding goes through the /v1/sdk-tokens path in Phase 3+.
   const workspaceId = 'wkspc_demo';
+  const connectionFlow = connectionFlowFor(input.platform);
 
   const existing = await prisma.account.findUnique({
     where: {
-      workspaceId_platform_canonicalUserId: {
+      workspaceId_platform_canonicalUserId_connectionFlow: {
         workspaceId,
         platform: input.platform,
         canonicalUserId: input.canonicalUserId,
+        connectionFlow,
       },
     },
   });
 
   const account = await prisma.account.upsert({
     where: {
-      workspaceId_platform_canonicalUserId: {
+      workspaceId_platform_canonicalUserId_connectionFlow: {
         workspaceId,
         platform: input.platform,
         canonicalUserId: input.canonicalUserId,
+        connectionFlow,
       },
     },
     create: {
       workspaceId,
       platform: input.platform,
       canonicalUserId: input.canonicalUserId,
+      connectionFlow,
       handle: input.handle ?? null,
       displayName: input.handle ?? null,
       status: 'ready',

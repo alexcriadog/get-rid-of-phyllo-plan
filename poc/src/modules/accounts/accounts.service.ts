@@ -18,6 +18,7 @@ import { PRODUCTS_BY_PLATFORM, type Platform } from './products.catalog';
 import { WorkspacesService } from '@modules/workspaces/workspaces.service';
 import { enforceWorkspaceProducts } from './seed-products-enforcement';
 import { isIgDirect } from '@modules/platforms/shared/meta-graph/ig-direct';
+import { connectionFlowFor } from './connection-flow';
 
 export type { Platform };
 
@@ -144,6 +145,10 @@ export class AccountsService {
     // Page token to normalize to and /me/accounts would reject the token.
     // The seed's access token is already the final long-lived credential.
     const igDirect = input.platform === 'instagram' && isIgDirect(input.metadata);
+    // Part of the uniqueness key: lets one IG identity coexist as two rows
+    // (ig_direct vs fb_login) instead of the second connect overwriting the
+    // first. Non-Instagram platforms always resolve to 'default'.
+    const connectionFlow = connectionFlowFor(input.platform, input.metadata);
     const isMeta =
       !igDirect &&
       (input.platform === 'facebook' || input.platform === 'instagram');
@@ -194,10 +199,11 @@ export class AccountsService {
       // five consecutive failures (sync.worker.ts).
       const existing = await tx.account.findUnique({
         where: {
-          workspaceId_platform_canonicalUserId: {
+          workspaceId_platform_canonicalUserId_connectionFlow: {
             workspaceId,
             platform: input.platform,
             canonicalUserId: input.canonicalUserId,
+            connectionFlow,
           },
         },
         select: { id: true, syncTier: true },
@@ -208,10 +214,11 @@ export class AccountsService {
 
       const account = await tx.account.upsert({
         where: {
-          workspaceId_platform_canonicalUserId: {
+          workspaceId_platform_canonicalUserId_connectionFlow: {
             workspaceId,
             platform: input.platform,
             canonicalUserId: input.canonicalUserId,
+            connectionFlow,
           },
         },
         create: {
@@ -220,6 +227,7 @@ export class AccountsService {
           isTest,
           platform: input.platform,
           canonicalUserId: input.canonicalUserId,
+          connectionFlow,
           handle: input.handle ?? null,
           status: 'ready',
           syncTier: 'standard',

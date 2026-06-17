@@ -1,8 +1,17 @@
 // InsightIQ-compatible accounts / users / work-platforms endpoints.
 // Mounted at /v1/* — Basic auth, workspace-scoped.
 
-import { Controller, Get, Param, Query, Req, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import { PrismaService } from "@shared/database/prisma.service";
+import { AccountsService } from "@modules/accounts/accounts.service";
 import {
   listEnvelope,
   WORK_PLATFORMS,
@@ -25,6 +34,7 @@ export class DataAccountsController {
     private readonly prisma: PrismaService,
     private readonly resolver: ApiAccountResolver,
     private readonly read: ApiReadService,
+    private readonly accounts: AccountsService,
   ) {}
 
   private ws(req: RequestWithApiWorkspace): string {
@@ -62,6 +72,35 @@ export class DataAccountsController {
       (await this.jobsByAccount([acc.id])).get(acc.id.toString()) ?? [];
     const profile = await this.read.profileByAccountPk(acc.id.toString());
     return accountView(acc, jobs, profile?.image_url ?? null);
+  }
+
+  /**
+   * Soft-disconnect a single account by its external UUID. Stops all data
+   * collection (drops the OAuth token, parks the sync jobs, and inbound
+   * webhooks skip disconnected rows) and emits ACCOUNTS.DISCONNECTED, but
+   * KEEPS historical data. Lets a consumer remove one of two coexisting
+   * Instagram connections (ig_direct vs fb_login) without touching the other.
+   * Workspace-scoped — cross-tenant ids 404.
+   */
+  @Delete("accounts/:id")
+  async disconnectAccount(
+    @Req() req: RequestWithApiWorkspace,
+    @Param("id") id: string,
+  ): Promise<Record<string, unknown>> {
+    const ws = this.ws(req);
+    const acc = await this.resolver.byAccountUuid(ws, id);
+    if (!acc)
+      throw notFound(
+        "incorrect_account_id",
+        "Requested account id does not exist",
+      );
+    const result = await this.accounts.disconnectAccount(acc.id, ws);
+    if (!result)
+      throw notFound(
+        "incorrect_account_id",
+        "Requested account id does not exist",
+      );
+    return result as unknown as Record<string, unknown>;
   }
 
   @Get("users")
