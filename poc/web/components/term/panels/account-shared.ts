@@ -28,6 +28,7 @@ export type AdminAccount = {
   workspace_slug?: string | null;
   workspace_name?: string | null;
   canonical_user_id?: string | null;
+  connection_flow?: string | null;
   connected_at?: string | null;
   products?: ProductHealth[] | Record<string, ProductHealth>;
   sync_jobs?: SyncJob[];

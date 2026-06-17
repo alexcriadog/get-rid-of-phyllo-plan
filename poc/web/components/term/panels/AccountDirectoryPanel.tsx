@@ -47,6 +47,27 @@ const KNOWN_PLATFORMS = [
 
 type PlatformFacet = 'all' | string;
 
+// A compact badge that distinguishes the two Instagram connection flows
+// (Instagram Login vs Facebook Login) so two coexisting rows for the same
+// handle are tellable apart. Renders nothing for single-connection platforms.
+function ConnectionFlowTag({ flow }: { flow?: string | null }) {
+  if (flow !== 'ig_direct' && flow !== 'fb_login') return null;
+  const isDirect = flow === 'ig_direct';
+  return (
+    <span
+      title={isDirect ? 'Instagram Login (IG-direct)' : 'Facebook Login'}
+      className={cn(
+        'shrink-0 rounded-sm border px-1 text-[9px] font-medium leading-tight',
+        isDirect
+          ? 'border-term-mint/60 text-term-mint'
+          : 'border-term-line/60 text-term-faint',
+      )}
+    >
+      {isDirect ? 'IG' : 'FB'}
+    </span>
+  );
+}
+
 // ── Columns ───────────────────────────────────────────────────────────────────
 
 function buildColumns(showWorkspace: boolean): TermColumn<AdminAccount>[] {
@@ -54,7 +75,12 @@ function buildColumns(showWorkspace: boolean): TermColumn<AdminAccount>[] {
     {
       key: 'platform',
       header: 'PLT',
-      render: (a) => <PlatformTag platform={a.platform} />,
+      render: (a) => (
+        <span className="flex items-center gap-1">
+          <PlatformTag platform={a.platform} />
+          <ConnectionFlowTag flow={a.connection_flow} />
+        </span>
+      ),
     },
     {
       key: 'handle',

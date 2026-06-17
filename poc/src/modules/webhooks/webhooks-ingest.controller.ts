@@ -154,53 +154,70 @@ export class WebhooksIngestController {
       return;
     }
 
-    const account = await this.prisma.account.findFirst({
-      where: { canonicalUserId: entryId },
+    // Meta delivers an IG webhook event keyed only by the IG asset id
+    // (= canonicalUserId), which is IDENTICAL for an account connected via
+    // Instagram Login and one connected via Facebook Login. Both rows are
+    // legitimate recipients, so fan out to EVERY non-disconnected account that
+    // shares this canonical id instead of picking one arbitrarily.
+    // Disconnected rows are skipped here so a soft-disconnect actually stops
+    // their inbound webhook ingestion.
+    const accounts = await this.prisma.account.findMany({
+      where: { canonicalUserId: entryId, status: { not: 'disconnected' } },
       select: { id: true, platform: true },
     });
-    if (!account) {
+    if (accounts.length === 0) {
       this.logger.warn(`No account for canonical_user_id=${entryId}`);
       this.metrics.incr('webhook_account_missing', { platform: 'meta' });
       return;
     }
 
-    const syncJob = await this.prisma.syncJob.findUnique({
-      where: { accountId_product: { accountId: account.id, product } },
-      select: { id: true },
-    });
+    const queue = this.bullmq.getQueue<SyncJobPayload>(SYNC_QUEUE_NAME);
+    let enqueued = 0;
+    for (const account of accounts) {
+      const syncJob = await this.prisma.syncJob.findUnique({
+        where: { accountId_product: { accountId: account.id, product } },
+        select: { id: true },
+      });
 
-    // The account resolved but has no sync job for this product — it isn't
-    // enrolled in it. This is normal on Instagram, whose webhook fields are
-    // app-level: we receive story_insights/comments/mentions for every
-    // connected IG account regardless of the products it enabled. There's
-    // nothing to sync, so record the resolution and skip. (Enqueuing a
-    // synthetic jobId here would also crash the worker, which does
-    // BigInt(jobId).)
-    if (!syncJob) {
+      // This row resolved but has no sync job for this product — it isn't
+      // enrolled. Normal on Instagram, whose webhook fields are app-level: we
+      // receive story_insights/comments/mentions for every connected IG
+      // account regardless of the products it enabled. Nothing to sync for
+      // this row; skip it (the other coexisting row may still be enrolled).
+      if (!syncJob) {
+        this.logger.log(
+          `Meta webhook for account ${account.id.toString()} resolved but product '${product}' not enrolled; skipping sync`,
+        );
+        continue;
+      }
+
+      const payload: SyncJobPayload = {
+        jobId: syncJob.id.toString(),
+        accountId: account.id.toString(),
+        product,
+      };
+
+      // The jobId MUST include the account id: two coexisting rows (ig_direct +
+      // fb_login) share one eventId, and BullMQ dedupes by jobId — without the
+      // per-account suffix the second row's sync job would be silently dropped.
+      await queue.add('sync', payload, {
+        priority: this.bullmq.toPriorityNumber('HIGH'),
+        jobId: `webhook-${eventId}-${account.id.toString()}`,
+        removeOnComplete: { age: 3600, count: 500 },
+        removeOnFail: { age: 86_400, count: 200 },
+      });
+      enqueued += 1;
+    }
+
+    // No coexisting row was enrolled in this product — record the resolution
+    // (so the event doesn't look unhandled) and count it once.
+    if (enqueued === 0) {
       await this.webhookLog.markResolved('meta', eventId, false);
       this.metrics.incr('webhook_skipped_no_product', {
         platform: 'meta',
         product,
       });
-      this.logger.log(
-        `Meta webhook for account ${account.id.toString()} resolved but product '${product}' not enrolled; skipping sync`,
-      );
-      return;
     }
-
-    const payload: SyncJobPayload = {
-      jobId: syncJob.id.toString(),
-      accountId: account.id.toString(),
-      product,
-    };
-
-    const queue = this.bullmq.getQueue<SyncJobPayload>(SYNC_QUEUE_NAME);
-    await queue.add('sync', payload, {
-      priority: this.bullmq.toPriorityNumber('HIGH'),
-      jobId: `webhook-${eventId}`,
-      removeOnComplete: { age: 3600, count: 500 },
-      removeOnFail: { age: 86_400, count: 200 },
-    });
 
     await this.webhookLog.markResolved('meta', eventId, true);
 

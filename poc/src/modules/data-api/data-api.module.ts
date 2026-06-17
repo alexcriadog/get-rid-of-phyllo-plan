@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { SharedDatabaseModule } from "@shared/database/database.module";
+import { AccountsModule } from "@modules/accounts/accounts.module";
 import { ApiCredentialsService } from "./credentials.service";
 import { ApiBasicAuthGuard } from "./basic-auth.guard";
 import { ApiAccountResolver } from "./account-resolver.service";
@@ -14,7 +15,7 @@ import { DataController } from "./data.controller";
  * See PLAN-canonical-data-api.md.
  */
 @Module({
-  imports: [SharedDatabaseModule],
+  imports: [SharedDatabaseModule, AccountsModule],
   controllers: [DataAccountsController, DataController],
   providers: [
     ApiCredentialsService,

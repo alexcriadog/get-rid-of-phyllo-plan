@@ -11,6 +11,11 @@ model Account {
   id                   BigInt   @id @default(autoincrement())
   platform             String
   canonicalUserId      String   @map("canonical_user_id")
+  // Connection-flow discriminator — part of the account uniqueness key so the
+  // SAME canonical Instagram identity can coexist as two rows: one connected
+  // via Instagram Login ('ig_direct'), one via Facebook Login ('fb_login').
+  // Every other platform resolves to 'default' (one connection per identity).
+  connectionFlow       String   @default("default") @map("connection_flow")
   handle               String?
   displayName          String?  @map("display_name")
   status               String   @default("ready")
@@ -41,7 +46,7 @@ model Account {
   overrides AccountCadenceOverride[]
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
 
-  @@unique([workspaceId, platform, canonicalUserId])
+  @@unique([workspaceId, platform, canonicalUserId, connectionFlow], map: "accounts_ws_platform_canonical_flow_key")
   @@index([workspaceId, platform])
   @@index([workspaceId, endUserId])
   @@map("accounts")

@@ -1840,6 +1840,7 @@ export class AdminService {
     account: {
       id: bigint;
       platform: string;
+      connectionFlow: string;
       handle: string | null;
       status: string;
       syncTier: string;
@@ -1869,6 +1870,7 @@ export class AdminService {
     return {
       id: account.id.toString(),
       platform: account.platform,
+      connection_flow: account.connectionFlow,
       handle: account.handle,
       status: account.status,
       sync_tier: account.syncTier,
