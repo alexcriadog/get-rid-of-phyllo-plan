@@ -139,6 +139,63 @@ describe('CadencePanel', () => {
     expect(screen.getByText('audience')).toBeInTheDocument();
   });
 
+  // ── Accordion (scalability) ────────────────────────────────────────────────
+
+  it('collapses every platform by default and toggles on header click', async () => {
+    mockLiveState = live(CADENCES_SINGLE);
+    render(<CadencePanel />);
+    const header = screen.getByRole('button', {
+      name: /toggle tiktok cadences/i,
+    });
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(header);
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(header);
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('force-expands matching platforms while a filter is active', () => {
+    mockLiveState = live(CADENCES_SINGLE);
+    render(<CadencePanel />);
+    const header = screen.getByRole('button', {
+      name: /toggle tiktok cadences/i,
+    });
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.change(screen.getByLabelText(/filter cadences/i), {
+      target: { value: 'engagement' },
+    });
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('shows "no matches" when the filter matches nothing', () => {
+    mockLiveState = live(CADENCES_SINGLE);
+    render(<CadencePanel />);
+    fireEvent.change(screen.getByLabelText(/filter cadences/i), {
+      target: { value: 'zzz-nope' },
+    });
+    expect(screen.getByText(/no matches/i)).toBeInTheDocument();
+  });
+
+  it('shows a custom count on the platform header', () => {
+    mockLiveState = live([
+      cad({
+        platform: 'tiktok',
+        product: 'identity',
+        default_interval_seconds: 1800,
+        sync_configured: true,
+      }),
+      cad({
+        platform: 'tiktok',
+        product: 'engagement_new',
+        default_interval_seconds: 3600,
+        sync_configured: false,
+        refresh_configured: false,
+      }),
+    ]);
+    render(<CadencePanel />);
+    expect(screen.getByText(/1 custom/i)).toBeInTheDocument();
+  });
+
   it('renders human-readable interval labels', () => {
     mockLiveState = live(CADENCES_DEFAULT);
     render(<CadencePanel />);

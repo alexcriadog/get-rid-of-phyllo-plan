@@ -95,30 +95,71 @@ export default function CadencePanel() {
     }
   };
 
+  const [filter, setFilter] = useState('');
+  const [openPlatforms, setOpenPlatforms] = useState<Set<string>>(new Set());
+
   // Backend already sorts platform asc → product asc; group consecutively.
   const groups = useMemo(() => groupByPlatform(cadences), [cadences]);
+
+  // Filter by platform or product name; drop platforms with no matching rows.
+  const q = filter.trim().toLowerCase();
+  const filteredGroups = useMemo(() => {
+    if (!q) return groups;
+    return groups
+      .map((g) => ({
+        platform: g.platform,
+        rows: g.rows.filter(
+          (r) =>
+            g.platform.toLowerCase().includes(q) ||
+            r.product.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((g) => g.rows.length > 0);
+  }, [groups, q]);
+
+  // Collapsed by default so the panel scales to many platforms. An active
+  // filter force-expands every matching platform so matches are always shown.
+  const isOpen = (platform: string) => q !== '' || openPlatforms.has(platform);
+  const togglePlatform = (platform: string) =>
+    setOpenPlatforms((s) => {
+      const next = new Set(s);
+      if (next.has(platform)) next.delete(platform);
+      else next.add(platform);
+      return next;
+    });
 
   return (
     <div className="flex h-full flex-col gap-2 p-3 font-mono text-xs">
       <HeaderRow apiDown={apiDown} loading={loading} total={cadences.length} />
+
+      {!apiDown && !loading && (
+        <TermInput
+          placeholder="filter platform / product"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          aria-label="Filter cadences"
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {apiDown ? (
           <div className="py-4 text-center text-term-danger">
             <span className="animate-term-blink">▮</span> endpoint unreachable
           </div>
-        ) : groups.length === 0 ? (
+        ) : filteredGroups.length === 0 ? (
           <div className="py-6 text-center text-term-faint">
-            &gt; no cadences registered{' '}
+            {filter ? 'no matches' : '> no cadences registered'}{' '}
             <span className="animate-term-blink">▮</span>
           </div>
         ) : (
-          <div className="space-y-3">
-            {groups.map((g) => (
+          <div className="space-y-1.5">
+            {filteredGroups.map((g) => (
               <PlatformGroup
                 key={g.platform}
                 platform={g.platform}
                 rows={g.rows}
+                expanded={isOpen(g.platform)}
+                onToggle={togglePlatform}
                 mutState={mutState}
                 onSave={saveCadence}
               />
@@ -184,21 +225,42 @@ function HeaderRow({
 function PlatformGroup({
   platform,
   rows,
+  expanded,
+  onToggle,
   mutState,
   onSave,
 }: {
   platform: string;
   rows: Cadence[];
+  expanded: boolean;
+  onToggle: (platform: string) => void;
   mutState: Record<string, MutState>;
   onSave: (p: string, prod: string, patch: CadencePatch) => Promise<void>;
 }) {
+  const customCount = rows.filter(
+    (r) => r.sync_configured || r.refresh_configured,
+  ).length;
+
   return (
     <section aria-label={`${platform} cadences`}>
-      <div className="mb-1 flex items-center gap-2 border-b border-term-line/40 pb-1">
+      {/* Collapsible header — keeps the panel compact across many platforms. */}
+      <button
+        type="button"
+        onClick={() => onToggle(platform)}
+        aria-expanded={expanded}
+        aria-label={`Toggle ${platform} cadences`}
+        className="flex w-full items-center gap-2 border-b border-term-line/40 py-1 text-left transition-colors hover:bg-term-line/10"
+      >
+        <span className="w-3 shrink-0 text-term-faint" aria-hidden="true">
+          {expanded ? '▾' : '▸'}
+        </span>
         <PlatformTag platform={platform} />
         <span className="text-[10px] text-term-faint">{rows.length} products</span>
-      </div>
-      <div>
+        {customCount > 0 && (
+          <span className="text-[10px] text-term-mint">· {customCount} custom</span>
+        )}
+      </button>
+      <div className={cn('pl-3', !expanded && 'hidden')}>
         {rows.map((c) => (
           <CadenceRow
             key={`${c.platform}:${c.product}`}
