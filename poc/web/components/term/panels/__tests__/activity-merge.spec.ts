@@ -278,6 +278,38 @@ describe('mergeActivity — delivery normalisation', () => {
     expect(item.summary).toContain('account.connected');
     expect(item.summary).toContain('https://example.com/hook');
   });
+
+  it('surfaces platform and account handle when resolved server-side', () => {
+    const delivery: DeliveryRaw = {
+      ...deliveryOk,
+      event: 'PROFILES.UPDATED',
+      platform: 'threads',
+      account: 'camaleonicanalytics',
+      account_id: '5c4fcefe-82b1-5f0d-9ba4-04665267f756',
+    };
+    const [item] = mergeActivity([], [], [], [delivery]);
+    expect(item.platform).toBe('threads');
+    expect(item.summary).toContain('PROFILES.UPDATED');
+    expect(item.summary).toContain('camaleonicanalytics');
+  });
+
+  it('falls back to a short account_id when no handle is resolved', () => {
+    const delivery: DeliveryRaw = {
+      ...deliveryOk,
+      platform: 'tiktok',
+      account: null,
+      account_id: '5c4fcefe-82b1-5f0d-9ba4-04665267f756',
+    };
+    const [item] = mergeActivity([], [], [], [delivery]);
+    expect(item.platform).toBe('tiktok');
+    expect(item.summary).toContain('#5c4fcefe');
+  });
+
+  it('leaves platform undefined and summary plain when nothing resolves', () => {
+    const [item] = mergeActivity([], [], [], [deliveryOk]);
+    expect(item.platform).toBeUndefined();
+    expect(item.summary).toBe('account.connected → https://example.com/hook');
+  });
 });
 
 describe('mergeActivity — cap', () => {

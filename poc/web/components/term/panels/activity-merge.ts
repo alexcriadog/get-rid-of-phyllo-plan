@@ -78,6 +78,10 @@ export interface DeliveryRaw {
   last_error: string | null;
   created_at: string;
   delivered_at: string | null;
+  // Resolved server-side from the payload's account_id (v1 uuid).
+  platform?: string | null;
+  account?: string | null;
+  account_id?: string | null;
 }
 
 // ── Tone helpers ─────────────────────────────────────────────────────────────
@@ -166,11 +170,16 @@ function normaliseWebhookIn(w: WebhookInRaw): ActivityItem {
 function normaliseDelivery(d: DeliveryRaw): ActivityItem {
   const tone = toneFromDeliveryStatus(d.status);
   const code = d.last_response_code != null ? ` ${d.last_response_code}` : '';
+  const acct =
+    d.account ?? (d.account_id ? `#${d.account_id.slice(0, 8)}` : '');
   return {
     id: `delivery:${d.id}`,
     ts: d.created_at,
     kind: 'delivery',
-    summary: `${d.event} → ${d.endpoint_url}`,
+    platform: d.platform ?? undefined,
+    summary: acct
+      ? `${d.event} · ${acct} → ${d.endpoint_url}`
+      : `${d.event} → ${d.endpoint_url}`,
     status: { text: `${d.status}${code}`, tone },
     raw: d,
   };
