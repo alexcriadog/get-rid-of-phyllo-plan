@@ -17,6 +17,7 @@ import { Empty } from '@/components/admin/empty';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ConnectionFlowBadge } from '@/components/account/ConnectionFlowBadge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Tabs,
@@ -49,6 +50,7 @@ type ProductHealth = {
 type AccountDetail = {
   id: string;
   platform: string;
+  connection_flow?: string | null;
   handle?: string | null;
   display_name?: string | null;
   status?: string;
@@ -175,6 +177,7 @@ export default function AccountDetailPage() {
                   {account.status ?? '—'}
                 </Badge>
                 <Badge variant="default">{account.sync_tier ?? '—'}</Badge>
+                <ConnectionFlowBadge flow={account.connection_flow} />
                 {(account.platform === 'facebook' ||
                   account.platform === 'instagram') &&
                   (account.webhook?.subscribed ? (
