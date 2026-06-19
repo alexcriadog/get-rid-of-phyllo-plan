@@ -22,6 +22,7 @@ import {
 } from '../../../../lib/api';
 import { Section } from '@/components/admin/section';
 import { Empty } from '@/components/admin/empty';
+import { ConnectionFlowBadge } from '@/components/account/ConnectionFlowBadge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +43,7 @@ type SyncJobDetail = {
   account_id: string;
   account_handle: string | null;
   platform: string;
+  connection_flow?: string | null;
   product: string;
   status: string;
   priority: string;
@@ -260,6 +262,7 @@ function SyncJobSettingsCard({
       <CardContent className="p-0">
         <div className="mb-3 flex items-center gap-3">
           <Badge variant="outline">{detail?.platform ?? ''}</Badge>
+          <ConnectionFlowBadge flow={detail?.connection_flow} />
           <span className="font-mono text-sm font-semibold">{product}</span>
           <Badge>{detail?.status ?? ''}</Badge>
           <span className="ml-auto font-mono text-[10px] text-muted-foreground">

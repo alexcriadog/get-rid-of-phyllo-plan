@@ -606,7 +606,7 @@ export class AdminService {
     const job = await this.prisma.syncJob.findUniqueOrThrow({
       where: { id },
       include: {
-        account: { select: { platform: true, handle: true } },
+        account: { select: { platform: true, handle: true, connectionFlow: true } },
       },
     });
     return {
@@ -614,6 +614,7 @@ export class AdminService {
       account_id: job.accountId.toString(),
       account_handle: job.account.handle ?? null,
       platform: job.account.platform,
+      connection_flow: job.account.connectionFlow,
       product: job.product,
       status: job.status,
       priority: job.priority,

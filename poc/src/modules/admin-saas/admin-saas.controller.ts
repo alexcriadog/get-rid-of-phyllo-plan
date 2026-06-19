@@ -679,16 +679,17 @@ export class AdminSaasController {
     // an N+1. apiAccountId is the same deterministic id used by the /v1 API.
     const accounts = await this.prisma.account.findMany({
       where: workspaceId ? { workspaceId } : undefined,
-      select: { id: true, platform: true, handle: true },
+      select: { id: true, platform: true, handle: true, connectionFlow: true },
     });
     const accountByUuid = new Map<
       string,
-      { platform: string; handle: string | null }
+      { platform: string; handle: string | null; connectionFlow: string | null }
     >();
     for (const a of accounts) {
       accountByUuid.set(apiAccountId(a.id.toString()), {
         platform: a.platform,
         handle: a.handle,
+        connectionFlow: a.connectionFlow,
       });
     }
 
@@ -741,6 +742,7 @@ export class AdminSaasController {
           platform: account?.platform ?? null,
           account: account?.handle ?? null,
           account_id: accountUuid,
+          connection_flow: account?.connectionFlow ?? null,
         };
       },
       (r) => encodeCompositeCursor(r.createdAt, r.id),

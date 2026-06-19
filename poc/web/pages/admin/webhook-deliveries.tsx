@@ -6,6 +6,7 @@ import { fmtRelative } from '../../lib/format';
 import { adminPost, CONNECTOR_API_URL } from '../../lib/api';
 import { Empty } from '@/components/admin/empty';
 import { Badge } from '@/components/ui/badge';
+import { ConnectionFlowBadge } from '@/components/account/ConnectionFlowBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,10 @@ type Delivery = {
   endpoint_id: string;
   endpoint_url: string;
   workspace_slug: string;
+  platform?: string | null;
+  account?: string | null;
+  account_id?: string | null;
+  connection_flow?: string | null;
   event: string;
   status: string;
   attempts: number;
@@ -105,6 +110,7 @@ export default function WebhookDeliveriesPage() {
                   <tr>
                     <th className="px-3 py-2">When</th>
                     <th className="px-3 py-2">Workspace</th>
+                    <th className="px-3 py-2">Account</th>
                     <th className="px-3 py-2">Event</th>
                     <th className="px-3 py-2">URL</th>
                     <th className="px-3 py-2">Status</th>
@@ -122,6 +128,23 @@ export default function WebhookDeliveriesPage() {
                     >
                       <td className="px-3 py-2 text-xs">{fmtRelative(d.created_at)}</td>
                       <td className="px-3 py-2 font-mono text-xs">{d.workspace_slug}</td>
+                      <td className="px-3 py-2 text-xs">
+                        {d.account || d.account_id ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="font-mono">
+                              {d.account ?? d.account_id?.slice(0, 8)}
+                            </span>
+                            <ConnectionFlowBadge flow={d.connection_flow} />
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/60">—</span>
+                        )}
+                        {d.platform && (
+                          <div className="text-[10px] text-muted-foreground/70">
+                            {d.platform}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-2 font-mono text-xs">{d.event}</td>
                       <td className="px-3 py-2 max-w-[280px] truncate font-mono text-xs">
                         {d.endpoint_url}
