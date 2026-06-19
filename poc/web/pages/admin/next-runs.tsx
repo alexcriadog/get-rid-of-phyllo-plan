@@ -9,6 +9,7 @@ import { Timeline, STATUS_COLORS } from '../../components/charts';
 import { Section } from '@/components/admin/section';
 import { Empty } from '@/components/admin/empty';
 import { Button } from '@/components/ui/button';
+import { ConnectionFlowBadge } from '@/components/account/ConnectionFlowBadge';
 import {
   Tabs,
   TabsContent,
@@ -31,6 +32,7 @@ type NextRun = {
   accountId: string;
   accountHandle?: string | null;
   platform: string;
+  connection_flow?: string | null;
   product: string;
   next_run_at: string;
   status?: string;
@@ -644,7 +646,10 @@ export default function NextRunsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div>{r.accountHandle ?? `#${r.accountId}`}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span>{r.accountHandle ?? `#${r.accountId}`}</span>
+                            <ConnectionFlowBadge flow={r.connection_flow} />
+                          </div>
                           <div className="font-mono text-[10px] text-muted-foreground">
                             {r.platform} · #{r.accountId}
                           </div>

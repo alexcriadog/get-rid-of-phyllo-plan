@@ -9,6 +9,7 @@ import { Empty } from '@/components/admin/empty';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { ConnectionFlowBadge } from '@/components/account/ConnectionFlowBadge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -22,6 +23,7 @@ import { cn } from '@/lib/utils';
 type RawResponse = {
   id: string;
   accountId?: string;
+  connection_flow?: string | null;
   platform?: string;
   endpoint?: string;
   contentHash?: string;
@@ -205,6 +207,7 @@ function BodyViewer({ id }: { id: string }) {
       <div className="flex flex-wrap gap-1.5">
         <Badge variant="info">{data.platform ?? '—'}</Badge>
         <Badge variant="default">#{data.accountId ?? '—'}</Badge>
+        <ConnectionFlowBadge flow={data.connection_flow} />
         <Badge variant="default">{fmtBytes(data.sizeBytes ?? 0)}</Badge>
         <Badge variant="default">{fmtTime(data.fetchedAt)}</Badge>
       </div>

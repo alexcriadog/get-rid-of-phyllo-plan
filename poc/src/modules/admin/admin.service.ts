@@ -123,6 +123,7 @@ interface AccountSummary {
   platform: string;
   handle: string | null;
   display_name: string | null;
+  connection_flow: string | null;
 }
 
 interface AccountIndex {
@@ -445,6 +446,7 @@ export class AdminService {
         platform: a.platform,
         handle: a.handle ?? null,
         display_name: a.displayName ?? null,
+        connection_flow: a.connectionFlow,
       };
       const token = a.tokens[0];
       if (token) {
@@ -951,6 +953,7 @@ export class AdminService {
           select: {
             handle: true,
             platform: true,
+            connectionFlow: true,
             syncTier: true,
             id: true,
             workspace: { select: { slug: true } },
@@ -975,6 +978,7 @@ export class AdminService {
           accountId: r.accountId.toString(),
           accountHandle: r.account?.handle ?? null,
           platform: r.account?.platform ?? null,
+          connection_flow: r.account?.connectionFlow ?? null,
           workspace_slug: r.account?.workspace?.slug ?? null,
           product: r.product,
           status: r.status,
@@ -1350,7 +1354,11 @@ export class AdminService {
 
     const accountMap = new Map<
       string,
-      { handle: string | null; workspaceSlug: string | null }
+      {
+        handle: string | null;
+        workspaceSlug: string | null;
+        connectionFlow: string | null;
+      }
     >();
     if (accountIds.length > 0) {
       const accounts = await this.prisma.account.findMany({
@@ -1358,6 +1366,7 @@ export class AdminService {
         select: {
           id: true,
           handle: true,
+          connectionFlow: true,
           workspace: { select: { slug: true } },
         },
       });
@@ -1365,6 +1374,7 @@ export class AdminService {
         accountMap.set(a.id.toString(), {
           handle: a.handle,
           workspaceSlug: a.workspace?.slug ?? null,
+          connectionFlow: a.connectionFlow,
         });
       }
     }
@@ -1383,6 +1393,7 @@ export class AdminService {
           usage_header: r.usageHeader,
           account_id: r.accountId?.toString() ?? null,
           account_handle: acc?.handle ?? null,
+          connection_flow: acc?.connectionFlow ?? null,
           workspace_slug: acc?.workspaceSlug ?? null,
           product: r.product ?? null,
           expected: r.expected ?? false,
@@ -1737,8 +1748,46 @@ export class AdminService {
       .limit(safeLimit)
       .toArray();
 
+    // Raw Mongo docs reference the account only by its internal PK (stored as a
+    // string), with no handle or flow. Resolve each id to its connection_flow
+    // in one Postgres query so IG-direct vs FB-login is visible here too.
+    const accIds = Array.from(
+      new Set(
+        rows
+          .map((r) => (typeof r.accountId === 'string' ? r.accountId : null))
+          .filter((v): v is string => v !== null),
+      ),
+    );
+    const flowByAccountId = new Map<string, string>();
+    if (accIds.length > 0) {
+      const bigintIds = accIds
+        .map((s) => {
+          try {
+            return BigInt(s);
+          } catch {
+            return null;
+          }
+        })
+        .filter((v): v is bigint => v !== null);
+      if (bigintIds.length > 0) {
+        const accounts = await this.prisma.account.findMany({
+          where: { id: { in: bigintIds } },
+          select: { id: true, connectionFlow: true },
+        });
+        for (const a of accounts) {
+          flowByAccountId.set(a.id.toString(), a.connectionFlow);
+        }
+      }
+    }
+
     return {
-      items: rows.map((r) => this.mongoDocToJson(r)),
+      items: rows.map((r) => {
+        const accId = typeof r.accountId === 'string' ? r.accountId : null;
+        return {
+          ...(this.mongoDocToJson(r) as Record<string, unknown>),
+          connection_flow: accId ? flowByAccountId.get(accId) ?? null : null,
+        };
+      }),
     };
   }
 
@@ -1760,7 +1809,23 @@ export class AdminService {
     if (!doc) {
       throw new NotFoundException(`raw_platform_response ${id} not found`);
     }
-    return this.mongoDocToJson(doc);
+    const accId = typeof doc.accountId === 'string' ? doc.accountId : null;
+    let connectionFlow: string | null = null;
+    if (accId) {
+      try {
+        const acc = await this.prisma.account.findUnique({
+          where: { id: BigInt(accId) },
+          select: { connectionFlow: true },
+        });
+        connectionFlow = acc?.connectionFlow ?? null;
+      } catch {
+        connectionFlow = null;
+      }
+    }
+    return {
+      ...(this.mongoDocToJson(doc) as Record<string, unknown>),
+      connection_flow: connectionFlow,
+    };
   }
 
   // ──────────────────────────────────────────────────────────────────────────

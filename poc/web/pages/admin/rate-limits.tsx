@@ -13,6 +13,7 @@ import {
 import { Section } from '@/components/admin/section';
 import { Empty } from '@/components/admin/empty';
 import { Badge } from '@/components/ui/badge';
+import { ConnectionFlowBadge } from '@/components/account/ConnectionFlowBadge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,6 +31,7 @@ type BucketAccount = {
   platform: string;
   handle: string | null;
   display_name: string | null;
+  connection_flow?: string | null;
 };
 
 type Bucket = {
@@ -211,8 +213,9 @@ function BucketCard({
         <div className="mb-1 min-h-[18px]">
           {bucket.account ? (
             <div className="flex flex-col items-center gap-0.5">
-              <span className="font-mono text-[12px] font-semibold text-foreground">
+              <span className="flex items-center gap-1.5 font-mono text-[12px] font-semibold text-foreground">
                 {bucket.account.handle ?? bucket.account.display_name ?? `account #${bucket.account.id}`}
+                <ConnectionFlowBadge flow={bucket.account.connection_flow} />
               </span>
               {bucket.account.display_name && bucket.account.handle && (
                 <span className="font-mono text-[10px] text-muted-foreground/70">

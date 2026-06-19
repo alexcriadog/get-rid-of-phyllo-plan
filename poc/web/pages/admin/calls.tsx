@@ -15,6 +15,7 @@ import { Empty } from '@/components/admin/empty';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { ConnectionFlowBadge } from '@/components/account/ConnectionFlowBadge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -32,6 +33,7 @@ type ApiCall = {
   duration_ms?: number;
   account_id?: string | null;
   account_handle?: string | null;
+  connection_flow?: string | null;
 };
 
 const PLATFORMS = ['all', 'instagram', 'facebook'];
@@ -204,10 +206,13 @@ function CallsTable({ calls }: { calls: ApiCall[] }) {
               {c.endpoint}
             </span>
             <span
-              className="overflow-hidden text-ellipsis whitespace-nowrap text-right text-[10px] text-muted-foreground/70"
+              className="flex items-center justify-end gap-1 overflow-hidden whitespace-nowrap text-right text-[10px] text-muted-foreground/70"
               title={c.account_handle ?? `#${c.account_id ?? ''}`}
             >
-              {c.account_handle ?? `#${c.account_id ?? ''}`}
+              <span className="truncate">
+                {c.account_handle ?? `#${c.account_id ?? ''}`}
+              </span>
+              <ConnectionFlowBadge flow={c.connection_flow} />
             </span>
             <span className="text-right text-[10px]">{fmtMs(c.duration_ms)}</span>
           </div>
