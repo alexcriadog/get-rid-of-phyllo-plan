@@ -19,6 +19,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
+import { TokenHistoryService } from '@modules/tokens/token-history.service';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 
 const IG_DIRECT_REFRESH_URL = 'https://graph.instagram.com/refresh_access_token';
@@ -38,6 +39,7 @@ export class InstagramDirectTokenRefreshService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
+    private readonly tokenHistory: TokenHistoryService,
     private readonly lifecycle: TokenLifecycleEmitter,
   ) {}
 
@@ -77,6 +79,10 @@ export class InstagramDirectTokenRefreshService {
         lastRefreshedAt: new Date(),
       },
     });
+
+    // Append the rotated token to the recovery history (best-effort).
+    await this.tokenHistory.record(accountId, 'refresh');
+
     this.logger.log(
       `IG-direct token refreshed for account ${accountId.toString()}; expires_in=${expiresInS}s`,
     );

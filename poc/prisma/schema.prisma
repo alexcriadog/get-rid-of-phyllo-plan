@@ -73,6 +73,32 @@ model OAuthToken {
   @@map("oauth_tokens")
 }
 
+/// Append-only history of every OAuth token sealed for an account (on connect
+/// and on each refresh). NO relation to Account on purpose, so it SURVIVES
+/// account deletion/overwrite — the break-glass recovery store read by
+/// scripts/decrypt-token.ts. Tokens stay encrypted (same AES-GCM bytes as
+/// OAuthToken); keyVersion records which active key sealed each row so a
+/// retiring key can be re-sealed before it is dropped from the keyring.
+model OAuthTokenHistory {
+  id                        BigInt    @id @default(autoincrement())
+  accountId                 BigInt    @map("account_id")
+  canonicalUserId           String?   @map("canonical_user_id")
+  platform                  String?
+  connectionFlow            String?   @map("connection_flow")
+  accessTokenCiphertext     Bytes     @map("access_token_ciphertext")
+  userAccessTokenCiphertext Bytes?    @map("user_access_token_ciphertext")
+  refreshTokenCiphertext    Bytes?    @map("refresh_token_ciphertext")
+  scopes                    Json?
+  expiresAt                 DateTime? @map("expires_at")
+  keyVersion                String    @map("key_version")
+  source                    String
+  capturedAt                DateTime  @default(now()) @map("captured_at")
+
+  @@index([canonicalUserId, platform, connectionFlow, capturedAt], map: "oauth_token_history_canonical_idx")
+  @@index([accountId, capturedAt], map: "oauth_token_history_account_idx")
+  @@map("oauth_token_history")
+}
+
 model SyncJob {
   id            BigInt   @id @default(autoincrement())
   accountId     BigInt   @map("account_id")

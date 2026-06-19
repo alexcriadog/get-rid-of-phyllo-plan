@@ -16,6 +16,7 @@ import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
+import { TokenHistoryService } from '@modules/tokens/token-history.service';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 
 const TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
@@ -39,6 +40,7 @@ export class TwitchTokenRefreshService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
+    private readonly tokenHistory: TokenHistoryService,
     private readonly config: ConfigService,
     private readonly lifecycle: TokenLifecycleEmitter,
   ) {}
@@ -133,6 +135,10 @@ export class TwitchTokenRefreshService {
         ...(scopes ? { scopes } : {}),
       },
     });
+
+    // Append the rotated token to the recovery history (best-effort).
+    await this.tokenHistory.record(accountId, 'refresh');
+
     this.logger.log(
       `Twitch token refreshed for account ${accountId.toString()}; expires_in=${expiresInS}s`,
     );

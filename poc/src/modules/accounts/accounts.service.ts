@@ -19,6 +19,7 @@ import { WorkspacesService } from '@modules/workspaces/workspaces.service';
 import { enforceWorkspaceProducts } from './seed-products-enforcement';
 import { isIgDirect } from '@modules/platforms/shared/meta-graph/ig-direct';
 import { connectionFlowFor } from './connection-flow';
+import { TokenHistoryService } from '@modules/tokens/token-history.service';
 
 export type { Platform };
 
@@ -85,6 +86,7 @@ export class AccountsService {
     private readonly aes: AesLocalService,
     private readonly workspaces: WorkspacesService,
     private readonly redis: RedisService,
+    private readonly tokenHistory: TokenHistoryService,
     // Optional: when AccountsModule is imported into a process that doesn't
     // wire OutboundWebhooks (e.g. the worker), seeding still succeeds —
     // emit is just a no-op.
@@ -282,6 +284,11 @@ export class AccountsService {
           lastRefreshedAt: now,
         },
       });
+
+      // Snapshot the just-sealed token into the append-only recovery history,
+      // inside the same tx. Best-effort (never throws) so it can't break the
+      // connect; survives a later overwrite/delete of this account's token.
+      await this.tokenHistory.record(account.id, 'connect', tx);
 
       const jobIds: string[] = [];
       for (const product of enforcedProducts) {

@@ -17,6 +17,7 @@ import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
+import { TokenHistoryService } from '@modules/tokens/token-history.service';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -41,6 +42,7 @@ export class YoutubeTokenRefreshService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
+    private readonly tokenHistory: TokenHistoryService,
     private readonly config: ConfigService,
     private readonly lifecycle: TokenLifecycleEmitter,
   ) {}
@@ -118,6 +120,10 @@ export class YoutubeTokenRefreshService {
         lastRefreshedAt: new Date(),
       },
     });
+
+    // Append the rotated token to the recovery history (best-effort).
+    await this.tokenHistory.record(accountId, 'refresh');
+
     this.logger.log(
       `YouTube token refreshed for account ${accountId.toString()}; expires_in=${expiresInS}s`,
     );

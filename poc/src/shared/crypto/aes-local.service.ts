@@ -1,5 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'node:crypto';
 import { AppConfigService } from '@shared/config/config.module';
 
 const ALGORITHM = 'aes-256-gcm';
@@ -101,6 +106,15 @@ export class AesLocalService implements OnModuleInit {
       `AES decrypt failed against the active key and ${this.oldKeys.length} retired key(s): ` +
         (lastErr instanceof Error ? lastErr.message : String(lastErr)),
     );
+  }
+
+  /**
+   * Stable short fingerprint of the ACTIVE key (first 12 hex of its SHA-256).
+   * Recorded with each token-history row so a retiring key can be identified
+   * and its rows re-sealed before it is dropped from LOCAL_AES_KEYS_OLD.
+   */
+  keyId(): string {
+    return createHash('sha256').update(this.key).digest('hex').slice(0, 12);
   }
 }
 

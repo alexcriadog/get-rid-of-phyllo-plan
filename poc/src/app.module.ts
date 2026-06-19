@@ -22,6 +22,7 @@ import { OutboundWebhooksModule } from '@modules/outbound-webhooks/outbound-webh
 import { AdminSaasModule } from '@modules/admin-saas/admin-saas.module';
 import { TokenRefreshModule } from '@modules/token-refresh/token-refresh.module';
 import { DataApiModule } from '@modules/data-api/data-api.module';
+import { TokenHistoryModule } from '@modules/tokens/token-history.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { DataApiModule } from '@modules/data-api/data-api.module';
     SharedDatabaseModule,
     SharedMongoModule,
     SharedCryptoModule,
+    TokenHistoryModule,
     SharedRedisModule,
     SharedMetricsModule,
     PlatformsModule,

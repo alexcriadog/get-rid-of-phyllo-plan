@@ -13,6 +13,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
+import { TokenHistoryService } from '@modules/tokens/token-history.service';
 import { ConfigService } from '@nestjs/config';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 
@@ -40,6 +41,7 @@ export class TikTokTokenRefreshService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aes: AesLocalService,
+    private readonly tokenHistory: TokenHistoryService,
     private readonly config: ConfigService,
     private readonly lifecycle: TokenLifecycleEmitter,
   ) {}
@@ -159,6 +161,10 @@ export class TikTokTokenRefreshService {
         lastRefreshedAt: new Date(),
       },
     });
+
+    // Append the rotated token to the recovery history (best-effort).
+    await this.tokenHistory.record(accountId, 'refresh');
+
     this.logger.log(
       `TikTok token refreshed for account ${accountId.toString()}; expires_in=${expiresInS}s`,
     );
