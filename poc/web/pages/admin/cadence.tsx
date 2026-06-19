@@ -11,6 +11,7 @@ import { Empty } from '@/components/admin/empty';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ConnectionFlowBadge } from '@/components/account/ConnectionFlowBadge';
 import {
   Tabs,
   TabsContent,
@@ -27,11 +28,28 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 
+// `/admin/cadences` returns the full (platform × product) matrix — including
+// combos with no DB row yet, which surface their effective fallback so they're
+// editable instead of invisible.
 type Cadence = {
   platform: string;
   product: string;
   default_interval_seconds: number;
+  sync_configured: boolean;
+  refresh_interval_seconds: number;
+  refresh_window_days: number;
+  refresh_configured: boolean;
+  updated_at: string | null;
 };
+
+// Only changed fields are PATCHed.
+type CadencePatch = {
+  interval_seconds?: number;
+  refresh_interval_seconds?: number;
+  refresh_window_days?: number;
+};
+
+type MutState = { busy: boolean; error: string | null };
 
 type ProductHealth = {
   product?: string;
@@ -43,6 +61,7 @@ type AdminAccount = {
   id: string;
   platform: string;
   handle?: string | null;
+  connection_flow?: string | null;
   sync_tier?: string;
   status?: string;
   products?: ProductHealth[] | Record<string, ProductHealth>;
@@ -56,13 +75,18 @@ type NextRun = {
   next_run_at: string;
 };
 
-const PRESETS: Array<{ label: string; s: number }> = [
+const INTERVAL_PRESETS: Array<{ label: string; s: number }> = [
+  { label: '15m', s: 900 },
   { label: '30m', s: 1800 },
   { label: '1h', s: 3600 },
-  { label: '2h', s: 7200 },
   { label: '6h', s: 21600 },
   { label: '24h', s: 86400 },
 ];
+
+const MIN_INTERVAL = 60;
+const MAX_INTERVAL = 30 * 86_400;
+const MIN_WINDOW_DAYS = 1;
+const MAX_WINDOW_DAYS = 365;
 
 export default function CadencePage() {
   const cadencesLive = useLive<Cadence[]>('/admin/cadences', 5000);
@@ -73,8 +97,10 @@ export default function CadencePage() {
   );
 
   const [tab, setTab] = useState('defaults');
-  const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [mutState, setMutState] = useState<Record<string, MutState>>({});
+  const [filter, setFilter] = useState('');
+  const [openPlatforms, setOpenPlatforms] = useState<Set<string>>(new Set());
 
   const cadences = cadencesLive.data ?? [];
   const accounts = accountsLive.data ?? [];
@@ -83,23 +109,50 @@ export default function CadencePage() {
   const heatmap = useMemo(() => buildScheduleHeatmap(nextRuns), [nextRuns]);
   const overrides = useMemo(() => collectOverrides(accounts), [accounts]);
 
-  const updateInterval = async (
+  // Backend already sorts platform asc → product asc; group consecutively.
+  const groups = useMemo(() => groupByPlatform(cadences), [cadences]);
+  const q = filter.trim().toLowerCase();
+  const filteredGroups = useMemo(() => {
+    if (!q) return groups;
+    return groups
+      .map((g) => ({
+        platform: g.platform,
+        rows: g.rows.filter(
+          (r) =>
+            g.platform.toLowerCase().includes(q) ||
+            r.product.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((g) => g.rows.length > 0);
+  }, [groups, q]);
+
+  // Collapsed by default so the editor scales to many platforms; an active
+  // filter force-expands every matching platform.
+  const isOpen = (platform: string) => q !== '' || openPlatforms.has(platform);
+  const togglePlatform = (platform: string) =>
+    setOpenPlatforms((s) => {
+      const next = new Set(s);
+      if (next.has(platform)) next.delete(platform);
+      else next.add(platform);
+      return next;
+    });
+
+  const saveCadence = async (
     platform: string,
     product: string,
-    intervalSeconds: number,
+    patch: CadencePatch,
   ) => {
     const k = `${platform}:${product}`;
-    setBusy(k);
+    setMutState((s) => ({ ...s, [k]: { busy: true, error: null } }));
     setErr(null);
     try {
-      await adminPatch(`/admin/cadences/${platform}/${product}`, {
-        interval_seconds: intervalSeconds,
-      });
+      await adminPatch(`/admin/cadences/${platform}/${product}`, patch);
+      setMutState((s) => ({ ...s, [k]: { busy: false, error: null } }));
       cadencesLive.refresh();
     } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(null);
+      const msg = (e as Error).message;
+      setMutState((s) => ({ ...s, [k]: { busy: false, error: msg } }));
+      setErr(msg);
     }
   };
 
@@ -122,16 +175,37 @@ export default function CadencePage() {
         <TabsContent value="defaults">
           <Section
             title="Default cadences"
-            description="Edit the interval applied to every account on this (platform, product). Per-account overrides are kept separately."
+            description="Per (platform × product): SYNC interval (how often we poll) + REFRESH cadence (engagement-refresh emit throttle + look-back window). Grouped by platform (click to expand); type to filter. Only changed fields are saved."
           >
             {cadences.length === 0 ? (
               <Empty message="No cadences registered yet." />
             ) : (
-              <DefaultsTable
-                cadences={cadences}
-                busy={busy}
-                onSave={updateInterval}
-              />
+              <div className="space-y-3">
+                <Input
+                  placeholder="Filter platform / product…"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  className="max-w-xs"
+                  aria-label="Filter cadences"
+                />
+                {filteredGroups.length === 0 ? (
+                  <Empty message="No cadences match the filter." />
+                ) : (
+                  <div className="space-y-2">
+                    {filteredGroups.map((g) => (
+                      <PlatformGroup
+                        key={g.platform}
+                        platform={g.platform}
+                        rows={g.rows}
+                        expanded={isOpen(g.platform)}
+                        onToggle={togglePlatform}
+                        mutState={mutState}
+                        onSave={saveCadence}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </Section>
         </TabsContent>
@@ -172,107 +246,240 @@ export default function CadencePage() {
   );
 }
 
-function DefaultsTable({
-  cadences,
-  busy,
+// ── Defaults: collapsible per-platform groups ───────────────────────────────────
+
+function PlatformGroup({
+  platform,
+  rows,
+  expanded,
+  onToggle,
+  mutState,
   onSave,
 }: {
-  cadences: Cadence[];
-  busy: string | null;
-  onSave: (platform: string, product: string, sec: number) => Promise<void>;
+  platform: string;
+  rows: Cadence[];
+  expanded: boolean;
+  onToggle: (platform: string) => void;
+  mutState: Record<string, MutState>;
+  onSave: (p: string, prod: string, patch: CadencePatch) => Promise<void>;
 }) {
+  const customCount = rows.filter(
+    (r) => r.sync_configured || r.refresh_configured,
+  ).length;
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Platform</TableHead>
-          <TableHead>Product</TableHead>
-          <TableHead className="text-right">Interval</TableHead>
-          <TableHead>Quick presets</TableHead>
-          <TableHead className="text-right">Save</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {cadences.map((c) => (
+    <div className="rounded-lg border border-border">
+      <button
+        type="button"
+        onClick={() => onToggle(platform)}
+        aria-expanded={expanded}
+        aria-label={`Toggle ${platform} cadences`}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-secondary/30"
+      >
+        <span className="w-3 shrink-0 text-muted-foreground" aria-hidden="true">
+          {expanded ? '▾' : '▸'}
+        </span>
+        <Badge variant="outline">{platform}</Badge>
+        <span className="text-xs text-muted-foreground">
+          {rows.length} products
+        </span>
+        {customCount > 0 && (
+          <span className="text-xs text-primary">· {customCount} custom</span>
+        )}
+      </button>
+      <div
+        className={cn(
+          'divide-y divide-border/40 border-t border-border px-3',
+          !expanded && 'hidden',
+        )}
+      >
+        {rows.map((c) => (
           <CadenceRow
             key={`${c.platform}:${c.product}`}
             cadence={c}
-            busy={busy}
+            mut={
+              mutState[`${c.platform}:${c.product}`] ?? {
+                busy: false,
+                error: null,
+              }
+            }
             onSave={onSave}
           />
         ))}
-      </TableBody>
-    </Table>
+      </div>
+    </div>
   );
 }
 
+// Each row tracks its own local sync interval, refresh interval and refresh
+// window so values can be typed without committing. Save sends only the fields
+// that differ from server state.
 function CadenceRow({
   cadence,
-  busy,
+  mut,
   onSave,
 }: {
   cadence: Cadence;
-  busy: string | null;
-  onSave: (platform: string, product: string, sec: number) => Promise<void>;
+  mut: MutState;
+  onSave: (p: string, prod: string, patch: CadencePatch) => Promise<void>;
 }) {
-  const [value, setValue] = useState(cadence.default_interval_seconds);
-  const k = `${cadence.platform}:${cadence.product}`;
-  const dirty = value !== cadence.default_interval_seconds;
+  const [sync, setSync] = useState(cadence.default_interval_seconds);
+  const [refresh, setRefresh] = useState(cadence.refresh_interval_seconds);
+  const [windowDays, setWindowDays] = useState(cadence.refresh_window_days);
+
+  const patch = useMemo<CadencePatch>(() => {
+    const p: CadencePatch = {};
+    if (sync !== cadence.default_interval_seconds) p.interval_seconds = sync;
+    if (refresh !== cadence.refresh_interval_seconds)
+      p.refresh_interval_seconds = refresh;
+    if (windowDays !== cadence.refresh_window_days)
+      p.refresh_window_days = windowDays;
+    return p;
+  }, [sync, refresh, windowDays, cadence]);
+
+  const dirty = Object.keys(patch).length > 0;
+  const configured = cadence.sync_configured || cadence.refresh_configured;
+
   return (
-    <TableRow className="font-mono text-xs">
-      <TableCell>
-        <Badge variant="outline">{cadence.platform}</Badge>
-      </TableCell>
-      <TableCell>{cadence.product}</TableCell>
-      <TableCell className="text-right">
-        <div className="flex items-center justify-end gap-2">
-          <Input
-            type="number"
-            value={value}
-            min={60}
-            max={30 * 86_400}
-            onChange={(e) => setValue(Number(e.target.value))}
-            className="h-8 w-[110px] text-right font-mono text-xs"
-          />
-          <span className="text-muted-foreground">
-            s · {humanInterval(value)}
-          </span>
-        </div>
-      </TableCell>
-      <TableCell>
-        <div className="flex flex-wrap gap-1">
-          {PRESETS.map((p) => (
-            <Button
-              key={p.label}
-              variant={value === p.s ? 'default' : 'outline'}
-              size="sm"
-              className="h-7 px-2 text-[10px]"
-              onClick={() => setValue(p.s)}
-            >
-              {p.label}
-            </Button>
-          ))}
-        </div>
-      </TableCell>
-      <TableCell className="text-right">
+    <div className="py-2.5">
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className="font-mono text-xs font-semibold">{cadence.product}</span>
+        <Badge
+          variant={configured ? 'primary' : 'outline'}
+          className="px-1.5 py-0 text-[9px]"
+        >
+          {configured ? 'custom' : 'default'}
+        </Badge>
         <Button
           size="sm"
           variant={dirty ? 'default' : 'outline'}
-          disabled={!dirty || busy === k}
-          onClick={() => onSave(cadence.platform, cadence.product, value)}
-          className={cn(!dirty && 'opacity-50')}
+          disabled={!dirty || mut.busy}
+          onClick={() => {
+            if (dirty && !mut.busy)
+              void onSave(cadence.platform, cadence.product, patch);
+          }}
+          className={cn('ml-auto', !dirty && 'opacity-50')}
         >
-          {busy === k ? '…' : 'Save'}
+          {mut.busy ? '…' : 'Save'}
         </Button>
-      </TableCell>
-    </TableRow>
+      </div>
+
+      <IntervalField
+        label="sync"
+        idPrefix={`${cadence.platform}-${cadence.product}-sync`}
+        value={sync}
+        onChange={setSync}
+      />
+
+      <div className="mt-1.5">
+        <IntervalField
+          label="refresh"
+          idPrefix={`${cadence.platform}-${cadence.product}-refresh`}
+          value={refresh}
+          onChange={setRefresh}
+        />
+        <div className="mt-1 flex items-center gap-2">
+          <span className="w-14 shrink-0 text-[10px] text-muted-foreground">
+            window
+          </span>
+          <Input
+            type="number"
+            value={windowDays}
+            min={MIN_WINDOW_DAYS}
+            max={MAX_WINDOW_DAYS}
+            onChange={(e) => setWindowDays(Number(e.target.value))}
+            className="h-8 w-24 font-mono text-xs"
+            aria-label={`${cadence.platform} ${cadence.product} refresh window in days`}
+          />
+          <span className="text-[10px] text-muted-foreground">days</span>
+        </div>
+      </div>
+
+      {mut.error && (
+        <div
+          className="mt-1 truncate text-[10px] text-danger"
+          role="alert"
+          title={mut.error}
+        >
+          {mut.error}
+        </div>
+      )}
+    </div>
   );
 }
+
+// A labelled interval editor: presets + numeric seconds input + human label.
+function IntervalField({
+  label,
+  idPrefix,
+  value,
+  onChange,
+}: {
+  label: string;
+  idPrefix: string;
+  value: number;
+  onChange: (s: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="w-14 shrink-0 text-[10px] text-muted-foreground">
+        {label}
+      </span>
+      <div
+        className="flex flex-wrap gap-1"
+        role="group"
+        aria-label={`${label} presets`}
+      >
+        {INTERVAL_PRESETS.map((p) => (
+          <Button
+            key={p.label}
+            variant={value === p.s ? 'default' : 'outline'}
+            size="sm"
+            className="h-7 px-2 text-[10px]"
+            onClick={() => onChange(p.s)}
+          >
+            {p.label}
+          </Button>
+        ))}
+      </div>
+      <Input
+        type="number"
+        value={value}
+        min={MIN_INTERVAL}
+        max={MAX_INTERVAL}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-8 w-28 font-mono text-xs"
+        aria-label={`${idPrefix} interval in seconds`}
+      />
+      <span className="text-[10px] text-muted-foreground">
+        {humanInterval(value)}
+      </span>
+    </div>
+  );
+}
+
+function groupByPlatform(
+  cadences: Cadence[],
+): Array<{ platform: string; rows: Cadence[] }> {
+  const groups: Array<{ platform: string; rows: Cadence[] }> = [];
+  for (const c of cadences) {
+    const last = groups[groups.length - 1];
+    if (last && last.platform === c.platform) {
+      last.rows.push(c);
+    } else {
+      groups.push({ platform: c.platform, rows: [c] });
+    }
+  }
+  return groups;
+}
+
+// ── Overrides ───────────────────────────────────────────────────────────────────
 
 type Override = {
   accountId: string;
   accountHandle?: string | null;
   platform: string;
+  connectionFlow?: string | null;
   product: string;
   nextRunAt?: string | null;
 };
@@ -287,6 +494,7 @@ function collectOverrides(accounts: AdminAccount[]): Override[] {
           accountId: a.id,
           accountHandle: a.handle,
           platform: a.platform,
+          connectionFlow: a.connection_flow,
           product,
           nextRunAt: p.next_run_at ?? null,
         });
@@ -314,7 +522,10 @@ function OverridesTable({ overrides }: { overrides: Override[] }) {
             className="font-mono text-xs"
           >
             <TableCell>
-              <div>{o.accountHandle ?? `Account ${o.accountId}`}</div>
+              <div className="flex items-center gap-1.5">
+                <span>{o.accountHandle ?? `Account ${o.accountId}`}</span>
+                <ConnectionFlowBadge flow={o.connectionFlow} />
+              </div>
               <div className="font-mono text-[10px] text-muted-foreground">
                 {o.platform} · #{o.accountId}
               </div>
@@ -338,6 +549,7 @@ function OverridesTable({ overrides }: { overrides: Override[] }) {
 }
 
 function humanInterval(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
   if (seconds < 60) return `${seconds}s`;
   const m = seconds / 60;
   if (m < 60) return `${m.toFixed(0)}m`;
@@ -373,9 +585,7 @@ function buildScheduleHeatmap(runs: NextRun[]) {
   });
 
   // Aggregate BY ACCOUNT (not by account+product). Cell value = total syncs
-  // this account fires in that hour, summed over all products. With 5
-  // cuentas × 4 productos = 20 syncs/24h, you now see 5 rows densely
-  // populated instead of 20 rows almost empty.
+  // this account fires in that hour, summed over all products.
   const rowSet = new Set<string>();
   const cellMap = new Map<string, number>();
   const start = now.getTime();
