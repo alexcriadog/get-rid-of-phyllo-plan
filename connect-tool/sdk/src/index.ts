@@ -34,8 +34,16 @@ export interface CamaleonicConnectOptions {
   onExit?: () => void;
 }
 
+/**
+ * Platform a caller can open the connector at. Besides the real platforms, the
+ * pseudo-key 'instagram_direct' opens Instagram in Business-Login mode (no
+ * Facebook Page) directly, so the host app doesn't have to make the user choose
+ * the flow a second time inside the connector.
+ */
+export type OpenPlatform = PlatformKey | 'instagram_direct';
+
 export interface CamaleonicConnectHandle {
-  open: (platform?: PlatformKey) => void;
+  open: (platform?: OpenPlatform) => void;
   close: () => void;
 }
 
@@ -89,8 +97,8 @@ function requireOpt(opts: CamaleonicConnectOptions, key: 'sdkToken' | 'workspace
 
 function effectivePlatform(
   opts: CamaleonicConnectOptions,
-  arg: PlatformKey | undefined,
-): PlatformKey | undefined {
+  arg: OpenPlatform | undefined,
+): OpenPlatform | undefined {
   if (arg) return arg;
   if (opts.platform) return opts.platform;
   if (opts.platforms && opts.platforms.length === 1) return opts.platforms[0];
@@ -100,7 +108,7 @@ function effectivePlatform(
 function buildConnectUrl(
   baseUrl: string,
   opts: CamaleonicConnectOptions,
-  platform: PlatformKey | undefined,
+  platform: OpenPlatform | undefined,
 ): string {
   const qs = new URLSearchParams({
     ws: opts.workspace,
@@ -203,11 +211,15 @@ function init(opts: CamaleonicConnectOptions): CamaleonicConnectHandle {
     document.body.appendChild(overlay);
   }
 
-  function open(platform?: PlatformKey): void {
+  function open(platform?: OpenPlatform): void {
     if (overlay) return; // already open
     done = false;
     const plat = effectivePlatform(opts, platform);
-    if (plat && opts.platforms && opts.platforms.length > 1 && opts.platforms.indexOf(plat) === -1) {
+    // 'instagram_direct' opens the same Instagram surface, so validate the
+    // allow-list against its base platform.
+    const allowKey: PlatformKey | undefined =
+      plat === 'instagram_direct' ? 'instagram' : plat;
+    if (allowKey && opts.platforms && opts.platforms.length > 1 && opts.platforms.indexOf(allowKey) === -1) {
       emitError('invalid_platform', 'platform "' + plat + '" is not in the configured allow-list');
       return;
     }
@@ -220,7 +232,7 @@ function init(opts: CamaleonicConnectOptions): CamaleonicConnectHandle {
       if (data.type === MSG.resize && modal && typeof data.height === 'number') {
         modal.style.height = Math.max(MIN_HEIGHT, data.height) + 'px';
       } else if (data.type === MSG.success) {
-        emitSuccess({ accountIds: Array.isArray(data.accountIds) ? data.accountIds : [], platform: data.platform ?? plat ?? null });
+        emitSuccess({ accountIds: Array.isArray(data.accountIds) ? data.accountIds : [], platform: data.platform ?? allowKey ?? null });
       } else if (data.type === MSG.exit) {
         emitExit();
       } else if (data.type === MSG.error) {

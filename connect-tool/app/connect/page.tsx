@@ -41,7 +41,14 @@ export default async function ConnectPage({
   const token = first(sp.token);
   const origin = first(sp.origin);
   const rawPlatform = first(sp.platform);
-  const platform: PlatformKey | undefined = isPlatformKey(rawPlatform) ? rawPlatform : undefined;
+  // The host app can request 'instagram_direct' to open Instagram in
+  // Business-Login mode (no Facebook Page) directly — it maps to the 'instagram'
+  // platform plus the initialDirect flag passed to ConnectShell below.
+  const initialDirect = rawPlatform === 'instagram_direct';
+  const normalizedPlatform = initialDirect ? 'instagram' : rawPlatform;
+  const platform: PlatformKey | undefined = isPlatformKey(normalizedPlatform)
+    ? normalizedPlatform
+    : undefined;
   const theme: 'light' | 'dark' = first(sp.theme) === 'dark' ? 'dark' : 'light';
 
   if (!ws || !token) {
@@ -116,6 +123,7 @@ export default async function ConnectPage({
       offeredPlatforms={offered}
       platformUnavailable={platformUnavailable}
       igDirectEnabled={process.env.IG_DIRECT_ENABLED === '1'}
+      initialDirect={initialDirect}
     />
   );
 }

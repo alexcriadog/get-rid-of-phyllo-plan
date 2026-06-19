@@ -35,8 +35,15 @@ export interface CamaleonicConnectOptions {
     onError?: (err: ErrorPayload) => void;
     onExit?: () => void;
 }
+/**
+ * Platform a caller can open the connector at. Besides the real platforms, the
+ * pseudo-key 'instagram_direct' opens Instagram in Business-Login mode (no
+ * Facebook Page) directly, so the host app doesn't have to make the user choose
+ * the flow a second time inside the connector.
+ */
+export type OpenPlatform = PlatformKey | 'instagram_direct';
 export interface CamaleonicConnectHandle {
-    open: (platform?: PlatformKey) => void;
+    open: (platform?: OpenPlatform) => void;
     close: () => void;
 }
 declare function init(opts: CamaleonicConnectOptions): CamaleonicConnectHandle;

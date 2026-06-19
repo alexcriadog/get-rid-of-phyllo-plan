@@ -46,6 +46,9 @@ interface Props {
   /** IG-direct (Instagram Business Login) rollout flag — shows the
    *  "connect without a Facebook Page" secondary action. */
   igDirectEnabled: boolean;
+  /** When the host opened the connector at 'instagram_direct', start Instagram
+   *  in Business-Login mode directly (IG-direct becomes the primary action). */
+  initialDirect?: boolean;
 }
 
 export function ConnectShell(props: Props) {
@@ -120,6 +123,10 @@ export function ConnectShell(props: Props) {
   }
 
   const conns = platform ? props.initialConnections.filter((c) => c.platform === platform) : [];
+  // Host requested 'instagram_direct' → make Instagram Business Login the
+  // primary action at the guidance step (no separate toggle to hunt for).
+  const igDirectMode =
+    platform === 'instagram' && !!props.initialDirect && props.igDirectEnabled;
 
   const rootStyle = props.accent
     ? ({ ['--cml-accent']: props.accent, ['--cml-on-accent']: '#ffffff' } as React.CSSProperties)
@@ -214,22 +221,39 @@ export function ConnectShell(props: Props) {
         ) : step === 'guidance' && platform ? (
           <div className="cml-step cml-center">
             <div className="cml-hero"><PlatformIcon platform={platform} large /></div>
-            <h2 className="cml-title">{guidance(platform).title}</h2>
-            <p className="cml-sub">{guidance(platform).body}</p>
+            <h2 className="cml-title">{guidance(platform, igDirectMode).title}</h2>
+            <p className="cml-sub">{guidance(platform, igDirectMode).body}</p>
             <div className="cml-btn__row">
-              <button
-                className="cml-btn cml-btn--brand"
-                style={{ background: BRAND[startPlatform(platform)].bg }}
-                disabled={connecting}
-                onClick={() => login(platform)}
-              >
-                {connecting ? 'Waiting for login…' : `Continue with ${BRAND[platform].provider}`}
-              </button>
+              {igDirectMode ? (
+                <button
+                  className="cml-btn cml-btn--accent"
+                  disabled={connecting}
+                  onClick={() => login(platform, true)}
+                >
+                  {connecting ? 'Waiting for login…' : 'Continue with Instagram'}
+                </button>
+              ) : (
+                <button
+                  className="cml-btn cml-btn--brand"
+                  style={{ background: BRAND[startPlatform(platform)].bg }}
+                  disabled={connecting}
+                  onClick={() => login(platform)}
+                >
+                  {connecting ? 'Waiting for login…' : `Continue with ${BRAND[platform].provider}`}
+                </button>
+              )}
             </div>
-            {platform === 'instagram' && props.igDirectEnabled && (
+            {platform === 'instagram' && props.igDirectEnabled && !igDirectMode && (
               <div className="cml-link-row">
                 <button className="cml-ghost" disabled={connecting} onClick={() => login(platform, true)}>
                   No Facebook Page? Connect with Instagram directly
+                </button>
+              </div>
+            )}
+            {igDirectMode && (
+              <div className="cml-link-row">
+                <button className="cml-ghost" disabled={connecting} onClick={() => login(platform, false)}>
+                  Connect via a Facebook Page instead
                 </button>
               </div>
             )}
@@ -241,8 +265,14 @@ export function ConnectShell(props: Props) {
   );
 }
 
-function guidance(p: PlatformKey): { title: string; body: string } {
+function guidance(p: PlatformKey, direct = false): { title: string; body: string } {
   if (p === 'instagram') {
+    if (direct) {
+      return {
+        title: 'Connect Instagram directly',
+        body: 'Log in with your Instagram professional account — no Facebook Page needed.',
+      };
+    }
     return {
       title: 'Connect Instagram via Facebook',
       body: 'Instagram business accounts connect through Facebook. Select the linked Page and grant all requested permissions.',

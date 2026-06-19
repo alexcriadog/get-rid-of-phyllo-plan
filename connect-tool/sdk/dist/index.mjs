@@ -1,6 +1,6 @@
-/*! Camaleonic Connect SDK v2.0.0 — 2026-06-04 */
+/*! Camaleonic Connect SDK v2.0.0 — 2026-06-19 */
 
-// sdk/src/index.ts
+// src/index.ts
 var VERSION = "2.0.0";
 var MSG = {
   resize: "camaleonic.connect.resize",
@@ -157,7 +157,8 @@ function init(opts) {
     if (overlay) return;
     done = false;
     const plat = effectivePlatform(opts, platform);
-    if (plat && opts.platforms && opts.platforms.length > 1 && opts.platforms.indexOf(plat) === -1) {
+    const allowKey = plat === "instagram_direct" ? "instagram" : plat;
+    if (allowKey && opts.platforms && opts.platforms.length > 1 && opts.platforms.indexOf(allowKey) === -1) {
       emitError("invalid_platform", 'platform "' + plat + '" is not in the configured allow-list');
       return;
     }
@@ -169,7 +170,7 @@ function init(opts) {
       if (data.type === MSG.resize && modal && typeof data.height === "number") {
         modal.style.height = Math.max(MIN_HEIGHT, data.height) + "px";
       } else if (data.type === MSG.success) {
-        emitSuccess({ accountIds: Array.isArray(data.accountIds) ? data.accountIds : [], platform: data.platform ?? plat ?? null });
+        emitSuccess({ accountIds: Array.isArray(data.accountIds) ? data.accountIds : [], platform: data.platform ?? allowKey ?? null });
       } else if (data.type === MSG.exit) {
         emitExit();
       } else if (data.type === MSG.error) {
