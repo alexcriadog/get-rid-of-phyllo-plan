@@ -14,6 +14,7 @@ import {
   listContentShape,
   getContentAnalyticsShape,
   getContentCommentsShape,
+  analyticsOverviewShape,
 } from "./tool-schemas";
 
 function text(s: string): McpToolResult {
@@ -62,7 +63,7 @@ export class McpServerFactory {
       MCP_TOOL.GET_ACCOUNT,
       {
         description:
-          "Get profile and reputation (followers, following, content count, verified) for one connected account.",
+          "Get the full profile for one connected account: followers, following, subscribers, content count, total likes, category, account type, bio, website, country, verified.",
         inputSchema: getAccountShape,
       },
       async (args) =>
@@ -73,7 +74,7 @@ export class McpServerFactory {
       MCP_TOOL.GET_ACCOUNT_AUDIENCE,
       {
         description:
-          "Get audience demographics (top countries, cities, gender × age) for one connected account.",
+          "Get audience demographics for one connected account: top countries, cities, gender × age, and gender/age splits.",
         inputSchema: getAccountAudienceShape,
       },
       async (args) =>
@@ -89,12 +90,14 @@ export class McpServerFactory {
       MCP_TOOL.LIST_CONTENT,
       {
         description:
-          "List recent posts/videos for an account with engagement metrics. Dates are ISO YYYY-MM-DD; when the user names a month, use the most recent occurrence rather than a year from training data.",
+          "List posts/videos for an account with caption, hashtags and engagement metrics. Filter by `hashtag` (e.g. to find which post has #Sponsorship), by `query` (caption text), and/or by date range. Dates are ISO YYYY-MM-DD; when the user names a month, use the most recent occurrence rather than a year from training data.",
         inputSchema: listContentShape,
       },
       async (args) =>
         text(
           await this.tools.listContent(workspaceId, String(args.account_id), {
+            hashtag: str(args.hashtag),
+            query: str(args.query),
             fromDate: str(args.from_date),
             toDate: str(args.to_date),
             limit: num(args.limit),
@@ -107,7 +110,7 @@ export class McpServerFactory {
       MCP_TOOL.GET_CONTENT_ANALYTICS,
       {
         description:
-          "Get detailed analytics for one published post/video (impressions, reach, likes, comments, shares, saves, views).",
+          "Get full analytics for one published post/video: complete caption, hashtags, mentions, every engagement metric (likes, comments, shares, saves, views, organic/paid impressions & reach, watch time, profile visits, link clicks, followers gained, ...), plus per-post audience and deep insights when available.",
         inputSchema: getContentAnalyticsShape,
       },
       async (args) =>
@@ -133,6 +136,24 @@ export class McpServerFactory {
             String(args.content_id),
             { limit: num(args.limit), offset: num(args.offset) },
           ),
+        ),
+    );
+
+    server.registerTool(
+      MCP_TOOL.GET_ANALYTICS_OVERVIEW,
+      {
+        description:
+          "Aggregate performance across all the workspace's accounts over a period (default last 30 days): total posts, views, impressions, reach, likes, comments, shares, saves and engagement rate, plus per-platform and per-account breakdowns. Use `period` (7d/30d/90d) or a custom from_date/to_date, and optionally limit to one `platform`.",
+        inputSchema: analyticsOverviewShape,
+      },
+      async (args) =>
+        text(
+          await this.tools.getAnalyticsOverview(workspaceId, {
+            period: str(args.period),
+            fromDate: str(args.from_date),
+            toDate: str(args.to_date),
+            platform: str(args.platform),
+          }),
         ),
     );
 

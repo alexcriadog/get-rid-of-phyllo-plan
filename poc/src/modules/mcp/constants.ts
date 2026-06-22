@@ -11,6 +11,7 @@ export const MCP_TOOL = {
   LIST_CONTENT: "list_content",
   GET_CONTENT_ANALYTICS: "get_content_analytics",
   GET_CONTENT_COMMENTS: "get_content_comments",
+  GET_ANALYTICS_OVERVIEW: "get_analytics_overview",
 } as const;
 
 export const MCP_DEFAULT_PAGE_LIMIT = 20;

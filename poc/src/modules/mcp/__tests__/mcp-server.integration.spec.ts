@@ -26,6 +26,7 @@ function stubTools(): McpToolsService {
     listContent: async () => "Content for Acme (showing 0, offset 0):",
     getContentAnalytics: async () => "**Content `c1`**",
     getContentComments: async () => "Comments (0):",
+    getAnalyticsOverview: async () => "**Analytics overview — last 30 days** (1 account(s))",
   } as unknown as McpToolsService;
 }
 
@@ -79,7 +80,7 @@ describe("MCP server over HTTP (in-process)", () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  it("lists all 7 read tools over the wire", async () => {
+  it("lists all 8 read tools over the wire", async () => {
     const transport = new StreamableHTTPClientTransport(new URL(baseUrl));
     const client = new Client({ name: "test-client", version: "0.0.1" });
     await client.connect(transport);
@@ -90,6 +91,7 @@ describe("MCP server over HTTP (in-process)", () => {
         [
           "get_account",
           "get_account_audience",
+          "get_analytics_overview",
           "get_content_analytics",
           "get_content_comments",
           "list_accounts",
