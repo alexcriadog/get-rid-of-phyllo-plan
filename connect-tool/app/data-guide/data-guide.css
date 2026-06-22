@@ -1,0 +1,499 @@
+/*
+ * Data Guide explorer styles — ported from the validated prototype at
+ * .screenshots/data-guide-mockup/index.html.
+ *
+ * Everything is scoped under `.dg-root` so the oklch design tokens and the
+ * generic class names (.bar, .tab, .grid, etc.) cannot clobber connect-tool
+ * globals. Theme tokens live on `.dg-root[data-theme="..."]` rather than
+ * :root for the same reason.
+ */
+
+.dg-root {
+  --dg-font: 'Söhne', 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --dg-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+  --dg-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dg-bar: 52px;
+  --dg-tabs: 46px;
+  --dg-tool: 50px;
+
+  height: 100vh;
+  font-family: var(--dg-font);
+  background: var(--dg-bg);
+  color: var(--dg-text);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.006em;
+  overflow: hidden;
+}
+
+.dg-root[data-theme='light'] {
+  --dg-bg: oklch(99% 0.003 150);
+  --dg-panel: oklch(100% 0 0);
+  --dg-panel-2: oklch(97.5% 0.006 150);
+  --dg-line: oklch(90% 0.008 150);
+  --dg-line-2: oklch(94% 0.006 150);
+  --dg-text: oklch(26% 0.02 162);
+  --dg-dim: oklch(50% 0.018 162);
+  --dg-faint: oklch(66% 0.014 162);
+  --dg-mint: oklch(56% 0.15 160);
+  --dg-mint-bg: oklch(56% 0.15 160 / 0.12);
+  --dg-mint-line: oklch(56% 0.15 160 / 0.3);
+  --dg-hover: oklch(96% 0.012 160);
+  --dg-amber: oklch(62% 0.13 70);
+}
+
+.dg-root[data-theme='dark'] {
+  --dg-bg: oklch(16% 0.012 162);
+  --dg-panel: oklch(19.5% 0.014 162);
+  --dg-panel-2: oklch(22.5% 0.016 162);
+  --dg-line: oklch(29% 0.014 162);
+  --dg-line-2: oklch(25% 0.013 162);
+  --dg-text: oklch(94% 0.012 150);
+  --dg-dim: oklch(72% 0.013 150);
+  --dg-faint: oklch(53% 0.013 150);
+  --dg-mint: oklch(84% 0.16 158);
+  --dg-mint-bg: oklch(84% 0.16 158 / 0.15);
+  --dg-mint-line: oklch(84% 0.16 158 / 0.34);
+  --dg-hover: oklch(23% 0.016 162);
+  --dg-amber: oklch(80% 0.13 75);
+}
+
+.dg-root *,
+.dg-root *::before,
+.dg-root *::after {
+  box-sizing: border-box;
+}
+
+.dg-root .mono {
+  font-family: var(--dg-mono);
+}
+
+/* ── Top bar ──────────────────────────────────────────────── */
+.dg-root .bar {
+  height: var(--dg-bar);
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--dg-line);
+  background: var(--dg-panel);
+}
+.dg-root .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.dg-root .brand .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--dg-mint);
+  box-shadow: 0 0 0 3px var(--dg-mint-bg);
+}
+.dg-root .brand .sub {
+  color: var(--dg-faint);
+  font-family: var(--dg-mono);
+  font-size: 0.72rem;
+  padding-left: 0.5rem;
+  margin-left: 0.35rem;
+  border-left: 1px solid var(--dg-line);
+  font-weight: 500;
+}
+.dg-root .stamp {
+  font-family: var(--dg-mono);
+  font-size: 0.72rem;
+  color: var(--dg-dim);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.dg-root .stamp .live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dg-mint);
+  animation: dg-blink 2.4s var(--dg-ease) infinite;
+}
+@keyframes dg-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.dg-root .stamp b {
+  color: var(--dg-mint);
+}
+.dg-root .grow {
+  flex: 1;
+}
+.dg-root .search {
+  font-family: var(--dg-mono);
+  font-size: 0.8rem;
+  color: var(--dg-text);
+  background: var(--dg-panel-2);
+  border: 1px solid var(--dg-line);
+  border-radius: 7px;
+  padding: 0.42rem 0.7rem;
+  width: 250px;
+}
+.dg-root .search:focus {
+  outline: none;
+  border-color: var(--dg-mint-line);
+}
+.dg-root .search::placeholder {
+  color: var(--dg-faint);
+}
+.dg-root .iconbtn {
+  font-family: var(--dg-mono);
+  font-size: 0.72rem;
+  color: var(--dg-dim);
+  background: var(--dg-panel-2);
+  border: 1px solid var(--dg-line);
+  border-radius: 7px;
+  padding: 0.42rem 0.6rem;
+  cursor: pointer;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────── */
+.dg-root .tabs {
+  height: var(--dg-tabs);
+  display: flex;
+  align-items: stretch;
+  gap: 0.15rem;
+  padding: 0 0.7rem;
+  border-bottom: 1px solid var(--dg-line);
+  background: var(--dg-panel);
+  overflow-x: auto;
+}
+.dg-root .tab {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.95rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--dg-dim);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dg-root .tab:hover {
+  color: var(--dg-text);
+}
+.dg-root .tab[aria-selected='true'] {
+  color: var(--dg-text);
+  border-bottom-color: var(--dg-mint);
+  font-weight: 600;
+}
+.dg-root .tab .n {
+  font-family: var(--dg-mono);
+  font-size: 0.68rem;
+  color: var(--dg-faint);
+  background: var(--dg-panel-2);
+  border: 1px solid var(--dg-line);
+  border-radius: 20px;
+  padding: 0.05rem 0.4rem;
+}
+.dg-root .tab[aria-selected='true'] .n {
+  color: var(--dg-mint);
+  border-color: var(--dg-mint-line);
+}
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+.dg-root .toolbar {
+  height: var(--dg-tool);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--dg-line);
+  background: var(--dg-panel-2);
+  overflow-x: auto;
+}
+.dg-root .tlabel {
+  font-family: var(--dg-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dg-faint);
+  white-space: nowrap;
+}
+.dg-root .pchips {
+  display: flex;
+  gap: 0.4rem;
+}
+.dg-root .pchip {
+  font-size: 0.76rem;
+  color: var(--dg-dim);
+  background: var(--dg-panel);
+  border: 1px solid var(--dg-line);
+  border-radius: 20px;
+  padding: 0.28rem 0.6rem;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.16s var(--dg-ease);
+}
+.dg-root .pchip i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dg-mint);
+}
+.dg-root .pchip[data-off='1'] {
+  color: var(--dg-faint);
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.dg-root .pchip[data-off='1'] i {
+  opacity: 0.25;
+  background: var(--dg-faint);
+}
+.dg-root .pchip:hover {
+  border-color: var(--dg-mint-line);
+}
+.dg-root .toggle2 {
+  font-size: 0.76rem;
+  color: var(--dg-dim);
+  background: var(--dg-panel);
+  border: 1px solid var(--dg-line);
+  border-radius: 7px;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dg-root .toggle2[aria-pressed='true'] {
+  background: var(--dg-mint-bg);
+  color: var(--dg-mint);
+  border-color: var(--dg-mint-line);
+  font-weight: 600;
+}
+.dg-root .legend {
+  font-family: var(--dg-mono);
+  font-size: 0.7rem;
+  color: var(--dg-faint);
+  display: inline-flex;
+  gap: 0.7rem;
+  align-items: center;
+  white-space: nowrap;
+}
+.dg-root .legend .on {
+  font-weight: 700;
+}
+.dg-root .legend .cav {
+  color: var(--dg-amber);
+}
+.dg-root .count {
+  font-family: var(--dg-mono);
+  font-size: 0.72rem;
+  color: var(--dg-faint);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ── Grid + table ─────────────────────────────────────────── */
+.dg-root .grid {
+  height: calc(100vh - var(--dg-bar) - var(--dg-tabs) - var(--dg-tool));
+  overflow: auto;
+  background: var(--dg-bg);
+}
+.dg-root table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+}
+.dg-root th,
+.dg-root td {
+  border-bottom: 1px solid var(--dg-line-2);
+  border-right: 1px solid var(--dg-line-2);
+  padding: 0.4rem 0.7rem;
+  text-align: center;
+  font-size: 0.82rem;
+  height: 33px;
+}
+.dg-root thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--dg-panel);
+  font-family: var(--dg-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dg-faint);
+  font-weight: 500;
+}
+.dg-root thead th.dim {
+  opacity: 0.4;
+}
+.dg-root tbody tr:hover td {
+  background: var(--dg-hover);
+}
+.dg-root .c-field {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--dg-panel);
+  text-align: left;
+  font-family: var(--dg-mono);
+  font-size: 0.79rem;
+  color: var(--dg-text);
+  white-space: nowrap;
+}
+.dg-root thead .c-field {
+  z-index: 4;
+}
+.dg-root tbody tr:hover .c-field {
+  background: var(--dg-hover);
+}
+.dg-root .c-desc {
+  text-align: left;
+  color: var(--dg-dim);
+  font-size: 0.8rem;
+  max-width: 440px;
+  white-space: normal;
+  line-height: 1.35;
+  font-family: var(--dg-font);
+}
+.dg-root .type {
+  font-family: var(--dg-mono);
+  font-size: 0.68rem;
+  color: var(--dg-dim);
+  white-space: nowrap;
+}
+.dg-root .type[data-t='datetime'] {
+  color: var(--dg-amber);
+}
+.dg-root .type[data-t='number'] {
+  color: var(--dg-mint);
+}
+.dg-root .on {
+  color: var(--dg-mint);
+  font-weight: 600;
+}
+.dg-root .na {
+  color: var(--dg-faint);
+  opacity: 0.3;
+}
+.dg-root .cav {
+  color: var(--dg-amber);
+  font-size: 0.62rem;
+  vertical-align: super;
+  margin-left: 1px;
+  cursor: help;
+}
+.dg-root .mat {
+  font-family: var(--dg-font);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  padding: 0.05rem 0.34rem;
+  border-radius: 4px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+.dg-root .mat-planned {
+  color: var(--dg-amber);
+  background: color-mix(in oklch, var(--dg-amber) 15%, transparent);
+  border: 1px solid color-mix(in oklch, var(--dg-amber) 38%, transparent);
+}
+.dg-root .mat-beta {
+  color: var(--dg-mint);
+  background: var(--dg-mint-bg);
+  border: 1px solid var(--dg-mint-line);
+}
+.dg-root .fam td {
+  text-align: left;
+  font-family: var(--dg-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dg-dim);
+  font-weight: 600;
+  height: 28px;
+  background: var(--dg-panel-2);
+  cursor: pointer;
+  position: sticky;
+  left: 0;
+}
+.dg-root .fam:hover td {
+  background: var(--dg-hover);
+}
+.dg-root .fam .caret {
+  color: var(--dg-mint);
+  margin-right: 0.55rem;
+  display: inline-block;
+  width: 9px;
+}
+.dg-root .fam .cnt {
+  color: var(--dg-faint);
+  font-weight: 500;
+  margin-left: 0.45rem;
+}
+.dg-root .anote {
+  padding: 0.55rem 1rem;
+  font-size: 0.82rem;
+  color: var(--dg-dim);
+  background: var(--dg-mint-bg);
+  border-bottom: 1px solid var(--dg-mint-line);
+  line-height: 1.4;
+}
+.dg-root .anote b {
+  color: var(--dg-text);
+}
+.dg-root .plat-row {
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dg-root .plat-row .pd {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dg-mint);
+  margin-right: 0.5rem;
+}
+.dg-root .cellbox {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--dg-mint-bg);
+  color: var(--dg-mint);
+  border: 1px solid var(--dg-mint-line);
+  font-size: 0.72rem;
+}
+.dg-root .off {
+  color: var(--dg-faint);
+  opacity: 0.35;
+}
+.dg-root .note {
+  text-align: left;
+  color: var(--dg-dim);
+  font-size: 0.84rem;
+  max-width: 520px;
+  white-space: normal;
+  line-height: 1.4;
+  font-family: var(--dg-font);
+}
+.dg-root .empty {
+  text-align: center;
+  color: var(--dg-faint);
+  padding: 3rem;
+  font-family: var(--dg-mono);
+  font-size: 0.85rem;
+}
