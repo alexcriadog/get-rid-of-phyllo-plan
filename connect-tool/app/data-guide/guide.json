@@ -1,0 +1,2644 @@
+{
+  "generatedAt": "2026-06-22",
+  "productsByPlatform": {
+    "YouTube": [
+      "identity",
+      "audience",
+      "engagement_new",
+      "engagement_deep",
+      "comments",
+      "ads"
+    ],
+    "Instagram": [
+      "identity",
+      "audience",
+      "engagement_new",
+      "stories"
+    ],
+    "TikTok": [
+      "identity",
+      "audience",
+      "engagement_new",
+      "comments"
+    ],
+    "Threads": [
+      "identity",
+      "audience",
+      "engagement_new",
+      "comments",
+      "mentions"
+    ],
+    "Facebook": [
+      "identity",
+      "audience",
+      "engagement_new",
+      "stories",
+      "mentions",
+      "comments",
+      "ratings",
+      "ads"
+    ],
+    "LinkedIn": [
+      "identity",
+      "audience",
+      "engagement_new",
+      "comments",
+      "mentions"
+    ],
+    "Twitch": [
+      "identity",
+      "engagement_new"
+    ]
+  },
+  "tables": {
+    "Identity": {
+      "product": "identity",
+      "offered": {
+        "YouTube": true,
+        "Instagram": true,
+        "TikTok": true,
+        "Threads": true,
+        "Facebook": true,
+        "LinkedIn": true,
+        "Twitch": true
+      },
+      "fields": [
+        {
+          "name": "addresses",
+          "desc": "Postal addresses listed on the profile.",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "category",
+          "desc": "Category of the user's platform account. Ex - For Instagram it's the page type which could be beauty, fitness etc",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": true,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "channel category not always populated (Data API brandingSettings/topicDetails)"
+          }
+        },
+        {
+          "name": "certifications",
+          "desc": "Certifications listed on the profile",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "country",
+          "desc": "Country of the user on the connected platform.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "date_of_birth",
+          "desc": "Date of birth of the user on the platform.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "education",
+          "desc": "Education listed on the profile",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "emails",
+          "desc": "Email addresses associated with the profile.",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "external_id",
+          "desc": "Unique identifier of the profile on the platform.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "first_name",
+          "desc": "First name of the user profile.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "full_name",
+          "desc": "Full name of the user profile.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "gender",
+          "desc": "Gender of the user.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "honors",
+          "desc": "List of honors listed on the profile",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "image_url",
+          "desc": "URL of the profile image on the platform.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          },
+          "caveat": {
+            "LinkedIn": "avatarUrl empty_possible — profile picture not guaranteed via /v2/me; org logo may be absent"
+          }
+        },
+        {
+          "name": "introduction",
+          "desc": "Description of the profile. Ex - For Instagram it's the bio and for YouTube it's the channel introduction.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "is_business",
+          "desc": "true if the user's profile is business account on the platform.",
+          "type": "boolean",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": true,
+            "Twitch": true
+          },
+          "caveat": {
+            "YouTube": "derived from accountType (empty_possible) — channel type not always set",
+            "Instagram": "derived from accountType (empty_possible) — business/creator flag may be empty"
+          }
+        },
+        {
+          "name": "is_verified",
+          "desc": "true if the user's profile is verified by the platform.",
+          "type": "boolean",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "last_name",
+          "desc": "Last name of the user profile.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "nick_name",
+          "desc": "Nickname of the user profile.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "phone_numbers",
+          "desc": "Phone numbers associated with the profile.",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "platform_account_type",
+          "desc": "Account type of the user on the platform.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          },
+          "caveat": {
+            "YouTube": "accountType empty_possible — channel type not always set",
+            "Instagram": "accountType empty_possible — business/creator flag may be empty"
+          }
+        },
+        {
+          "name": "platform_profile_id",
+          "desc": "Unique profile ID of the user on the work platform. Ex - For YouTube it's the channel ID and for Instagram it's the Instagram page ID.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "platform_profile_name",
+          "desc": "User's profile name on the work platform. This is not unique, is displayed prominently on the profile, usually editable and is most commonly associated with that user's identity on the platform. Ex - For YouTube, it's the channel name displayed on the channel page and for Instagram / Twitter / TikTok etc, it's the name displayed on the user's profile page.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "platform_profile_published_at",
+          "desc": "Timestamp when the profile was created on the platform.",
+          "type": "datetime",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "platform_username",
+          "desc": "Username of the connected account. This is used to uniquely identify a user on any platform and usually the name that is present in the URLs, used to tag a user etc. Ex - For YouTube, it's the channel name in the URL and for Instagram / Twitter / TikTok etc, it's the handle.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          },
+          "caveat": {
+            "LinkedIn": "vanityName (username) not guaranteed; falls back to context username"
+          }
+        },
+        {
+          "name": "projects",
+          "desc": "List of projects listed on the profile",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "publications",
+          "desc": "Publications listed on the profile",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "reputation.average_click_rate",
+          "desc": "The historical average clickthrough rate of the publication as percentage.",
+          "type": "",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "reputation.average_open_rate",
+          "desc": "The historical average open rate of the publication as percentage.",
+          "type": "",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "reputation.connection_count",
+          "desc": "Total number of connections of this profile.",
+          "type": "number",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "reputation.content_count",
+          "desc": "Total number of content items (videos, images, posts etc).",
+          "type": "number",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "reputation.content_group_count",
+          "desc": "Total number of content group items (playlists, albums, collections etc).",
+          "type": "",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "reputation.follower_count",
+          "desc": "Total number of followers of this profile.",
+          "type": "number",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "reputation.following_count",
+          "desc": "Total number of profiles this profile is following.",
+          "type": "number",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "reputation.like_count",
+          "desc": "Total number of likes count",
+          "type": "",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "reputation.paid_subscriber_count",
+          "desc": "Total number of paid subscribers.",
+          "type": "",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "reputation.subscriber_count",
+          "desc": "Total number of subscribers.",
+          "type": "number",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "reputation.watch_time_in_hours",
+          "desc": "Total watch time in hours.",
+          "type": "",
+          "family": "reputation",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "url",
+          "desc": "Profile URL on the connected platform.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          },
+          "caveat": {
+            "Threads": "profileUrl empty_possible — reconstructed as threads.net/@username, not returned by /me",
+            "LinkedIn": "profileUrl empty_possible — public profile URL not guaranteed"
+          }
+        },
+        {
+          "name": "username",
+          "desc": "Account username / handle on the platform.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          },
+          "caveat": {
+            "LinkedIn": "vanityName not guaranteed by /v2/me"
+          }
+        },
+        {
+          "name": "volunteer_experiences",
+          "desc": "Volunteering experiences listed on the profile",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "website",
+          "desc": "User website listed on the platform.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": true,
+            "Twitch": false
+          },
+          "caveat": {
+            "LinkedIn": "website empty_possible — org rows only"
+          }
+        },
+        {
+          "name": "work_experiences",
+          "desc": "Work experiences listed on the profile",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        }
+      ]
+    },
+    "Engagement": {
+      "product": "engagement_new",
+      "offered": {
+        "YouTube": true,
+        "Instagram": true,
+        "TikTok": true,
+        "Threads": true,
+        "Facebook": true,
+        "LinkedIn": true,
+        "Twitch": true
+      },
+      "fields": [
+        {
+          "name": "audience",
+          "desc": "Per-content audience demographics (viewers of this item).",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "per-video viewer demographics via deep analytics (demographics empty_possible, owner-only)",
+            "Instagram": "per-post audience breakdowns are access/threshold gated, may be empty",
+            "TikTok": "per-video audience breakdowns gated by per-video viewer threshold"
+          }
+        },
+        {
+          "name": "audience.age_distribution",
+          "desc": "Per-content audience breakdown: age distribution.",
+          "type": "array",
+          "family": "audience",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "audience.audience_types",
+          "desc": "Per-content audience breakdown: audience types.",
+          "type": "array",
+          "family": "audience",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "TikTok": "audienceTypes empty_possible — viewer-type buckets gated by threshold"
+          }
+        },
+        {
+          "name": "audience.cities",
+          "desc": "Per-content audience breakdown: cities.",
+          "type": "array",
+          "family": "audience",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "TikTok": "audienceCities empty_possible — gated by per-video viewer threshold"
+          }
+        },
+        {
+          "name": "audience.countries",
+          "desc": "Per-content audience breakdown: countries.",
+          "type": "array",
+          "family": "audience",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "deep-analytics per-video countries (present only on engagement_deep join)",
+            "TikTok": "audienceCountries empty_possible — gated by per-video viewer threshold"
+          }
+        },
+        {
+          "name": "audience.gender_age_distribution",
+          "desc": "Per-content audience breakdown: gender age distribution.",
+          "type": "array",
+          "family": "audience",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "deep-analytics demographics empty_possible (joint gender×age)"
+          }
+        },
+        {
+          "name": "audience.gender_distribution",
+          "desc": "Per-content audience breakdown: gender distribution.",
+          "type": "array",
+          "family": "audience",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "deep-analytics demographics empty_possible",
+            "TikTok": "audienceGenders empty_possible — gated by per-video viewer threshold"
+          }
+        },
+        {
+          "name": "authors",
+          "desc": "Authors or creators credited on the content item.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "collaboration",
+          "desc": "Collaboration metadata (co-authors / collaborators).",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "content_tags",
+          "desc": "Tags or labels classifying the content item.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "description",
+          "desc": "Description of the content item.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "duration",
+          "desc": "Video duration in seconds (only available for YouTube).",
+          "type": "number",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "engagement.additional_info",
+          "desc": "Container for platform-specific extra metrics (see nested keys).",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "story/post extras (profile_visits, follows, etc.) present only on story/reels media"
+          }
+        },
+        {
+          "name": "engagement.additional_info.bio_link_clicked",
+          "desc": "Platform extra metric: bio link clicked.",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "bio link clicks present only on profile/story media"
+          }
+        },
+        {
+          "name": "engagement.additional_info.completion_rate",
+          "desc": "Platform extra metric: completion rate.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "reels completion rate present only on reels media"
+          }
+        },
+        {
+          "name": "engagement.additional_info.followers_gained",
+          "desc": "Platform extra metric: followers gained.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "follows-from-post present only on eligible media"
+          }
+        },
+        {
+          "name": "engagement.additional_info.profile_visits",
+          "desc": "Platform extra metric: profile visits.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "profile visits from post present only on eligible media"
+          }
+        },
+        {
+          "name": "engagement.additional_info.reels_skip_rate",
+          "desc": "Platform extra metric: reels skip rate.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "reels skip rate present only on reels media"
+          }
+        },
+        {
+          "name": "engagement.additional_info.sticker_interactions",
+          "desc": "Platform extra metric: sticker interactions.",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "sticker interactions present only on story media"
+          }
+        },
+        {
+          "name": "engagement.additional_info.story_navigation",
+          "desc": "Platform extra metric: story navigation.",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "story swipe/tap navigation present only on story media"
+          }
+        },
+        {
+          "name": "engagement.additional_info.story_replies",
+          "desc": "Platform extra metric: story replies.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": true,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "story replies present only on story media",
+            "Facebook": "FB story replies supported on the stories product (story media only)"
+          }
+        },
+        {
+          "name": "engagement.additional_info.total_interactions",
+          "desc": "Platform extra metric: total interactions.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "total interactions present only on eligible media"
+          }
+        },
+        {
+          "name": "engagement.additional_info.unique_media_views",
+          "desc": "Platform extra metric: unique media views.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "unique media views present only on eligible media"
+          }
+        },
+        {
+          "name": "engagement.avg_watch_time_in_sec",
+          "desc": "Average watch time of reel in seconds",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "reels avg watch time present only on reels media"
+          }
+        },
+        {
+          "name": "engagement.click_count",
+          "desc": "Total clicks on the content item (e.g. link clicks).",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.comment_count",
+          "desc": "Total comments.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.dislike_count",
+          "desc": "Total dislikes (owner-only, where the platform exposes it).",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.email_click_rate",
+          "desc": "Email click-through rate (newsletter content).",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.email_open_rate",
+          "desc": "Email open rate (newsletter content).",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.impression_organic_count",
+          "desc": "Total organic impressions.",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": true,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.impression_paid_count",
+          "desc": "Total paid impressions on the content item.",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.like_count",
+          "desc": "Total likes.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.reach_organic_count",
+          "desc": "Total organic reach.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": true,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.reach_paid_count",
+          "desc": "Total paid reach.",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.replay_count",
+          "desc": "Total replays of the content item.",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.repost_count",
+          "desc": "Total reposts of the content item (e.g. Threads reposts).",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": true,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.save_count",
+          "desc": "Total item saves.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.share_count",
+          "desc": "Total shares.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "shares empty_possible — Meta may omit the shares metric for IG"
+          }
+        },
+        {
+          "name": "engagement.spam_report_count",
+          "desc": "Number of spam reports on the content item.",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.unsubscribe_count",
+          "desc": "Unsubscribes attributed to the content item (newsletter).",
+          "type": "",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "engagement.view_count",
+          "desc": "Total views.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "engagement.watch_time_in_hours",
+          "desc": "If format is video - total watch time in hours.",
+          "type": "number",
+          "family": "engagement",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "reels total watch time present only on reels media"
+          }
+        },
+        {
+          "name": "external_id",
+          "desc": "Unique identifier of the profile on the platform.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "format",
+          "desc": "Media type of the content item. - VIDEO / IMAGE / AUDIO / TEXT / OTHER",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "hashtags",
+          "desc": "Array of hashtags used in the media description",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "insights",
+          "desc": "Deep per-item analytics bundle (platform-specific).",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.audience_retention",
+          "desc": "Audience retention curve for the content item.",
+          "type": "array",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "retentionCurve empty_possible (engagement_deep, owner-only)"
+          }
+        },
+        {
+          "name": "insights.devices",
+          "desc": "Views by device type.",
+          "type": "array",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.countries",
+          "desc": "Deep analytics: extra countries.",
+          "type": "array",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.annotationClickThroughRate",
+          "desc": "YouTube Analytics metric: annotation click through rate.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "annotations empty_possible — legacy annotations deprecated, often empty"
+          }
+        },
+        {
+          "name": "insights.extra.metrics.annotationClicks",
+          "desc": "YouTube Analytics metric: annotation clicks.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "annotations empty_possible — legacy annotations deprecated, often empty"
+          }
+        },
+        {
+          "name": "insights.extra.metrics.annotationImpressions",
+          "desc": "YouTube Analytics metric: annotation impressions.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "annotations empty_possible — legacy annotations deprecated, often empty"
+          }
+        },
+        {
+          "name": "insights.extra.metrics.averageViewDuration",
+          "desc": "YouTube Analytics metric: average view duration.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.averageViewPercentage",
+          "desc": "YouTube Analytics metric: average view percentage.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.cardClickRate",
+          "desc": "YouTube Analytics metric: card click rate.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.cardClicks",
+          "desc": "YouTube Analytics metric: card clicks.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.cardImpressions",
+          "desc": "YouTube Analytics metric: card impressions.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.cardTeaserClickRate",
+          "desc": "YouTube Analytics metric: card teaser click rate.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.cardTeaserClicks",
+          "desc": "YouTube Analytics metric: card teaser clicks.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.cardTeaserImpressions",
+          "desc": "YouTube Analytics metric: card teaser impressions.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.comments",
+          "desc": "YouTube Analytics metric: comments.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.dislikes",
+          "desc": "YouTube Analytics metric: dislikes.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.engagedViews",
+          "desc": "YouTube Analytics metric: engaged views.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.estimatedMinutesWatched",
+          "desc": "YouTube Analytics metric: estimated minutes watched.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.likes",
+          "desc": "YouTube Analytics metric: likes.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.shares",
+          "desc": "YouTube Analytics metric: shares.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.subscribersGained",
+          "desc": "YouTube Analytics metric: subscribers gained.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.subscribersLost",
+          "desc": "YouTube Analytics metric: subscribers lost.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.videosAddedToPlaylists",
+          "desc": "YouTube Analytics metric: videos added to playlists.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.videosRemovedFromPlaylists",
+          "desc": "YouTube Analytics metric: videos removed from playlists.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.extra.metrics.views",
+          "desc": "YouTube Analytics metric: views.",
+          "type": "number",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.likes_timeline",
+          "desc": "Per-second likes timeline for the item.",
+          "type": "array",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.retention_curve",
+          "desc": "Per-second view-retention curve for the item.",
+          "type": "array",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.sharing",
+          "desc": "Shares by destination/service for the item.",
+          "type": "array",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "sharing empty_possible (engagement_deep)"
+          }
+        },
+        {
+          "name": "insights.traffic_sources",
+          "desc": "Where views came from (search, feed, external…).",
+          "type": "array",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "insights.viewer_demographics",
+          "desc": "Viewer demographic breakdown for the item.",
+          "type": "array",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "demographics empty_possible (engagement_deep)"
+          }
+        },
+        {
+          "name": "insights.viewer_types",
+          "desc": "Viewer type breakdown (new / returning / subscribed).",
+          "type": "array",
+          "family": "insights",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "TikTok": "audienceTypes empty_possible — viewer-type buckets gated by threshold"
+          }
+        },
+        {
+          "name": "is_owned_by_platform_user",
+          "desc": "true, if the content is owned by the creator. In YouTube, it is possible that content is actually owned by another creator, but current creator has linked that content in their playlist. In such a case the content will still be listed for the current creator.",
+          "type": "boolean",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "media_url",
+          "desc": "Direct media URL of the content item, which can be used to download the media item. This is usually a signed URL and may have certain expiry limits so we recommend using it for downloads as soon as possible (such as when a webhook is received), if you are looking to cache media files with you.)",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": false,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "media_urls",
+          "desc": "All media URLs for multi-media items (carousels / albums).",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": false,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": false,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "mentions",
+          "desc": "Array of mentioned accounts in the media",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "persistent_thumbnail_url",
+          "desc": "A stable, long-lived URL to the media thumbnail cached on our servers. Since the original \"thumbnail_url\" provided by the platform has an expiry limit.",
+          "type": "",
+          "family": "core",
+          "maturity": "planned",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "platform",
+          "desc": "Source platform identifier for the content item.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "platform_profile_id",
+          "desc": "Unique profile ID of the user on the work platform. Ex - For YouTube it's the channel ID and for Instagram it's the Instagram page ID.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "platform_profile_name",
+          "desc": "User's profile name on the work platform. This is not unique, is displayed prominently on the profile, usually editable and is most commonly associated with that user's identity on the platform. Ex - For YouTube, it's the channel name displayed on the channel page and for Instagram / Twitter / TikTok etc, it's the name displayed on the user's profile page.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "published_at",
+          "desc": "Publishing timestamp of the content item.",
+          "type": "datetime",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "sponsored",
+          "desc": "Sponsorship metadata (sponsored flag and sponsor tags).",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "thumbnail_url",
+          "desc": "Thumbnail URL of the content item, which can be used to download the media thumbnail. This is usually a signed URL and may have certain expiry limits so we recommend using it for downloads as soon as possible (such as when a webhook is received), if you are looking to cache thumbnails with you.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          },
+          "caveat": {
+            "Threads": "derived from thumbnail_url/media_url — present only on posts that carry media (text-only Threads posts have none)",
+            "LinkedIn": "derived from the post's media/article preview — present only when the post has an image, video, or shared article"
+          }
+        },
+        {
+          "name": "title",
+          "desc": "Title of the content item.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "type",
+          "desc": "Platform specific content type. - VIDEO / POST / STORY / TWEET / BLOG / IMAGE / THREAD / PODCAST / TRACK / REELS / STREAM / FEED / IGTV",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "url",
+          "desc": "Profile URL on the connected platform.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        },
+        {
+          "name": "visibility",
+          "desc": "Visibility of a content item. Values can be PRIVATE / UNLISTED / PUBLIC",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": true,
+            "Twitch": true
+          }
+        }
+      ]
+    },
+    "Audience": {
+      "product": "audience",
+      "offered": {
+        "YouTube": true,
+        "Instagram": true,
+        "TikTok": true,
+        "Threads": true,
+        "Facebook": true,
+        "LinkedIn": true,
+        "Twitch": false
+      },
+      "fields": [
+        {
+          "name": "age_distribution",
+          "desc": "Audience distribution by age range (percentage per range).",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "TikTok": "ageDistribution empty_possible — populated only when account ≥ 100 followers"
+          }
+        },
+        {
+          "name": "cities",
+          "desc": "Audience distribution by city (percentage per city).",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": true,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "TikTok": "cityDistribution empty_possible — populated only when account ≥ 100 followers"
+          }
+        },
+        {
+          "name": "countries",
+          "desc": "Audience distribution by country (percentage per country).",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          },
+          "caveat": {
+            "TikTok": "countryDistribution empty_possible — populated only when account ≥ 100 followers"
+          }
+        },
+        {
+          "name": "gender_age_distribution",
+          "desc": "Joint audience distribution by gender × age range.",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "TikTok": "demographics empty_possible — populated only when account ≥ 100 followers"
+          }
+        },
+        {
+          "name": "gender_distribution",
+          "desc": "Audience distribution by gender (percentage per gender).",
+          "type": "array",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": true,
+            "TikTok": true,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          },
+          "caveat": {
+            "TikTok": "genderDistribution empty_possible — populated only when account ≥ 100 followers"
+          }
+        }
+      ]
+    },
+    "Comments": {
+      "product": "comments",
+      "offered": {
+        "YouTube": true,
+        "Instagram": false,
+        "TikTok": true,
+        "Threads": true,
+        "Facebook": true,
+        "LinkedIn": true,
+        "Twitch": false
+      },
+      "fields": [
+        {
+          "name": "commenter_display_name",
+          "desc": "Full display name of the commenter profile.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "commenter_id",
+          "desc": "Unique identifier of the commenter's profile on the platform.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "commenter_profile_url",
+          "desc": "Commenter's profile URL on the connected platform.",
+          "type": "",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "commenter_username",
+          "desc": "Commenter profile username.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "content.id",
+          "desc": "Unique ID of the content item.",
+          "type": "string",
+          "family": "content",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "content.published_at",
+          "desc": "Content's published date and time on the platform.",
+          "type": "",
+          "family": "content",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "content.url",
+          "desc": "URL of the content item.",
+          "type": "",
+          "family": "content",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "external_id",
+          "desc": "Unique identifier of the profile on the platform.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "like_count",
+          "desc": "Total likes.",
+          "type": "number",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "reply_count",
+          "desc": "Total replies.",
+          "type": "number",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": false,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        },
+        {
+          "name": "text",
+          "desc": "Text content of the comment.",
+          "type": "string",
+          "family": "core",
+          "maturity": "production",
+          "support": {
+            "YouTube": true,
+            "Instagram": false,
+            "TikTok": true,
+            "Threads": true,
+            "Facebook": true,
+            "LinkedIn": true,
+            "Twitch": false
+          }
+        }
+      ]
+    }
+  },
+  "audienceNote": "Offered = the platform’s API exposes it to us (from our per-platform support matrices). TikTok audience is offered too — gated above the ≥100-follower threshold (✓△). Threads & Twitch expose no audience demographics. LinkedIn audience is organization-only."
+}
