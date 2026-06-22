@@ -43,6 +43,15 @@ smconnector.camaleonicanalytics.com {
 		reverse_proxy api:3000
 	}
 
+	# MCP server (read-only, Phase 1). AI assistants (Claude/ChatGPT) connect
+	# here as a custom MCP connector — Streamable HTTP, served by the api
+	# container at /mcp/t/:token. The :token path segment is a bearer-style
+	# connection credential; see docs/MCP-SERVER-DESIGN.md for Phase-1 limits
+	# (add access-log redaction for /mcp/t/* + rate limiting before scaling).
+	handle /mcp* {
+		reverse_proxy api:3000
+	}
+
 	# Admin dashboard — operator-only. basic_auth enabled (Sec-4 hardening): the
 	# admin surface mutates security-critical config (workspace origin allow-
 	# lists, product scopes, live API keys), so it must not be anonymously

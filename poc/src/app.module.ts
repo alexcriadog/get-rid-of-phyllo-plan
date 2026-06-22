@@ -23,6 +23,7 @@ import { AdminSaasModule } from '@modules/admin-saas/admin-saas.module';
 import { TokenRefreshModule } from '@modules/token-refresh/token-refresh.module';
 import { DataApiModule } from '@modules/data-api/data-api.module';
 import { TokenHistoryModule } from '@modules/tokens/token-history.module';
+import { McpModule } from '@modules/mcp/mcp.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { TokenHistoryModule } from '@modules/tokens/token-history.module';
     WebhooksModule,
     TokenRefreshModule,
     DataApiModule,
+    McpModule,
   ],
   providers: [
     {

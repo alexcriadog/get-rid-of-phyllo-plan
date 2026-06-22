@@ -23,6 +23,6 @@ import { DataController } from "./data.controller";
     ApiAccountResolver,
     ApiReadService,
   ],
-  exports: [ApiCredentialsService],
+  exports: [ApiCredentialsService, ApiReadService, ApiAccountResolver],
 })
 export class DataApiModule {}
