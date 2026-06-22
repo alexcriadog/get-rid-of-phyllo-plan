@@ -26,7 +26,10 @@ export default function ClientLoginPage() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.message ?? body.error ?? `HTTP ${res.status}`);
       }
-      router.push('/client');
+      const rt = router.query.return_to;
+      const dest =
+        typeof rt === 'string' && rt.startsWith('/client') ? rt : '/client';
+      router.push(dest);
     } catch (e) {
       setError((e as Error).message);
     } finally {

@@ -2,7 +2,7 @@
 //
 // The client pastes their cmlk_(live|test)_* API key into /client/login.
 // We HMAC-sign it with WEB_SESSION_SECRET and store the signed payload in
-// a HttpOnly + SameSite=Strict cookie. /api/client/proxy/[...path] reads
+// a HttpOnly + SameSite=Lax cookie. /api/client/proxy/[...path] reads
 // the cookie on every request, verifies the signature, extracts the raw
 // key, and forwards the request to the connector API as Bearer auth.
 //
@@ -81,7 +81,7 @@ export function setSessionCookie(res: NextApiResponse, signed: string): void {
   const secure = process.env.NODE_ENV === 'production' ? 'Secure; ' : '';
   res.setHeader(
     'Set-Cookie',
-    `${CLIENT_SESSION_COOKIE}=${signed}; Path=/; HttpOnly; ${secure}SameSite=Strict; Max-Age=${COOKIE_TTL_SECONDS}`,
+    `${CLIENT_SESSION_COOKIE}=${signed}; Path=/; HttpOnly; ${secure}SameSite=Lax; Max-Age=${COOKIE_TTL_SECONDS}`,
   );
 }
 
@@ -89,7 +89,7 @@ export function clearSessionCookie(res: NextApiResponse): void {
   const secure = process.env.NODE_ENV === 'production' ? 'Secure; ' : '';
   res.setHeader(
     'Set-Cookie',
-    `${CLIENT_SESSION_COOKIE}=; Path=/; HttpOnly; ${secure}SameSite=Strict; Max-Age=0`,
+    `${CLIENT_SESSION_COOKIE}=; Path=/; HttpOnly; ${secure}SameSite=Lax; Max-Age=0`,
   );
 }
 
