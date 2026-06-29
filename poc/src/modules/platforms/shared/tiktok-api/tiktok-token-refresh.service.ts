@@ -16,7 +16,11 @@ import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { TokenHistoryService } from '@modules/tokens/token-history.service';
 import { ConfigService } from '@nestjs/config';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
+import { TokenRefreshError } from '../token-refresh-error';
+import { resolveRefreshExpiry } from '../token-refresh-expiry';
 
+/** Fallback access-token TTL when TikTok omits expires_in (~24h). */
+const DEFAULT_TOKEN_TTL_MS = 24 * 60 * 60_000;
 const TIKTOK_TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
 const REFRESH_LEAD_TIME_MS = 5 * 60_000;     // refresh if expires within 5 min
 const REFRESH_TIMEOUT_MS = 15_000;
@@ -134,21 +138,29 @@ export class TikTokTokenRefreshService {
     const body = res.data ?? {};
     const errMsg = this.extractError(body, res.status);
     if (errMsg) {
+      // TikTok answers invalid_grant once the refresh token is invalid or
+      // expired (365-day TTL) — terminal. Other errors (5xx, invalid_client
+      // config, network) are transient: retry, don't flag reauth.
+      const permanent = this.isPermanentError(body);
       this.logger.error(
         `TikTok refresh failed for account ${accountId.toString()}: ${errMsg}`,
       );
-      await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
-      throw new Error(`TikTok token refresh failed: ${errMsg}`);
+      if (!permanent) {
+        await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
+      }
+      throw new TokenRefreshError(`TikTok token refresh failed: ${errMsg}`, permanent);
     }
     if (!body.access_token || !body.refresh_token) {
+      // 2xx but no tokens — anomalous, not a confirmed dead grant. Transient.
       const detail = 'response missing access_token/refresh_token';
       await this.lifecycle.tokenRefreshFailed(accountId, { reason: detail });
-      throw new Error(
+      throw new TokenRefreshError(
         `TikTok refresh response missing tokens: ${JSON.stringify(body).slice(0, 200)}`,
+        false,
       );
     }
     const expiresInS = typeof body.expires_in === 'number' ? body.expires_in : 0;
-    const expiresAt = expiresInS > 0 ? new Date(Date.now() + expiresInS * 1000) : null;
+    const expiresAt = resolveRefreshExpiry(expiresInS, DEFAULT_TOKEN_TTL_MS);
     const newAccessCipher = this.aes.encrypt(body.access_token);
     const newRefreshCipher = this.aes.encrypt(body.refresh_token);
 
@@ -170,6 +182,16 @@ export class TikTokTokenRefreshService {
     );
     await this.lifecycle.tokenRefreshed(accountId, { expiresAt });
     return body.access_token;
+  }
+
+  /**
+   * True only for a confirmed dead grant. TikTok signals an invalid/expired
+   * refresh token with `error: 'invalid_grant'` (string form) or an error
+   * object whose `code` is `invalid_grant`. Anything else stays transient.
+   */
+  private isPermanentError(body: TikTokTokenRefreshResponse): boolean {
+    const code = typeof body.error === 'string' ? body.error : body.error?.code;
+    return code === 'invalid_grant';
   }
 
   private extractError(

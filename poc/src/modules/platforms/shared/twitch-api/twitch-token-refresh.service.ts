@@ -18,7 +18,11 @@ import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { TokenHistoryService } from '@modules/tokens/token-history.service';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
+import { TokenRefreshError } from '../token-refresh-error';
+import { resolveRefreshExpiry } from '../token-refresh-expiry';
 
+/** Fallback access-token TTL when Twitch omits expires_in (~4h). */
+const DEFAULT_TOKEN_TTL_MS = 4 * 60 * 60_000;
 const TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
 const REFRESH_LEAD_TIME_MS = 5 * 60_000;
 const REFRESH_TIMEOUT_MS = 15_000;
@@ -103,16 +107,22 @@ export class TwitchTokenRefreshService {
     const body = res.data ?? {};
     if (res.status < 200 || res.status >= 300 || !body.access_token) {
       const errMsg = body.message ?? `HTTP ${res.status}`;
+      // Twitch answers 400 "Invalid refresh token" once the refresh token is
+      // revoked, rotated-away, or expired — terminal. A 403 invalid-client is
+      // our own config and 5xx are transient: retry, don't flag reauth.
+      const permanent =
+        res.status === 400 && /invalid refresh token/i.test(body.message ?? '');
       this.logger.error(
         `Twitch refresh failed for account ${accountId.toString()}: ${errMsg}`,
       );
-      await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
-      throw new Error(`Twitch token refresh failed: ${errMsg}`);
+      if (!permanent) {
+        await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
+      }
+      throw new TokenRefreshError(`Twitch token refresh failed: ${errMsg}`, permanent);
     }
 
     const expiresInS = typeof body.expires_in === 'number' ? body.expires_in : 0;
-    const expiresAt =
-      expiresInS > 0 ? new Date(Date.now() + expiresInS * 1000) : null;
+    const expiresAt = resolveRefreshExpiry(expiresInS, DEFAULT_TOKEN_TTL_MS);
     const newAccessCipher = this.aes.encrypt(body.access_token);
     // Twitch ROTATES the refresh_token on every refresh — the old one stops
     // working immediately. Persist the new one or the next refresh will fail.

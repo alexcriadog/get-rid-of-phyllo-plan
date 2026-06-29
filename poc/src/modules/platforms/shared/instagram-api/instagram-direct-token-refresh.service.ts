@@ -21,7 +21,12 @@ import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { TokenHistoryService } from '@modules/tokens/token-history.service';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
+import { TokenRefreshError } from '../token-refresh-error';
+import { resolveRefreshExpiry } from '../token-refresh-expiry';
+import { isTokenDeadGraphBody } from '../meta-graph/graph-errors';
 
+/** Fallback token TTL when IG-direct omits expires_in (60d long-lived token). */
+const DEFAULT_TOKEN_TTL_MS = 60 * 24 * 60 * 60_000;
 const IG_DIRECT_REFRESH_URL = 'https://graph.instagram.com/refresh_access_token';
 const REFRESH_TIMEOUT_MS = 15_000;
 
@@ -60,15 +65,20 @@ export class InstagramDirectTokenRefreshService {
     const body = res.data ?? {};
     if (res.status < 200 || res.status >= 300 || !body.access_token) {
       const errMsg = body.error?.message ?? `HTTP ${res.status}`;
+      // Meta-family token-dead OAuthException (code 190 / dead subcodes) is
+      // terminal — the cron flags needs_reauth. Other failures (5xx, network)
+      // are transient and retried on the next hourly sweep.
+      const permanent = isTokenDeadGraphBody(body);
       this.logger.error(
         `IG-direct refresh failed for account ${accountId.toString()}: ${errMsg}`,
       );
-      await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
-      throw new Error(`IG-direct token refresh failed: ${errMsg}`);
+      if (!permanent) {
+        await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
+      }
+      throw new TokenRefreshError(`IG-direct token refresh failed: ${errMsg}`, permanent);
     }
     const expiresInS = typeof body.expires_in === 'number' ? body.expires_in : 0;
-    const expiresAt =
-      expiresInS > 0 ? new Date(Date.now() + expiresInS * 1000) : null;
+    const expiresAt = resolveRefreshExpiry(expiresInS, DEFAULT_TOKEN_TTL_MS);
     const newAccessCipher = this.aes.encrypt(body.access_token);
 
     await this.prisma.oAuthToken.update({
