@@ -21,7 +21,12 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
+import { TokenRefreshError } from '../token-refresh-error';
+import { resolveRefreshExpiry } from '../token-refresh-expiry';
+import { isTokenDeadGraphBody } from '../meta-graph/graph-errors';
 
+/** Fallback token TTL when Threads omits expires_in (60d long-lived token). */
+const DEFAULT_TOKEN_TTL_MS = 60 * 24 * 60 * 60_000;
 const THREADS_REFRESH_URL = 'https://graph.threads.net/refresh_access_token';
 const THREADS_EXCHANGE_URL = 'https://graph.threads.net/access_token';
 // Refresh when within this window of expiry. 7d gives the worker plenty of
@@ -100,18 +105,23 @@ export class ThreadsTokenRefreshService {
     const body = res.data ?? {};
     if (res.status < 200 || res.status >= 300 || !body.access_token) {
       const errMsg = body.error?.message ?? `HTTP ${res.status}`;
+      // Meta-family token-dead OAuthException (code 190 / dead subcodes) is
+      // terminal — only re-auth recovers it, so the cron flags needs_reauth.
+      // Other failures (5xx, network) are transient and retried hourly.
+      const permanent = isTokenDeadGraphBody(body);
       this.logger.error(
         `Threads refresh failed for account ${accountId.toString()}: ${errMsg}`,
       );
-      // Emit webhook for the transient failure (ensureFresh will fall back
-      // to the current token and the next sync tick will retry). If the
-      // failure turns out to be terminal the sync.worker emits
-      // token.expired separately when it marks the account needs_reauth.
-      await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
-      throw new Error(`Threads token refresh failed: ${errMsg}`);
+      // On a transient failure emit token.refresh_failed (ensureFresh falls
+      // back to the current token; the next tick retries). On a permanent one
+      // we stay silent here — the cron fires the terminal token.expired.
+      if (!permanent) {
+        await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
+      }
+      throw new TokenRefreshError(`Threads token refresh failed: ${errMsg}`, permanent);
     }
     const expiresInS = typeof body.expires_in === 'number' ? body.expires_in : 0;
-    const expiresAt = expiresInS > 0 ? new Date(Date.now() + expiresInS * 1000) : null;
+    const expiresAt = resolveRefreshExpiry(expiresInS, DEFAULT_TOKEN_TTL_MS);
     const newAccessCipher = this.aes.encrypt(body.access_token);
 
     await this.prisma.oAuthToken.update({

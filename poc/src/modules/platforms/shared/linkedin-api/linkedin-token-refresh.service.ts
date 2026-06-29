@@ -17,8 +17,12 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
+import { TokenRefreshError } from '../token-refresh-error';
+import { resolveRefreshExpiry } from '../token-refresh-expiry';
 import type { LinkedInTokenResponse } from './linkedin-types';
 
+/** Fallback access-token TTL when LinkedIn omits expires_in (60d). */
+const DEFAULT_TOKEN_TTL_MS = 60 * 24 * 60 * 60_000;
 const LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken';
 /** 60-day tokens: a 7-day lead gives a failed refresh days of hourly retries. */
 const REFRESH_LEAD_TIME_MS = 7 * 24 * 60 * 60_000;
@@ -93,16 +97,21 @@ export class LinkedInTokenRefreshService {
     if (res.status < 200 || res.status >= 300 || !body.access_token) {
       const errMsg =
         body.error_description ?? body.error ?? `HTTP ${res.status}`;
+      // LinkedIn returns 400 invalid_grant when the refresh token has expired
+      // (fixed 365-day TTL, does not reset) or was revoked — terminal. Other
+      // failures (5xx, network) are transient: retry, do not flag reauth.
+      const permanent = body.error === 'invalid_grant';
       this.logger.error(
         `LinkedIn refresh failed for account ${accountId.toString()}: ${errMsg}`,
       );
-      await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
-      throw new Error(`LinkedIn token refresh failed: ${errMsg}`);
+      if (!permanent) {
+        await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
+      }
+      throw new TokenRefreshError(`LinkedIn token refresh failed: ${errMsg}`, permanent);
     }
 
     const expiresInS = typeof body.expires_in === 'number' ? body.expires_in : 0;
-    const expiresAt =
-      expiresInS > 0 ? new Date(Date.now() + expiresInS * 1000) : null;
+    const expiresAt = resolveRefreshExpiry(expiresInS, DEFAULT_TOKEN_TTL_MS);
     const newAccessCipher = this.aes.encrypt(body.access_token);
     // LinkedIn MAY return a new refresh_token; persist when present. The
     // refresh-token TTL does not reset — after ~365 days the member must

@@ -36,6 +36,7 @@ import { ThreadsTokenRefreshService } from '@modules/platforms/shared/threads-ap
 import { InstagramDirectTokenRefreshService } from '@modules/platforms/shared/instagram-api/instagram-direct-token-refresh.service';
 import { LinkedInTokenRefreshService } from '@modules/platforms/shared/linkedin-api/linkedin-token-refresh.service';
 import { isIgDirect } from '@modules/platforms/shared/meta-graph/ig-direct';
+import { TokenRefreshError } from '@modules/platforms/shared/token-refresh-error';
 import { MetricsService } from '@shared/metrics/metrics.service';
 
 /** Refresh short-lived access tokens this far ahead of expiry. */
@@ -124,11 +125,16 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
 
     const rows = await this.prisma.oAuthToken.findMany({
       where: {
-        expiresAt: { not: null, lte: horizon },
         // Only connected accounts. Excludes disconnected / needs_reauth (no
         // point) but includes syncTier='paused' on purpose — a paused
         // account's token must stay alive for when it resumes.
         account: { is: { status: 'ready' } },
+        // Sweep tokens due within the horizon AND tokens with an UNKNOWN
+        // expiry (null). A null expiresAt would otherwise be excluded from
+        // every proactive path forever (edge 4): the refreshable branches
+        // below refresh it once to re-establish a real expiry, while
+        // Meta-family null rows fall through to the harmless `else → skipped`.
+        OR: [{ expiresAt: { lte: horizon } }, { expiresAt: null }],
       },
       select: {
         accountId: true,
@@ -146,9 +152,14 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
     for (const row of rows) {
       const platform = row.account.platform;
       const accountId = row.accountId;
-      const expiresAt = row.expiresAt; // not-null guaranteed by the query
-      const msToExpiry = expiresAt ? expiresAt.getTime() - now.getTime() : Infinity;
-      const expired = msToExpiry <= 0;
+      const expiresAt = row.expiresAt; // may be null — see the query OR note
+      const hasExpiry = expiresAt !== null;
+      const msToExpiry = hasExpiry ? expiresAt.getTime() - now.getTime() : Infinity;
+      // A null/unknown expiry is NOT "expired" (treating it as expired would
+      // wrongly flag Meta accounts that can't be refreshed) — but for the
+      // refreshable platforms below it IS treated as due, so we refresh once
+      // and re-establish a real expiresAt (edge 4).
+      const expired = hasExpiry && msToExpiry <= 0;
 
       // IG-direct accounts are platform 'instagram' but behave like Threads:
       // long-lived token, refreshable while alive, 7-day lead. Classified
@@ -162,7 +173,7 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
 
       try {
         if (igDirectRow) {
-          if (msToExpiry > THREADS_LEAD_MS) {
+          if (hasExpiry && msToExpiry > THREADS_LEAD_MS) {
             result.skipped += 1; // not due yet — 7-day lead on a 60-day token
             continue;
           }
@@ -176,7 +187,7 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
           });
         } else if (REFRESHABLE.has(platform)) {
           const lead = platform === 'threads' ? THREADS_LEAD_MS : SHORT_LEAD_MS;
-          if (msToExpiry > lead) {
+          if (hasExpiry && msToExpiry > lead) {
             result.skipped += 1; // not due yet for this platform's window
             continue;
           }
@@ -189,7 +200,7 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
           }
         } else if (LINKEDIN.has(platform)) {
           if (row.refreshTokenCiphertext) {
-            if (msToExpiry > THREADS_LEAD_MS) {
+            if (hasExpiry && msToExpiry > THREADS_LEAD_MS) {
               result.skipped += 1; // 7-day lead on a 60-day token
               continue;
             }
@@ -225,24 +236,36 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
           result.skipped += 1;
         }
       } catch (err) {
-        result.failed += 1;
         const msg = err instanceof Error ? err.message : String(err);
-        this.metrics.incr('token_refresh_cron_failed', { platform: metricPlatform });
-        this.logger.warn(
-          `Token refresh failed for account ${accountId.toString()} (${platform}): ${msg}`,
-        );
-        // If the token is already expired and the refresh failed, it's dead —
-        // tell the client to re-auth rather than leaving it silently broken.
-        if (expired) {
+        // Act on WHY the refresh failed, not on whether the access token
+        // happens to be expired. A PERMANENT failure (revoked / invalid_grant
+        // / token-dead OAuthException) can only be recovered by re-auth, so
+        // flag it now — even with days of lead left — instead of retrying for
+        // the whole window. A TRANSIENT failure (5xx / network / timeout, or
+        // anything a service couldn't confidently classify) might clear on its
+        // own, so we retry next hour and NEVER flag needs_reauth — even once
+        // the token has lapsed. Flagging on a passing outage would bounce a
+        // healthy account to needs_reauth, which the cron then stops sweeping,
+        // so it can't self-heal and the end-user is forced to reconnect.
+        const permanent = err instanceof TokenRefreshError && err.permanent;
+        if (permanent) {
+          this.metrics.incr('token_refresh_cron_reauth', { platform: metricPlatform });
           try {
             await this.flagNeedsReauth(
               accountId,
-              `${platform} token refresh failed and token has expired: ${msg}`,
+              `${platform} token refresh permanently failed: ${msg}`,
             );
             result.reauthFlagged += 1;
           } catch {
-            // best-effort; next run retries
+            // Couldn't persist the flag — count it and let the next run retry.
+            result.failed += 1;
           }
+        } else {
+          result.failed += 1;
+          this.metrics.incr('token_refresh_cron_failed', { platform: metricPlatform });
+          this.logger.warn(
+            `Token refresh failed (transient) for account ${accountId.toString()} (${platform}): ${msg}`,
+          );
         }
       }
     }

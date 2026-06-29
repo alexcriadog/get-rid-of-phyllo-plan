@@ -18,7 +18,11 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/database/prisma.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
+import { TokenRefreshError } from '../token-refresh-error';
+import { resolveRefreshExpiry } from '../token-refresh-expiry';
 
+/** Fallback access-token TTL when Google omits expires_in (~1h). */
+const DEFAULT_TOKEN_TTL_MS = 60 * 60_000;
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const REFRESH_LEAD_TIME_MS = 5 * 60_000;
 const REFRESH_TIMEOUT_MS = 15_000;
@@ -96,14 +100,20 @@ export class YoutubeTokenRefreshService {
     const body = res.data ?? {};
     if (res.status < 200 || res.status >= 300 || !body.access_token) {
       const errMsg = body.error_description ?? body.error ?? `HTTP ${res.status}`;
+      // Google returns 400 invalid_grant when the refresh token is expired or
+      // revoked — terminal, only re-auth recovers it. Everything else (5xx,
+      // network, invalid_client config) is transient: retry, don't reauth.
+      const permanent = body.error === 'invalid_grant';
       this.logger.error(
         `YouTube refresh failed for account ${accountId.toString()}: ${errMsg}`,
       );
-      await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
-      throw new Error(`YouTube token refresh failed: ${errMsg}`);
+      if (!permanent) {
+        await this.lifecycle.tokenRefreshFailed(accountId, { reason: errMsg });
+      }
+      throw new TokenRefreshError(`YouTube token refresh failed: ${errMsg}`, permanent);
     }
     const expiresInS = typeof body.expires_in === 'number' ? body.expires_in : 0;
-    const expiresAt = expiresInS > 0 ? new Date(Date.now() + expiresInS * 1000) : null;
+    const expiresAt = resolveRefreshExpiry(expiresInS, DEFAULT_TOKEN_TTL_MS);
     const newAccessCipher = this.aes.encrypt(body.access_token);
     const newRefreshCipher = body.refresh_token
       ? this.aes.encrypt(body.refresh_token)
