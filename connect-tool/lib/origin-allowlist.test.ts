@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeOrigin, isOriginAllowed } from './origin-allowlist';
+import {
+  normalizeOrigin,
+  isOriginAllowed,
+  isOriginAllowedStrict,
+  shouldRequireAllowList,
+} from './origin-allowlist';
 
 describe('normalizeOrigin', () => {
   it('canonicalises valid http(s) origins', () => {
@@ -45,5 +50,34 @@ describe('isOriginAllowed', () => {
 
   it('does not allow a path-bearing origin to slip past membership', () => {
     expect(isOriginAllowed('https://app.example.com/evil', ['https://app.example.com'])).toBe(false);
+  });
+});
+
+describe('isOriginAllowedStrict (fail-closed)', () => {
+  it('DENIES when no allow-list is configured (opposite of the lenient default)', () => {
+    expect(isOriginAllowedStrict('https://anything.com', undefined)).toBe(false);
+    expect(isOriginAllowedStrict('https://anything.com', [])).toBe(false);
+    expect(isOriginAllowedStrict(undefined, undefined)).toBe(false);
+  });
+
+  it('enforces membership like the lenient form once a list is present', () => {
+    const list = ['https://app.example.com'];
+    expect(isOriginAllowedStrict('https://app.example.com', list)).toBe(true);
+    expect(isOriginAllowedStrict('https://evil.com', list)).toBe(false);
+    expect(isOriginAllowedStrict(undefined, list)).toBe(false);
+  });
+});
+
+describe('shouldRequireAllowList', () => {
+  it('requires a configured allow-list in production', () => {
+    expect(shouldRequireAllowList({ NODE_ENV: 'production' } as NodeJS.ProcessEnv)).toBe(
+      true,
+    );
+  });
+  it('stays lenient outside production (dev keeps working without origins)', () => {
+    expect(
+      shouldRequireAllowList({ NODE_ENV: 'development' } as NodeJS.ProcessEnv),
+    ).toBe(false);
+    expect(shouldRequireAllowList({} as NodeJS.ProcessEnv)).toBe(false);
   });
 });

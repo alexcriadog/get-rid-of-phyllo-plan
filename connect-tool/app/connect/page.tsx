@@ -4,7 +4,11 @@ import { internalAuthHeader } from '../../lib/poc-internal';
 import { sanitizeAccent } from '../../lib/css-color';
 import { fetchConnections } from '../../lib/connections';
 import { fetchWorkspaceProducts, offeredPlatforms } from '../../lib/workspace-config';
-import { isOriginAllowed } from '../../lib/origin-allowlist';
+import {
+  isOriginAllowed,
+  isOriginAllowedStrict,
+  shouldRequireAllowList,
+} from '../../lib/origin-allowlist';
 import { ConnectShell } from './ConnectShell';
 import { isPlatformKey, type PlatformKey } from './shell-machine';
 
@@ -73,13 +77,22 @@ export default async function ConnectPage({
   let validatedOrigin: string | undefined = origin;
   try {
     const claims = await verifySdkToken(token);
+    // F3: the token MUST be for the workspace named in ?ws. Otherwise a valid
+    // token for workspace A could be replayed as ?ws=B to render B's branding
+    // and B's end-user connection list. (/api/oauth/start enforces this too.)
+    if (claims.ws_slug !== ws) {
+      throw new Error('SDK token workspace mismatch');
+    }
     endUserId = claims.sub;
-    // Sec-4: if the workspace has an allow-list and this embedder isn't on it,
-    // fail fast — drop the origin AND surface an error so ConnectShell renders
-    // the error state immediately, rather than letting the user pick a platform
-    // and then hit a hard rejection at /api/oauth/start (stranded popup).
-    // isOriginAllowed returns true when no allow-list exists (legacy flow).
-    if (!isOriginAllowed(origin, claims.origins)) {
+    // Sec-4: if this embedder isn't on the workspace's allow-list, fail fast —
+    // drop the origin AND surface an error so ConnectShell renders the error
+    // state immediately, rather than letting the user pick a platform and then
+    // hit a hard rejection at /api/oauth/start (stranded popup). FAIL-CLOSED in
+    // production (no allow-list ⇒ denied); lenient in dev.
+    const originAllowed = shouldRequireAllowList()
+      ? isOriginAllowedStrict(origin, claims.origins)
+      : isOriginAllowed(origin, claims.origins);
+    if (!originAllowed) {
       validatedOrigin = undefined;
       error =
         'This page is not authorised to use the Connect widget for this workspace. Contact your administrator.';

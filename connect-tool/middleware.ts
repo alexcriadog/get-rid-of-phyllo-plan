@@ -10,6 +10,16 @@ export function middleware(req: NextRequest): NextResponse {
   const res = NextResponse.next();
   const { searchParams } = req.nextUrl;
 
+  // Baseline hardening on every framed/connect route. `no-referrer` stops the
+  // token-bearing URL (?token=…) from leaking to third parties via Referer;
+  // nosniff + a locked-down Permissions-Policy are cheap defence-in-depth.
+  // (Clickjacking is enforced primarily server-side: the /connect page and
+  // /api/oauth/start fail closed on a disallowed embedder origin in prod, so a
+  // framed page for an unlisted origin renders an error with nothing to redress.)
+  res.headers.set('Referrer-Policy', 'no-referrer');
+  res.headers.set('X-Content-Type-Options', 'nosniff');
+  res.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+
   if (searchParams.get('embed') === '1') {
     const origin = searchParams.get('origin');
     // Only echo a well-formed http(s) origin into the directive so a

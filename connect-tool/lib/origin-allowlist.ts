@@ -62,3 +62,30 @@ export function isOriginAllowed(
   }
   return false;
 }
+
+/**
+ * Fail-closed variant: an ABSENT or EMPTY allow-list means DENY (not "allow
+ * all"). Use this where leaving the list unconfigured must not silently open
+ * the door — e.g. production embedder-origin enforcement. A configured list is
+ * checked exactly like `isOriginAllowed`.
+ */
+export function isOriginAllowedStrict(
+  origin: string | null | undefined,
+  allowList: ReadonlyArray<string> | undefined,
+): boolean {
+  if (!allowList || allowList.length === 0) return false;
+  return isOriginAllowed(origin, allowList);
+}
+
+/**
+ * Whether the embedder-origin allow-list must be CONFIGURED (fail-closed) for
+ * this environment. True in production: a workspace with no allowed origins is
+ * denied rather than wide-open. Non-production stays lenient so local/dev
+ * workspaces without an allow-list keep working. Mirrors the env-gated pattern
+ * of `shouldRequireHttps` in the webhook validator.
+ */
+export function shouldRequireAllowList(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env.NODE_ENV === 'production';
+}

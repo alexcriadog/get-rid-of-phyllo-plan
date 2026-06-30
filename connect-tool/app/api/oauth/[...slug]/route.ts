@@ -19,7 +19,11 @@ import {
   verifySdkToken,
   getContextCookie,
 } from '../../../../lib/oauth-context';
-import { isOriginAllowed } from '../../../../lib/origin-allowlist';
+import {
+  isOriginAllowed,
+  isOriginAllowedStrict,
+  shouldRequireAllowList,
+} from '../../../../lib/origin-allowlist';
 import {
   computeOAuthScopes,
   fetchProductsCatalog,
@@ -256,9 +260,14 @@ export async function GET(
         // allow-list (carried in the signed token). Reject here — BEFORE
         // redirecting to the provider and before any session is created — so a
         // leaked token can't drive an OAuth flow whose result would postMessage
-        // to an attacker origin. isOriginAllowed returns true when no allow-list
-        // is configured, so workspaces without one are unaffected (legacy).
-        if (!isOriginAllowed(origin, claims.origins)) {
+        // to an attacker origin. In production this is FAIL-CLOSED: a workspace
+        // with no allow-list is denied (a public connector must not default to
+        // "any origin"). Non-production stays lenient so dev workspaces without
+        // an allow-list keep working.
+        const originAllowed = shouldRequireAllowList()
+          ? isOriginAllowedStrict(origin, claims.origins)
+          : isOriginAllowed(origin, claims.origins);
+        if (!originAllowed) {
           throw new Error(
             `Origin "${origin ?? '(none provided)'}" is not allowed for workspace "${ws}". Add it under the workspace's allowed origins.`,
           );
