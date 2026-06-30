@@ -25,10 +25,14 @@ export class TikTokRateLimitStrategy implements TikTokRateLimitStrategyPort {
         strategy: 'token-bucket',
       },
     ];
-    if (context?.tokenHash) {
+    // TikTok meters the daily user-data quota per authorized account (open_id),
+    // not per token — and tokens rotate every 24h. Key by the canonical user id
+    // (open_id, carried as channelId) so a user's tokens across workspaces +
+    // refreshes share one daily bucket. (rate-limit research)
+    if (context?.channelId) {
       hints.push({
-        scope: 'daily_user_token',
-        keyTemplate: 'rate:tt:daily_user_token:{hash}:{YYYY-MM-DD-UTC}',
+        scope: 'daily_user',
+        keyTemplate: 'rate:tt:daily_user:{channel_id}:{YYYY-MM-DD-UTC}',
         capacity: DAILY_USER_CAP,
         refillPerMs: 0,
         costPerCall: 1,

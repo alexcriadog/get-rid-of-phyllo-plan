@@ -45,10 +45,14 @@ export class YoutubeRateLimitStrategy implements RateLimitStrategy {
         strategy: 'token-bucket',
       },
     ];
-    if (context?.tokenHash) {
+    // Google meters "per minute per user" by the authenticated principal (the
+    // Google user/channel), NOT the access token — and tokens rotate ~hourly.
+    // Key by the stable channel id (= canonicalId) so all of one user's tokens
+    // (across workspaces + refreshes) share one bucket. (rate-limit research)
+    if (context?.channelId) {
       hints.push({
         scope: 'qps_analytics_user',
-        keyTemplate: 'rate:yt:qps_analytics_user:{hash}',
+        keyTemplate: 'rate:yt:qps_analytics_user:{channel_id}',
         capacity: ANALYTICS_USER_CAPACITY,
         refillPerMs: ANALYTICS_USER_REFILL_PER_MS,
         costPerCall: 1,

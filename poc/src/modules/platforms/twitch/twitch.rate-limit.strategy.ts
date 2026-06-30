@@ -32,10 +32,14 @@ export class TwitchRateLimitStrategy implements RateLimitStrategy {
         strategy: 'token-bucket',
       },
     ];
-    if (context?.tokenHash) {
+    // Helix applies user-token limits "per client ID per user per minute" — per
+    // user, not per token. Key by the Twitch user id (= canonicalId, carried as
+    // channelId) so a user's tokens across workspaces + refreshes share one
+    // bucket, matching how Twitch meters. (rate-limit research)
+    if (context?.channelId) {
       hints.push({
         scope: 'helix_user',
-        keyTemplate: 'rate:twitch:helix_user:{hash}',
+        keyTemplate: 'rate:twitch:helix_user:{channel_id}',
         capacity: PER_TOKEN_CAPACITY,
         refillPerMs: PER_TOKEN_REFILL_PER_MS,
         costPerCall: 1,

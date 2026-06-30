@@ -21,15 +21,13 @@ const THREADS_CAPACITY = 200;
 @Injectable()
 export class ThreadsRateLimitStrategy implements RateLimitStrategy {
   hints(context: PlatformAdapterContext): RateLimitHint[] {
+    // No per-token bucket: Threads (Meta) meters per (app, user) pair — "unique
+    // for each app and app user pair", never per token. The `user` bucket below
+    // (keyed by the stable Threads user id) is the correct per-user limiter; a
+    // token-hash bucket would just double-count one user across workspaces +
+    // reset on every refresh. We keep the app-level bucket as a global fuse.
+    // (rate-limit research)
     const hints: RateLimitHint[] = [
-      {
-        scope: 'user_token',
-        keyTemplate: 'rate:threads:user_token:{hash}',
-        capacity: THREADS_CAPACITY,
-        refillPerMs: THREADS_REFILL_PER_MS,
-        costPerCall: 1,
-        strategy: 'token-bucket',
-      },
       {
         scope: 'app',
         keyTemplate: 'rate:threads:app',

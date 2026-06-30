@@ -36,11 +36,11 @@ export class TikTokCommentsFetcher {
 
   async fetch(
     accessToken: string,
-    _canonicalId: string,
+    canonicalId: string,
     opts: FetchOpts,
     metadata?: Record<string, unknown>,
   ): Promise<CommentData[]> {
-    const ctx = buildTikTokContext(accessToken, metadata);
+    const ctx = buildTikTokContext(accessToken, canonicalId, metadata);
     const accountId = extractAccountId(metadata);
     const perVideo = opts.limit ?? DEFAULT_COMMENTS_PER_VIDEO;
 

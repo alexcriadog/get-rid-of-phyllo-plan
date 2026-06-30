@@ -92,6 +92,7 @@ export class BoundTikTokClient {
     });
     const acquireCtx: Record<string, string> = {};
     if (opts.context.tokenHash) acquireCtx['hash'] = opts.context.tokenHash;
+    if (opts.context.channelId) acquireCtx['channel_id'] = opts.context.channelId;
     if (opts.context.businessId) acquireCtx['business_id'] = opts.context.businessId;
 
     const acquired = await this.rateBucket.acquire(hints, acquireCtx);

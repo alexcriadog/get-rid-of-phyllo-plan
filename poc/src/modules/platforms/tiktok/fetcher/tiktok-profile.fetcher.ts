@@ -35,7 +35,7 @@ export class TikTokProfileFetcher {
     canonicalId: string,
     metadata?: Record<string, unknown>,
   ): Promise<ProfileData> {
-    const ctx = buildTikTokContext(accessToken, metadata);
+    const ctx = buildTikTokContext(accessToken, canonicalId, metadata);
     const account = await this.client.call<TikTokBusinessAccount>({
       endpoint: '/business/get/',
       method: 'GET',

@@ -18,11 +18,11 @@ export class TikTokMentionsFetcher {
 
   async fetch(
     accessToken: string,
-    _canonicalId: string,
+    canonicalId: string,
     _opts: FetchOpts,
     metadata?: Record<string, unknown>,
   ): Promise<ContentData[]> {
-    void buildTikTokContext(accessToken, metadata);
+    void buildTikTokContext(accessToken, canonicalId, metadata);
     this.logger.debug('TikTok mentions endpoint not yet probed — returning []');
     return [];
   }

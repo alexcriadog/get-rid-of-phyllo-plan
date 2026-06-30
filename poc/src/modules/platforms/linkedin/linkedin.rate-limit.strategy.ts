@@ -25,10 +25,14 @@ export class LinkedInRateLimitStrategy implements RateLimitStrategy {
         strategy: 'token-bucket',
       },
     ];
-    if (context?.tokenHash) {
+    // LinkedIn meters the "Member" limit per member identity per app — "a
+    // single member per application" — not per token. Key by the member/org id
+    // (= canonicalId, carried as channelId) so a member's tokens across
+    // workspaces + refreshes share one bucket. (rate-limit research)
+    if (context?.channelId) {
       hints.push({
         scope: 'linkedin_member',
-        keyTemplate: 'rate:linkedin:member:{hash}',
+        keyTemplate: 'rate:linkedin:member:{channel_id}',
         capacity: MEMBER_DAILY_CAPACITY,
         refillPerMs: MEMBER_DAILY_CAPACITY / DAY_MS,
         costPerCall: 1,

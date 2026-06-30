@@ -15,8 +15,8 @@ describe('YoutubeRateLimitStrategy', () => {
     expect(qps.strategy).toBe('token-bucket');
   });
 
-  it('adds qps_analytics_user when context has tokenHash', () => {
-    const hints = strategy.hints({ tokenHash: 'abcdef' });
+  it('adds qps_analytics_user keyed by {channel_id} when context has a channel id', () => {
+    const hints = strategy.hints({ channelId: 'UC123' });
     expect(hints.map((h) => h.scope)).toEqual([
       'daily_quota',
       'qps_analytics',
@@ -24,6 +24,11 @@ describe('YoutubeRateLimitStrategy', () => {
     ]);
     const userHint = hints.find((h) => h.scope === 'qps_analytics_user')!;
     expect(userHint.capacity).toBe(60);
-    expect(userHint.keyTemplate).toContain('{hash}');
+    expect(userHint.keyTemplate).toContain('{channel_id}');
+  });
+
+  it('does not add the per-user bucket from a token hash alone', () => {
+    const hints = strategy.hints({ tokenHash: 'abcdef' });
+    expect(hints.map((h) => h.scope)).toEqual(['daily_quota', 'qps_analytics']);
   });
 });

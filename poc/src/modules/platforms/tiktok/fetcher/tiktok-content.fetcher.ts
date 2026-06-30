@@ -75,11 +75,11 @@ export class TikTokContentFetcher {
 
   async fetch(
     accessToken: string,
-    _canonicalId: string,
+    canonicalId: string,
     opts: FetchOpts,
     metadata?: Record<string, unknown>,
   ): Promise<ContentData[]> {
-    const ctx = buildTikTokContext(accessToken, metadata);
+    const ctx = buildTikTokContext(accessToken, canonicalId, metadata);
     const accountId = extractAccountId(metadata);
     const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
     const collected: ContentData[] = [];
