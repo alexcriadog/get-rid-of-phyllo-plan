@@ -13,6 +13,7 @@ import { PrismaService } from '@shared/database/prisma.service';
 import { BullmqService, QueueName } from '@shared/redis/bullmq.service';
 import {
   shouldRequireHttps,
+  ssrfSafeAgents,
   validateWebhookTarget,
 } from './webhook-target-validator';
 
@@ -506,6 +507,12 @@ export class OutboundWebhooksService implements OnModuleInit, OnModuleDestroy {
         timeout: 10_000,
         validateStatus: () => true,
         proxy: false,
+        // SSRF hardening: never follow redirects (a 3xx Location to an
+        // internal URL is NOT re-validated by axios) and pin the socket to the
+        // address the validator already vetted, so a DNS flip between check
+        // and connect cannot repoint us at a private IP / metadata service.
+        maxRedirects: 0,
+        ...ssrfSafeAgents(targetCheck.resolvedAddresses),
         responseType: 'text',
         // Caps the bytes axios will accept BEFORE we truncate ourselves —
         // saves memory on a misbehaving client that floods the response.

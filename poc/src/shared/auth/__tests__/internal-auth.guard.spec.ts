@@ -8,6 +8,10 @@ function makeConfig(secret: string | undefined): ConfigService {
   return { get: () => secret } as unknown as ConfigService;
 }
 
+function makeConfigMap(map: Record<string, string | undefined>): ConfigService {
+  return { get: (k: string) => map[k] } as unknown as ConfigService;
+}
+
 function ctxFor(path: string, authHeader?: string): ExecutionContext {
   const req = { path, url: path, headers: authHeader ? { authorization: authHeader } : {} };
   return {
@@ -48,5 +52,17 @@ describe('InternalAuthGuard', () => {
     expect(guard.canActivate(ctxFor('/internal/workspaces/demo/branding'))).toBe(
       true,
     );
+  });
+
+  it('FAILS CLOSED on /internal in production when no secret is configured', () => {
+    const guard = new InternalAuthGuard(makeConfigMap({ NODE_ENV: 'production' }));
+    expect(() => guard.canActivate(ctxFor('/internal/accounts'))).toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('stays permissive on /internal in non-production when no secret is configured', () => {
+    const guard = new InternalAuthGuard(makeConfigMap({ NODE_ENV: 'development' }));
+    expect(guard.canActivate(ctxFor('/internal/accounts'))).toBe(true);
   });
 });

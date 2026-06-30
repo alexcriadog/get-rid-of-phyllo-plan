@@ -7,7 +7,9 @@ jest.mock('node:dns/promises', () => ({ lookup: jest.fn() }));
 
 import { lookup as lookupReal } from 'node:dns/promises';
 import {
+  pinnedLookup,
   shouldRequireHttps,
+  ssrfSafeAgents,
   validateWebhookTarget,
 } from '../webhook-target-validator';
 
@@ -263,5 +265,49 @@ describe('validateWebhookTarget — DNS resolution path', () => {
     if (r.ok) {
       expect(r.resolvedAddresses).toContain('93.184.216.34');
     }
+  });
+});
+
+// Connection pinning: the delivery must connect ONLY to the address the
+// validator already approved (closes the redirect bypass + DNS-rebinding
+// TOCTOU where axios would otherwise re-resolve the host itself).
+describe('pinnedLookup', () => {
+  it('returns the pre-validated IP regardless of the hostname asked', (done) => {
+    const fn = pinnedLookup(['93.184.216.34']);
+    fn('evil-rebind.example.com', { all: false } as never, ((
+      err: Error | null,
+      address: string,
+      family: number,
+    ) => {
+      expect(err).toBeNull();
+      expect(address).toBe('93.184.216.34');
+      expect(family).toBe(4);
+      done();
+    }) as never);
+  });
+
+  it('supports the all:true callback shape (IPv6)', (done) => {
+    const ipv6 = '2606:2800:220:1:248:1893:25c8:1946';
+    const fn = pinnedLookup([ipv6]);
+    fn('host', { all: true } as never, ((
+      err: Error | null,
+      addresses: { address: string; family: number }[],
+    ) => {
+      expect(err).toBeNull();
+      expect(addresses).toEqual([{ address: ipv6, family: 6 }]);
+      done();
+    }) as never);
+  });
+});
+
+describe('ssrfSafeAgents', () => {
+  it('builds http + https agents wired to the pinned lookup', () => {
+    const { httpAgent, httpsAgent } = ssrfSafeAgents(['93.184.216.34']);
+    expect(
+      typeof (httpAgent as unknown as { options: { lookup: unknown } }).options.lookup,
+    ).toBe('function');
+    expect(
+      typeof (httpsAgent as unknown as { options: { lookup: unknown } }).options.lookup,
+    ).toBe('function');
   });
 });

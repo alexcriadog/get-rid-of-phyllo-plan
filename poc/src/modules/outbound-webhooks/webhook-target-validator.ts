@@ -11,7 +11,9 @@
 // scheme_invalid without parsing free-form prose.
 
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { Agent as HttpAgent } from 'node:http';
+import { Agent as HttpsAgent } from 'node:https';
+import { isIP, type LookupFunction } from 'node:net';
 
 export type WebhookTargetCheck =
   | { ok: true; canonicalUrl: string; resolvedAddresses: ReadonlyArray<string> }
@@ -257,6 +259,51 @@ export async function validateWebhookTarget(
     ok: true,
     canonicalUrl: parsed.toString(),
     resolvedAddresses: resolved.map((r) => r.address),
+  };
+}
+
+/**
+ * A `dns.lookup`-shaped function that ALWAYS resolves to a pre-validated IP,
+ * ignoring the hostname it is asked about. Wiring this into the delivery agent
+ * pins the TCP connection to the exact address `validateWebhookTarget` already
+ * vetted — closing the DNS-rebinding TOCTOU where axios would otherwise
+ * re-resolve the host itself, after our check.
+ */
+export function pinnedLookup(addresses: ReadonlyArray<string>): LookupFunction {
+  const pin = addresses[0];
+  const family = isIP(pin); // 4 | 6 for a validated literal IP
+  return ((_hostname: string, options: unknown, callback?: unknown): void => {
+    const cb = (typeof options === 'function' ? options : callback) as (
+      err: NodeJS.ErrnoException | null,
+      address: string | ReadonlyArray<{ address: string; family: number }>,
+      family?: number,
+    ) => void;
+    const wantsAll =
+      typeof options === 'object' &&
+      options !== null &&
+      (options as { all?: boolean }).all === true;
+    if (wantsAll) {
+      cb(null, [{ address: pin, family }]);
+    } else {
+      cb(null, pin, family);
+    }
+  }) as unknown as LookupFunction;
+}
+
+/**
+ * http + https agents that pin every connection to `addresses` (see
+ * `pinnedLookup`). Pass these into the delivery request together with
+ * `maxRedirects: 0` so neither a redirect nor a racing DNS change can steer
+ * the request to an internal address after validation.
+ */
+export function ssrfSafeAgents(addresses: ReadonlyArray<string>): {
+  httpAgent: HttpAgent;
+  httpsAgent: HttpsAgent;
+} {
+  const lookup = pinnedLookup(addresses);
+  return {
+    httpAgent: new HttpAgent({ lookup }),
+    httpsAgent: new HttpsAgent({ lookup }),
   };
 }
 

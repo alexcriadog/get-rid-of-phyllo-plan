@@ -18,9 +18,12 @@
 // through untouched (the /v1 BearerApiKeyGuard and /admin/connect
 // ConnectToolGuard still apply at their own controllers).
 //
-// If CONNECT_TOOL_SECRET is unset (a freshly-cloned dev box), the guard is
-// permissive with a warning — same dev-convenience model as
-// ConnectToolGuard — so local stacks work without configuring a secret.
+// If CONNECT_TOOL_SECRET is unset, the guard is permissive with a warning in
+// non-production (a freshly-cloned dev box) — same dev-convenience model as
+// ConnectToolGuard — so local stacks work without configuring a secret. In
+// production a missing secret FAILS CLOSED (401): an unset credential must
+// never silently expose the zone. Deploy note: CONNECT_TOOL_SECRET must be
+// set in every production env (connect-tool already authenticates with it).
 
 import {
   CanActivate,
@@ -53,6 +56,16 @@ export class InternalAuthGuard implements CanActivate {
 
     const secret = this.config.get<string>('CONNECT_TOOL_SECRET');
     if (!secret) {
+      const nodeEnv =
+        this.config.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
+      if (nodeEnv === 'production') {
+        // Fail closed in production: a missing secret must NEVER silently
+        // expose the /internal/* zone (workspace config + end-user account
+        // handles). Dev stays permissive for local convenience.
+        throw new UnauthorizedException(
+          'internal endpoint auth is not configured',
+        );
+      }
       // Warn once per process so logs aren't spammed.
       if (!this.warnedMissingSecret) {
         this.logger.warn(
