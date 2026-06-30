@@ -213,6 +213,20 @@ export interface ApiContentInsights {
   extra: Record<string, unknown>;
 }
 
+/** Additive — a Threads quote/repost's referenced post, enough to render it
+ *  embedded (the wrapping post often has no text/media of its own). */
+export interface ApiReferencedContent {
+  external_id: string;
+  url: string | null;
+  description: string | null;
+  media_url: string | null;
+  thumbnail_url: string | null;
+  type: string | null;
+  format: string | null;
+  platform_profile_name: string | null;
+  published_at: string | null;
+}
+
 export interface ApiContent extends ApiEnvelope {
   engagement: ApiEngagement;
   authors: unknown[] | null;
@@ -241,6 +255,10 @@ export interface ApiContent extends ApiEnvelope {
   media_urls: string[];
   /** Additive (§4.6) — our deep analytics. InsightIQ leaves no field here. */
   insights: ApiContentInsights | null;
+  /** Additive — Threads quote post: the post this one QUOTES (embeddable). */
+  quoted_post?: ApiReferencedContent | null;
+  /** Additive — Threads repost: the post this one RE-SHARES. */
+  reposted_post?: ApiReferencedContent | null;
 }
 
 export interface ApiAudience extends ApiEnvelope {

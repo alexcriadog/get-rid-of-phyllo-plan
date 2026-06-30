@@ -51,6 +51,10 @@ const LIST_FIELDS = [
   'reply_audience',
   'alt_text',
   'children{id,media_type,media_url,thumbnail_url,permalink}',
+  // Quote / repost: the wrapping post often has no text/media of its own, so
+  // fetch the referenced post's content (else the item renders blank).
+  'quoted_post{id,text,media_type,media_url,thumbnail_url,permalink,username,timestamp,shortcode}',
+  'reposted_post{id,text,media_type,media_url,thumbnail_url,permalink,username,timestamp,shortcode}',
 ].join(',');
 
 const POST_INSIGHT_METRICS = ['views', 'likes', 'replies', 'reposts', 'quotes'].join(',');

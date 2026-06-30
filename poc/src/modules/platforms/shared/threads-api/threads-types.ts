@@ -41,6 +41,11 @@ export interface ThreadsPost {
   owner?: { id: string };
   username?: string;
   is_quote_post?: boolean;
+  /** The post this one QUOTES (present when is_quote_post). Requested as a
+   *  nested `quoted_post{...}` field; carries the referenced post's content. */
+  quoted_post?: ThreadsPost;
+  /** The post this one RE-SHARES (media_type REPOST_FACADE). */
+  reposted_post?: ThreadsPost;
   has_replies?: boolean;
   reply_audience?: 'EVERYONE' | 'ACCOUNTS_YOU_FOLLOW' | 'MENTIONED_ONLY';
   alt_text?: string;

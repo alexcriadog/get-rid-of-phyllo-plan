@@ -3,6 +3,7 @@ import type {
   ContentInsights,
   DistributionBucket,
   EngagementDeepItem,
+  ReferencedContent,
   RetentionCurve,
   SecondPercentage,
 } from "@modules/platforms/shared/platform-types";
@@ -14,6 +15,7 @@ import type {
   ApiEngagement,
   ApiEngagementAdditionalInfo,
   ApiGenderAgeBucket,
+  ApiReferencedContent,
 } from "../api-types";
 import { apiContentId } from "../ids";
 import { buildEnvelope } from "./envelope.mapper";
@@ -357,6 +359,29 @@ export function toApiContent(
     mentions: extractTags(content.caption, "@"),
     media_urls: mediaUrls.length > 1 ? mediaUrls : [],
     insights: buildInsights(content.insights, deep),
+    quoted_post: referencedToApi(content.quotedPost),
+    reposted_post: referencedToApi(content.repostedPost),
+  };
+}
+
+/** Map a referenced (quoted/reposted) post to the additive /v1 shape. */
+function referencedToApi(
+  ref: ReferencedContent | null | undefined,
+): ApiReferencedContent | null {
+  if (!ref) return null;
+  const { format, type } = contentTypeToFormatType(ref.contentType, {
+    isVideo: ref.contentType === "video" || ref.contentType === "reel",
+  });
+  return {
+    external_id: ref.platformContentId,
+    url: ref.permalink,
+    description: ref.caption,
+    media_url: ref.mediaUrls[0] ?? null,
+    thumbnail_url: ref.thumbnailUrl ?? null,
+    type,
+    format,
+    platform_profile_name: ref.ownerHandle,
+    published_at: naiveUtc(ref.publishedAt ?? null),
   };
 }
 

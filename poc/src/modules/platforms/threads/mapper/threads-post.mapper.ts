@@ -18,6 +18,7 @@ import type {
   ContentData,
   ContentMetrics,
   ContentType,
+  ReferencedContent,
 } from '../../shared/platform-types';
 import type {
   ThreadsInsight,
@@ -29,6 +30,14 @@ export function threadsPostToContent(post: ThreadsPost): ContentData {
   const contentType = detectThreadsContentType(post.media_type);
   const mediaUrls = collectMediaUrls(post);
   const children = mapChildren(post);
+  // A quote / repost often has no text or media of its own — surface the
+  // referenced post so the UI can render it embedded instead of blank.
+  const quotedPost = post.quoted_post
+    ? toReferencedContent(post.quoted_post)
+    : undefined;
+  const repostedPost = post.reposted_post
+    ? toReferencedContent(post.reposted_post)
+    : undefined;
   const serialized = JSON.stringify(post);
   const hash = createHash('sha256').update(serialized).digest('hex');
 
@@ -57,6 +66,8 @@ export function threadsPostToContent(post: ThreadsPost): ContentData {
     children: children.length > 0 ? children : undefined,
     shortcode: post.shortcode ?? null,
     ownerHandle: post.username ?? null,
+    quotedPost,
+    repostedPost,
     rawResponse: {
       collection: MONGO_COLLECTIONS.rawPlatformResponses,
       contentHash: hash,
@@ -109,6 +120,20 @@ function readInsightScalar(insight: ThreadsInsight): number | undefined {
     if (typeof last === 'number') return last;
   }
   return undefined;
+}
+
+/** Flatten a quoted / reposted Threads post into the embeddable reference. */
+function toReferencedContent(p: ThreadsPost): ReferencedContent {
+  return {
+    platformContentId: p.id,
+    ownerHandle: p.username ?? null,
+    caption: p.text ?? null,
+    permalink: p.permalink ?? null,
+    contentType: detectThreadsContentType(p.media_type),
+    mediaUrls: collectMediaUrls(p),
+    thumbnailUrl: p.thumbnail_url ?? p.media_url ?? null,
+    publishedAt: p.timestamp ? safeDate(p.timestamp) : null,
+  };
 }
 
 function detectThreadsContentType(media?: ThreadsMediaType): ContentType {

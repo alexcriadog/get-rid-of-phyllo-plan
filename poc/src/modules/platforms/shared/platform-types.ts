@@ -283,6 +283,22 @@ export interface ContentChild {
   permalink?: string | null;
 }
 
+/**
+ * A post REFERENCED by another one (Threads quote / repost). Carries enough of
+ * the referenced post to render it embedded, since the wrapping post often has
+ * no text/media of its own.
+ */
+export interface ReferencedContent {
+  platformContentId: string;
+  ownerHandle: string | null;
+  caption: string | null;
+  permalink: string | null;
+  contentType: ContentType;
+  mediaUrls: string[];
+  thumbnailUrl?: string | null;
+  publishedAt?: Date | null;
+}
+
 export interface ContentData {
   platformContentId: string;
   contentType: ContentType;
@@ -362,6 +378,14 @@ export interface ContentData {
     concurrentViewers?: string | null;
     activeLiveChatId?: string | null;
   } | null;
+  /**
+   * Threads quote post: the post this one QUOTES (`is_quote_post`). The
+   * wrapping post frequently has no text/media of its own — render this
+   * embedded so the item isn't blank.
+   */
+  quotedPost?: ReferencedContent | null;
+  /** Threads repost (`REPOST_FACADE`): the post this one RE-SHARES. */
+  repostedPost?: ReferencedContent | null;
   /**
    * Reference (hash / object id) to the raw blob stored in Mongo
    * `raw_platform_responses`. Not the blob itself — keep canonical records
