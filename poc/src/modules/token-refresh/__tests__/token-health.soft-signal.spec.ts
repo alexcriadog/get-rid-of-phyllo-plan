@@ -50,4 +50,20 @@ describe('token-health soft signal', () => {
     await run(svc);
     expect(lifecycle.reauthRecommended).not.toHaveBeenCalled();
   });
+
+  it('clears reauthRecommendedAt when the account is healthy again (no event)', async () => {
+    const { svc, prisma, lifecycle } = build({ reauthRecommendedAt: new Date() });
+    // Healthy: data_access far in the future => classifyDataAccess => 'ok'
+    (svc as any).probeDataAccessExpiry = jest
+      .fn()
+      .mockResolvedValue(Date.now() + 200 * 24 * 3600_000);
+    await run(svc);
+    expect(prisma.account.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 7n },
+        data: expect.objectContaining({ reauthRecommendedAt: null }),
+      }),
+    );
+    expect(lifecycle.reauthRecommended).not.toHaveBeenCalled();
+  });
 });
