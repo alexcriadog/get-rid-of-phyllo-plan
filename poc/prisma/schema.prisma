@@ -45,6 +45,9 @@ model Account {
   disconnectedAt       DateTime? @map("disconnected_at")
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
+  reauthRecommendedAt  DateTime? @map("reauth_recommended_at")
+  dataAccessExpiresAt  DateTime? @map("data_access_expires_at")
+  lastProbedAt         DateTime? @map("last_probed_at")
 
   tokens    OAuthToken[]
   syncJobs  SyncJob[]
