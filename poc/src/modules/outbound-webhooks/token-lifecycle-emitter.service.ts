@@ -97,6 +97,55 @@ export class TokenLifecycleEmitter {
     void this.standardWebhooks.fireLifecycle({ accountId, type: 'token.expired' });
   }
 
+  /**
+   * Soft signal: the data-access window is near/at its cliff but the token
+   * still works. The account keeps syncing; the client should prompt the
+   * end-user to reconnect at leisure. Fired once per transition (the health
+   * cron gates on Account.reauthRecommendedAt), never changes status.
+   */
+  async reauthRecommended(
+    accountId: bigint,
+    opts: { dataAccessExpiresAt: Date | null; reason: string },
+  ): Promise<void> {
+    const acc = await this.loadAccount(accountId);
+    if (!acc) return;
+    if (acc.isTest) return;
+    await this.webhooks.emit(acc.workspaceId, 'token.reauth_required', {
+      account_id: acc.id.toString(),
+      platform: acc.platform,
+      workspace_id: acc.workspaceId,
+      end_user_id: acc.endUserId ?? null,
+      canonical_user_id: acc.canonicalUserId,
+      severity: 'soft',
+      data_access_expires_at: opts.dataAccessExpiresAt?.toISOString() ?? null,
+      reason: opts.reason,
+      occurred_at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * An account previously flagged needs_reauth passed a real liveness probe
+   * again — it has been restored to status='ready'. Lets the client clear its
+   * "reconnect" prompt.
+   */
+  async tokenRecovered(
+    accountId: bigint,
+    opts: { reason: string },
+  ): Promise<void> {
+    const acc = await this.loadAccount(accountId);
+    if (!acc) return;
+    if (acc.isTest) return;
+    await this.webhooks.emit(acc.workspaceId, 'token.recovered', {
+      account_id: acc.id.toString(),
+      platform: acc.platform,
+      workspace_id: acc.workspaceId,
+      end_user_id: acc.endUserId ?? null,
+      canonical_user_id: acc.canonicalUserId,
+      reason: opts.reason,
+      occurred_at: new Date().toISOString(),
+    });
+  }
+
   private async loadAccount(accountId: bigint): Promise<{
     id: bigint;
     workspaceId: string;
