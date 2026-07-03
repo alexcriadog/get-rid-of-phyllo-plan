@@ -30,6 +30,8 @@ export const ALLOWED_EVENTS: ReadonlyArray<string> = [
   'account.refreshed',
   'token.refresh_failed',
   'token.expired',
+  'token.reauth_required',
+  'token.recovered',
   // Test ping: never emitted by an automated flow; only by the explicit
   // POST /v1/webhook-endpoints/:id/test and the admin "send test
   // webhook" button. Bypasses the subscription filter.
