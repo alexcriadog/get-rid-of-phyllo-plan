@@ -33,6 +33,7 @@ import { RedisService } from '@shared/redis/redis.service';
 import { AesLocalService } from '@shared/crypto/aes-local.service';
 import { runWithLock } from '@shared/redis/cron-lock';
 import { MetricsService } from '@shared/metrics/metrics.service';
+import { TokenLifecycleEmitter } from '@modules/outbound-webhooks/token-lifecycle-emitter.service';
 import { isIgDirect } from '@modules/platforms/shared/meta-graph/ig-direct';
 import {
   classifyDataAccess,
@@ -81,6 +82,7 @@ export class TokenHealthCronService implements OnApplicationBootstrap {
     private readonly aes: AesLocalService,
     private readonly config: ConfigService,
     private readonly metrics: MetricsService,
+    private readonly lifecycle: TokenLifecycleEmitter,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -140,7 +142,10 @@ export class TokenHealthCronService implements OnApplicationBootstrap {
       select: {
         accountId: true,
         accessTokenCiphertext: true,
-        account: { select: { platform: true, handle: true, metadata: true } },
+        account: { select: {
+          platform: true, handle: true, metadata: true,
+          reauthRecommendedAt: true, status: true,
+        } },
       },
       orderBy: { accountId: 'asc' },
       take: BATCH_SIZE,
@@ -172,6 +177,17 @@ export class TokenHealthCronService implements OnApplicationBootstrap {
     return snapshot;
   }
 
+  /** Overridable seam: returns data_access_expires_at ms (or null). */
+  protected async probeDataAccessExpiry(
+    url: string, inputToken: string, appToken: string,
+  ): Promise<number | null> {
+    const res = await axios.get<unknown>(url, {
+      params: { input_token: inputToken, access_token: appToken },
+      timeout: DEBUG_TIMEOUT_MS,
+    });
+    return parseDebugTokenDataAccessExpiry(res.data);
+  }
+
   private async checkRow(
     row: {
       accountId: bigint;
@@ -180,6 +196,8 @@ export class TokenHealthCronService implements OnApplicationBootstrap {
         platform: string;
         handle: string | null;
         metadata: unknown;
+        reauthRecommendedAt: Date | null;
+        status: string;
       };
     },
     nowMs: number,
@@ -228,11 +246,7 @@ export class TokenHealthCronService implements OnApplicationBootstrap {
       );
       const url =
         flow === 'threads' ? THREADS_DEBUG_TOKEN_URL : META_DEBUG_TOKEN_URL;
-      const res = await axios.get<unknown>(url, {
-        params: { input_token: inputToken, access_token: appToken },
-        timeout: DEBUG_TIMEOUT_MS,
-      });
-      const expiresAtMs = parseDebugTokenDataAccessExpiry(res.data);
+      const expiresAtMs = await this.probeDataAccessExpiry(url, inputToken, appToken);
       const cls = classifyDataAccess(expiresAtMs, nowMs);
       if (cls.status === 'expiring' || cls.status === 'expired') {
         this.metrics.incr('token_health_alert', {
@@ -245,6 +259,25 @@ export class TokenHealthCronService implements OnApplicationBootstrap {
             `${cls.daysLeft} day(s) left — end-user re-auth required before the cliff`,
         );
       }
+
+      const alert = cls.status === 'expiring' || cls.status === 'expired';
+      const dataAccessDate = expiresAtMs === null ? null : new Date(expiresAtMs);
+      if (alert && row.account.reauthRecommendedAt === null) {
+        await this.prisma.account.update({
+          where: { id: row.accountId },
+          data: { reauthRecommendedAt: new Date(), dataAccessExpiresAt: dataAccessDate },
+        });
+        await this.lifecycle.reauthRecommended(row.accountId, {
+          dataAccessExpiresAt: dataAccessDate,
+          reason: `data_access ${cls.status} (${cls.daysLeft} day(s) left)`,
+        });
+      } else if (!alert && row.account.reauthRecommendedAt !== null) {
+        await this.prisma.account.update({
+          where: { id: row.accountId },
+          data: { reauthRecommendedAt: null },
+        });
+      }
+
       return {
         ...base,
         flow,
