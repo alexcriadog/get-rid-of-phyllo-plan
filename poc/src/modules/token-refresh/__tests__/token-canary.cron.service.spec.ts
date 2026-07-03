@@ -79,4 +79,17 @@ describe('token-canary cron', () => {
       expect.objectContaining({ where: { id: 9n }, data: { lastProbedAt: expect.any(Date) } }),
     );
   });
+
+  it('probes ig_direct accounts via fetchProfile with their metadata (IG blind-spot path)', async () => {
+    const probe = jest.fn().mockResolvedValue({ id: '1' }); // healthy
+    const acct = {
+      id: 21n, platform: 'instagram', canonicalUserId: 'c', status: 'needs_reauth',
+      metadata: { oauth_flow: 'ig_direct' },
+      tokens: [{ accessTokenCiphertext: Buffer.from('x'), userAccessTokenCiphertext: null }],
+    };
+    const { svc, lifecycle } = build([acct], probe);
+    await run(svc);
+    expect(probe).toHaveBeenCalledWith('plain', 'c', { oauth_flow: 'ig_direct' });
+    expect(lifecycle.tokenRecovered).toHaveBeenCalledTimes(1); // healthy → self-heal
+  });
 });

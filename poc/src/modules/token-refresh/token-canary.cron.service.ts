@@ -83,8 +83,9 @@ export class TokenCanaryCronService implements OnApplicationBootstrap {
       },
       select: {
         id: true, platform: true, canonicalUserId: true, status: true, metadata: true,
-        tokens: { select: { accessTokenCiphertext: true, userAccessTokenCiphertext: true } },
+        tokens: { select: { accessTokenCiphertext: true } },
       },
+      orderBy: { lastProbedAt: 'asc' },
       take: BATCH_SIZE,
     });
 
@@ -94,9 +95,11 @@ export class TokenCanaryCronService implements OnApplicationBootstrap {
       const token = row.tokens[0];
       if (!adapter || !token) { result.skipped += 1; continue; }
 
-      const accessToken = token.userAccessTokenCiphertext
-        ? this.aes.decrypt(Buffer.from(token.userAccessTokenCiphertext))
-        : this.aes.decrypt(Buffer.from(token.accessTokenCiphertext));
+      // Probe with the PRIMARY (page/access) token — the token organic products
+      // read. A revoked *user* token (Meta ads-only) must NOT gate otherwise-
+      // working organic data, so we deliberately do not prefer it here (unlike
+      // the sync worker, which uses the user token only for facebook ads).
+      const accessToken = this.aes.decrypt(Buffer.from(token.accessTokenCiphertext));
 
       const verdict = await probeAccount(
         adapter, accessToken, row.canonicalUserId,
@@ -143,6 +146,11 @@ export class TokenCanaryCronService implements OnApplicationBootstrap {
       this.logger.log(
         `Token-canary sweep: scanned=${result.scanned} recovered=${result.recovered} ` +
           `flagged=${result.flagged} skipped=${result.skipped}`,
+      );
+    }
+    if (result.scanned === BATCH_SIZE) {
+      this.logger.warn(
+        `Token-canary hit the ${BATCH_SIZE}-row batch cap — more accounts may be due; next daily run continues.`,
       );
     }
     return result;
