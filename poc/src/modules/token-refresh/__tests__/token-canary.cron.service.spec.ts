@@ -59,4 +59,24 @@ describe('token-canary cron', () => {
     expect(lifecycle.tokenExpired).not.toHaveBeenCalled();
     expect(lifecycle.tokenRecovered).not.toHaveBeenCalled();
   });
+
+  it('queries only quiet ready accounts + needs_reauth, excluding recently-synced ready', async () => {
+    const { svc, prisma } = build([], async () => ({ id: '1' }));
+    await run(svc);
+    const arg = prisma.account.findMany.mock.calls[0][0];
+    expect(arg.where.OR).toEqual([
+      { status: 'ready', syncJobs: { none: { lastAttemptAt: { gte: expect.any(Date) } } } },
+      { status: 'needs_reauth' },
+    ]);
+  });
+
+  it('healthy probe on a ready account emits no event and only touches lastProbedAt', async () => {
+    const { svc, prisma, lifecycle } = build([row({ id: 9n, status: 'ready' })], async () => ({ id: '1' }));
+    await run(svc);
+    expect(lifecycle.tokenRecovered).not.toHaveBeenCalled();
+    expect(lifecycle.tokenExpired).not.toHaveBeenCalled();
+    expect(prisma.account.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 9n }, data: { lastProbedAt: expect.any(Date) } }),
+    );
+  });
 });
