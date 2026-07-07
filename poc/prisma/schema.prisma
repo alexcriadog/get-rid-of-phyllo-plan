@@ -25,8 +25,13 @@ model Account {
   // accounts are reassigned to the auto-created "demo" workspace so legacy
   // single-tenant deployments keep working unchanged.
   workspaceId          String   @map("workspace_id")
-  // Optional end-user identifier carried in from the SDK token. Lets a
-  // client correlate the connected account back to their own user record.
+  // End-user identifier carried in from the SDK token (the connect session's
+  // `sub`, e.g. an app-side `${orgId}_${platformId}`). PART OF THE UNIQUENESS
+  // KEY: two different end users (tenants/orgs) that connect the SAME real
+  // platform account each get their OWN account row — independent token, sync,
+  // and apiAccountId — so one tenant's connect/disconnect never clobbers
+  // another's. Nullable for legacy/direct-API seeds (no SDK token); those all
+  // share the same "no end user" slot per canonical identity.
   endUserId            String?  @map("end_user_id")
   // True when the account was created via a `cmlk_test_*` SDK token.
   // Test-mode accounts share the same storage as live ones but don't fire
@@ -46,7 +51,14 @@ model Account {
   overrides AccountCadenceOverride[]
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
 
-  @@unique([workspaceId, platform, canonicalUserId, connectionFlow], map: "accounts_ws_platform_canonical_flow_key")
+  // endUserId is part of the key so two tenants that connect the SAME real
+  // account get separate rows (see the endUserId comment above). Prefix lengths
+  // keep this 5-column index within MySQL's 3072-byte InnoDB limit; the prefixes
+  // far exceed real value lengths (canonical ids and `${orgId}_${platformId}`
+  // end users are short), so uniqueness stays exact in practice. Dedup is also
+  // enforced in code (accounts.service upsert) since a nullable key column can't
+  // drive Prisma's compound-unique upsert.
+  @@unique([workspaceId(length: 64), platform(length: 32), canonicalUserId(length: 128), connectionFlow(length: 32), endUserId(length: 128)], map: "accounts_ws_platform_canonical_flow_euid_key")
   @@index([workspaceId, platform])
   @@index([workspaceId, endUserId])
   @@map("accounts")

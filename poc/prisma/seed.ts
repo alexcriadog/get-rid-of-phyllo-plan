@@ -187,43 +187,42 @@ async function seedAccount(input: SeedAccountInput): Promise<{
   const workspaceId = 'wkspc_demo';
   const connectionFlow = connectionFlowFor(input.platform);
 
-  const existing = await prisma.account.findUnique({
+  // Demo seeds carry no SDK token, so end_user_id is NULL. end_user_id is now
+  // part of the account key, but a nullable key column can't drive Prisma's
+  // compound-unique upsert — match with findFirst (endUserId: null) then
+  // create-or-update by id.
+  const existing = await prisma.account.findFirst({
     where: {
-      workspaceId_platform_canonicalUserId_connectionFlow: {
-        workspaceId,
-        platform: input.platform,
-        canonicalUserId: input.canonicalUserId,
-        connectionFlow,
-      },
-    },
-  });
-
-  const account = await prisma.account.upsert({
-    where: {
-      workspaceId_platform_canonicalUserId_connectionFlow: {
-        workspaceId,
-        platform: input.platform,
-        canonicalUserId: input.canonicalUserId,
-        connectionFlow,
-      },
-    },
-    create: {
       workspaceId,
       platform: input.platform,
       canonicalUserId: input.canonicalUserId,
       connectionFlow,
-      handle: input.handle ?? null,
-      displayName: input.handle ?? null,
-      status: 'ready',
-      syncTier: 'standard',
-      owningOrganizationId: 'demo',
-    },
-    update: {
-      handle: input.handle ?? null,
-      displayName: input.handle ?? null,
-      status: 'ready',
+      endUserId: null,
     },
   });
+
+  const account = existing
+    ? await prisma.account.update({
+        where: { id: existing.id },
+        data: {
+          handle: input.handle ?? null,
+          displayName: input.handle ?? null,
+          status: 'ready',
+        },
+      })
+    : await prisma.account.create({
+        data: {
+          workspaceId,
+          platform: input.platform,
+          canonicalUserId: input.canonicalUserId,
+          connectionFlow,
+          handle: input.handle ?? null,
+          displayName: input.handle ?? null,
+          status: 'ready',
+          syncTier: 'standard',
+          owningOrganizationId: 'demo',
+        },
+      });
 
   await prisma.oAuthToken.upsert({
     where: { accountId: account.id },

@@ -199,14 +199,20 @@ export class AccountsService {
       // 'paused' — that preserves deliberate 'lite'/'demo' tiers across
       // re-connects while clearing the auto-pause that the worker sets after
       // five consecutive failures (sync.worker.ts).
-      const existing = await tx.account.findUnique({
+      // endUserId is part of the account identity key: a DIFFERENT end user
+      // (tenant/org) connecting the SAME real account gets its OWN row, so a
+      // second tenant's connect never clobbers the first's. We can't use
+      // Prisma's compound-unique upsert here because the key includes a
+      // nullable column (endUserId), so match with findFirst then
+      // create-or-update by id. The DB unique index is the backstop.
+      const endUserId = input.endUserId ?? null;
+      const existing = await tx.account.findFirst({
         where: {
-          workspaceId_platform_canonicalUserId_connectionFlow: {
-            workspaceId,
-            platform: input.platform,
-            canonicalUserId: input.canonicalUserId,
-            connectionFlow,
-          },
+          workspaceId,
+          platform: input.platform,
+          canonicalUserId: input.canonicalUserId,
+          connectionFlow,
+          endUserId,
         },
         select: { id: true, syncTier: true },
       });
@@ -214,44 +220,41 @@ export class AccountsService {
 
       const isTest = input.isTest === true;
 
-      const account = await tx.account.upsert({
-        where: {
-          workspaceId_platform_canonicalUserId_connectionFlow: {
-            workspaceId,
-            platform: input.platform,
-            canonicalUserId: input.canonicalUserId,
-            connectionFlow,
-          },
-        },
-        create: {
-          workspaceId,
-          endUserId: input.endUserId ?? null,
-          isTest,
-          platform: input.platform,
-          canonicalUserId: input.canonicalUserId,
-          connectionFlow,
-          handle: input.handle ?? null,
-          status: 'ready',
-          syncTier: 'standard',
-          metadata: metadataValue,
-        },
-        update: {
-          handle: input.handle ?? undefined,
-          status: 'ready',
-          // Re-seeding an existing account doesn't downgrade live → test
-          // (a live account that previously had webhooks fire shouldn't
-          // start being silenced because someone re-OAuth'd with a test
-          // key). Only upgrade test → live.
-          ...(input.endUserId !== undefined ? { endUserId: input.endUserId } : {}),
-          ...(isTest === false ? { isTest: false } : {}),
-          ...(wasPaused ? { syncTier: 'standard' } : {}),
-          // Only overwrite metadata when the caller provided one — preserves
-          // existing keys (e.g. page_id) on a re-seed of the same account.
-          ...(input.metadata && Object.keys(input.metadata).length > 0
-            ? { metadata: metadataValue }
-            : {}),
-        },
-      });
+      const account = existing
+        ? await tx.account.update({
+            where: { id: existing.id },
+            data: {
+              handle: input.handle ?? undefined,
+              status: 'ready',
+              // Re-seeding an existing account doesn't downgrade live → test
+              // (a live account that previously had webhooks fire shouldn't
+              // start being silenced because someone re-OAuth'd with a test
+              // key). Only upgrade test → live. endUserId is NOT touched here —
+              // it's part of the match key, so any row we reach already carries
+              // this exact endUserId.
+              ...(isTest === false ? { isTest: false } : {}),
+              ...(wasPaused ? { syncTier: 'standard' } : {}),
+              // Only overwrite metadata when the caller provided one — preserves
+              // existing keys (e.g. page_id) on a re-seed of the same account.
+              ...(input.metadata && Object.keys(input.metadata).length > 0
+                ? { metadata: metadataValue }
+                : {}),
+            },
+          })
+        : await tx.account.create({
+            data: {
+              workspaceId,
+              endUserId,
+              isTest,
+              platform: input.platform,
+              canonicalUserId: input.canonicalUserId,
+              connectionFlow,
+              handle: input.handle ?? null,
+              status: 'ready',
+              syncTier: 'standard',
+              metadata: metadataValue,
+            },
+          });
 
       // If the account was auto-paused, the failure_count on its jobs is the
       // tripwire that paused it — clear it so future failures start from zero

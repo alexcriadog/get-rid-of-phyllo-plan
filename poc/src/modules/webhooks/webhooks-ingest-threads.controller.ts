@@ -129,11 +129,19 @@ export class WebhooksIngestThreadsController {
 
     const product = THREADS_FIELD_TO_PRODUCT[envelope.field] ?? 'engagement_new';
 
-    const account = await this.prisma.account.findFirst({
-      where: { platform: 'threads', canonicalUserId: envelope.targetId },
+    // Threads (like Meta/IG) delivers the event keyed only by the platform user
+    // id (= canonicalUserId). Multiple tenant rows can share it — the same real
+    // account connected by two different end users (orgs) — so fan out to EVERY
+    // non-disconnected account with this canonical id instead of picking one.
+    const accounts = await this.prisma.account.findMany({
+      where: {
+        platform: 'threads',
+        canonicalUserId: envelope.targetId,
+        status: { not: 'disconnected' },
+      },
       select: { id: true },
     });
-    if (!account) {
+    if (accounts.length === 0) {
       this.logger.warn(
         `No threads account for canonical_user_id=${envelope.targetId}`,
       );
@@ -141,15 +149,43 @@ export class WebhooksIngestThreadsController {
       return;
     }
 
-    const syncJob = await this.prisma.syncJob.findUnique({
-      where: { accountId_product: { accountId: account.id, product } },
-      select: { id: true },
-    });
+    const queue = this.bullmq.getQueue<SyncJobPayload>(SYNC_QUEUE_NAME);
+    let enqueued = 0;
+    for (const account of accounts) {
+      const syncJob = await this.prisma.syncJob.findUnique({
+        where: { accountId_product: { accountId: account.id, product } },
+        select: { id: true },
+      });
 
-    // Account resolved but not enrolled in the product — record and skip
-    // (same rationale as the Meta route: nothing to sync, and a synthetic
-    // jobId would crash the worker's BigInt(jobId)).
-    if (!syncJob) {
+      // Row resolved but not enrolled in the product — skip it (a coexisting
+      // tenant row may still be enrolled). A synthetic jobId would crash the
+      // worker's BigInt(jobId).
+      if (!syncJob) {
+        this.logger.log(
+          `Threads webhook for account ${account.id.toString()} resolved but product '${product}' not enrolled; skipping sync`,
+        );
+        continue;
+      }
+
+      const payload: SyncJobPayload = {
+        jobId: syncJob.id.toString(),
+        accountId: account.id.toString(),
+        product,
+      };
+
+      // jobId MUST include the account id: coexisting tenant rows share one
+      // eventId and BullMQ dedupes by jobId — without the per-account suffix the
+      // second row's sync job would be silently dropped.
+      await queue.add('sync', payload, {
+        priority: this.bullmq.toPriorityNumber('HIGH'),
+        jobId: `webhook-${eventId}-${account.id.toString()}`,
+        removeOnComplete: { age: 3600, count: 500 },
+        removeOnFail: { age: 86_400, count: 200 },
+      });
+      enqueued += 1;
+    }
+
+    if (enqueued === 0) {
       await this.webhookLog.markResolved('threads', eventId, false);
       this.metrics.incr('webhook_skipped_no_product', {
         platform: 'threads',
@@ -157,20 +193,6 @@ export class WebhooksIngestThreadsController {
       });
       return;
     }
-
-    const payload: SyncJobPayload = {
-      jobId: syncJob.id.toString(),
-      accountId: account.id.toString(),
-      product,
-    };
-
-    const queue = this.bullmq.getQueue<SyncJobPayload>(SYNC_QUEUE_NAME);
-    await queue.add('sync', payload, {
-      priority: this.bullmq.toPriorityNumber('HIGH'),
-      jobId: `webhook-${eventId}`,
-      removeOnComplete: { age: 3600, count: 500 },
-      removeOnFail: { age: 86_400, count: 200 },
-    });
 
     await this.webhookLog.markResolved('threads', eventId, true);
     this.metrics.incr('webhook_enqueued', { platform: 'threads', product });

@@ -124,11 +124,13 @@ export class WebhooksIngestTikTokController {
       return;
     }
 
-    const account = await this.prisma.account.findFirst({
+    // The same real TikTok account can be connected by multiple end users
+    // (tenants/orgs) → multiple rows sharing this openId. Resolve them all.
+    const accounts = await this.prisma.account.findMany({
       where: { platform: 'tiktok', canonicalUserId: openId },
       select: { id: true, workspaceId: true, status: true },
     });
-    if (!account) {
+    if (accounts.length === 0) {
       this.metrics.incr('webhook_account_missing', { platform: 'tiktok' });
       return;
     }
@@ -144,24 +146,29 @@ export class WebhooksIngestTikTokController {
       return;
     }
 
+    // A TikTok deauthorization is at the platform-user level: every tenant row
+    // that connected this account is now dead, so disconnect them all.
     const reason = this.parseRemovalReason(body.content);
-    if (account.status === 'disconnected') {
-      await this.webhookLog.markResolved('tiktok', eventId, true);
+    let disconnected = 0;
+    for (const account of accounts) {
+      if (account.status === 'disconnected') continue;
+      await this.accounts.disconnectAccount(account.id, account.workspaceId);
+      disconnected += 1;
       this.logger.log(
-        `TikTok deauthorization for already-disconnected account ${account.id.toString()} (${reason})`,
+        `TikTok deauthorization → disconnected account ${account.id.toString()} (reason=${reason})`,
       );
-      return;
     }
-
-    await this.accounts.disconnectAccount(account.id, account.workspaceId);
     await this.webhookLog.markResolved('tiktok', eventId, true);
-    this.metrics.incr('webhook_deauthorization_processed', {
-      platform: 'tiktok',
-      reason,
-    });
-    this.logger.log(
-      `TikTok deauthorization → disconnected account ${account.id.toString()} (reason=${reason})`,
-    );
+    if (disconnected > 0) {
+      this.metrics.incr('webhook_deauthorization_processed', {
+        platform: 'tiktok',
+        reason,
+      });
+    } else {
+      this.logger.log(
+        `TikTok deauthorization for already-disconnected account(s) openId=${openId} (${reason})`,
+      );
+    }
   }
 
   /** content is double-encoded JSON: "{\"reason\": 1}". */
