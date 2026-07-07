@@ -56,6 +56,7 @@ type AccountDetail = {
   status?: string;
   sync_tier?: string;
   canonical_user_id?: string;
+  end_user_id?: string | null;
   connected_at?: string | null;
   token_expires_at?: string | null;
   products?: ProductHealth[] | Record<string, ProductHealth>;
@@ -172,6 +173,11 @@ export default function AccountDetailPage() {
               <div className="mt-1 font-mono text-xs text-muted-foreground/70">
                 #{id} · {account.canonical_user_id ?? '—'}
               </div>
+              {account.end_user_id && (
+                <div className="mt-0.5 font-mono text-xs text-muted-foreground/70">
+                  end user · {account.end_user_id}
+                </div>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge variant={account.status === 'paused' ? 'danger' : 'ok'}>
                   {account.status ?? '—'}
