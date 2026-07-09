@@ -12,6 +12,34 @@ import axios from 'axios';
 import { type SeedBody } from './seed-client';
 import { putSession, type FbPageInSession } from './session';
 
+/**
+ * Meta serializes some large numeric ids — notably the Threads and Instagram
+ * professional `user_id`, which exceed Number.MAX_SAFE_INTEGER — as UNQUOTED
+ * JSON numbers. axios' default `JSON.parse` then rounds the last digit
+ * (e.g. 24359267497097029 → 24359267497097028), so we'd persist a
+ * `canonical_user_id` that doesn't exist and every id-keyed call (profile
+ * fetch, webhook correlation) would silently break. This axios
+ * `transformResponse` re-reads the field from the RAW body (which still has
+ * full precision) as a string and overwrites the rounded value in place.
+ * Usage: `transformResponse: [preserveNumericId('user_id')]`.
+ */
+function preserveNumericId(field: string) {
+  return (raw: unknown): unknown => {
+    if (typeof raw !== 'string' || raw.length === 0) return raw;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return raw;
+    }
+    if (parsed && typeof parsed === 'object') {
+      const match = raw.match(new RegExp(`"${field}"\\s*:\\s*"?(\\d+)"?`));
+      if (match) (parsed as Record<string, unknown>)[field] = match[1];
+    }
+    return parsed;
+  };
+}
+
 const META_GRAPH = 'https://graph.facebook.com/v22.0';
 const THREADS_GRAPH = 'https://graph.threads.net/v1.0';
 const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -452,6 +480,9 @@ const threads: PlatformDef = {
     }>(THREADS_TOKEN, params, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       timeout: 15_000,
+      // user_id exceeds 2^53 and arrives as an unquoted JSON number; keep it
+      // exact as a string so canonical_user_id matches the real Threads id.
+      transformResponse: [preserveNumericId('user_id')],
     });
     const shortLived = slRes.data.access_token;
     const userId = String(slRes.data.user_id);
@@ -634,6 +665,9 @@ const instagramDirect: PlatformDef = {
       timeout: 15_000,
       validateStatus: () => true,
       proxy: false,
+      // IG professional user_id exceeds 2^53 and arrives as an unquoted JSON
+      // number; keep it exact as a string (see preserveNumericId).
+      transformResponse: [preserveNumericId('user_id')],
     });
     if (meRes.status < 200 || meRes.status >= 300) {
       const errMsg = meRes.data?.error?.message ?? `HTTP ${meRes.status}`;
