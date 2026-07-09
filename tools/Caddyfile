@@ -132,6 +132,12 @@ smconnector.camaleonicanalytics.com {
 		reverse_proxy connect-tool:3002
 	}
 
+	# Inbound platform webhooks (Meta/Threads/TikTok) -> poc-api ingest
+	# controllers. Public; the controllers verify the X-Hub-Signature-256 HMAC.
+	handle /webhooks/* {
+		reverse_proxy api:3000
+	}
+
 	# Everything else (/, /api/oauth/*, /facebook/pages, /confirm/*,
 	# /success, /api/seed-pages, /api/seed-confirm) → connect-tool.
 	handle {
