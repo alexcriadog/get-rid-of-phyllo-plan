@@ -153,12 +153,19 @@ function detectThreadsContentType(media?: ThreadsMediaType): ContentType {
 }
 
 function collectMediaUrls(post: ThreadsPost): string[] {
-  const urls: string[] = [];
-  if (post.media_url) urls.push(post.media_url);
-  for (const child of post.children?.data ?? []) {
-    if (child.media_url) urls.push(child.media_url);
+  // For a CAROUSEL_ALBUM, `children` holds every slide and the parent
+  // `media_url` is just the cover — which is the SAME image as the first
+  // child. Including both duplicated the first image (and pushed the real
+  // last slide out of any downstream length cap). So: use children when
+  // present, and fall back to the parent media_url only for single-media
+  // posts (IMAGE / VIDEO, which have no children).
+  const children = post.children?.data ?? [];
+  if (children.length > 0) {
+    return children
+      .map((child) => child.media_url)
+      .filter((url): url is string => !!url);
   }
-  return urls;
+  return post.media_url ? [post.media_url] : [];
 }
 
 function mapChildren(post: ThreadsPost): ContentChild[] {
