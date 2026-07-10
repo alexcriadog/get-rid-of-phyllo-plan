@@ -144,6 +144,9 @@ export class TokenLifecycleEmitter {
       reason: opts.reason,
       occurred_at: new Date().toISOString(),
     });
+    // InsightIQ-compatible SESSION.RECOVERED (thin) to standard-format
+    // endpoints — flag-gated until consumer receivers handle the name.
+    void this.standardWebhooks.fireLifecycle({ accountId, type: 'token.recovered' });
   }
 
   private async loadAccount(accountId: bigint): Promise<{

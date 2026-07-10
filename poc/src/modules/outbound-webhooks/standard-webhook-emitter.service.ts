@@ -24,7 +24,7 @@ import {
 } from "@modules/data-schema";
 import {
   PRODUCT_EVENT_MAP,
-  LIFECYCLE_EVENT_MAP,
+  standardLifecycleSpec,
   chunk,
   type EventSpec,
 } from "./standard-webhook-events";
@@ -97,7 +97,7 @@ export class StandardWebhookEmitter {
     accountId: bigint;
     type: string;
   }): Promise<void> {
-    const spec = LIFECYCLE_EVENT_MAP[args.type];
+    const spec = standardLifecycleSpec(args.type, process.env);
     if (!spec) return;
     const acc = await this.loadAccount(args.accountId);
     if (!acc || acc.isTest) return;

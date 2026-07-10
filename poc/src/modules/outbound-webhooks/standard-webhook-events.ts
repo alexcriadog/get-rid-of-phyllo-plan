@@ -70,12 +70,34 @@ export const LIFECYCLE_EVENT_MAP: Record<string, EventSpec> = {
     nameAdded: "session expired",
     kind: "account",
   },
-  "token.refresh_failed": {
-    added: "SESSION.EXPIRED",
-    nameAdded: "session expired",
+  // NOTE: token.refresh_failed (transient, will retry) deliberately has NO
+  // thin mapping. Consumer backends treat SESSION.EXPIRED as a hard
+  // disconnect, so a retryable blip must never be delivered under that name.
+  "token.recovered": {
+    added: "SESSION.RECOVERED",
+    nameAdded: "session recovered",
     kind: "account",
   },
 };
+
+/**
+ * Rollout flag for SESSION.RECOVERED: consumer webhook receivers throw on
+ * unknown event names, so thin emission stays off until they handle it.
+ */
+export const SESSION_RECOVERED_FLAG = "WEBHOOK_STANDARD_SESSION_RECOVERED";
+
+/** Lifecycle spec lookup honouring rollout flags; null = don't emit thin. */
+export function standardLifecycleSpec(
+  type: string,
+  env: Record<string, string | undefined>,
+): EventSpec | null {
+  const spec = LIFECYCLE_EVENT_MAP[type];
+  if (!spec) return null;
+  if (type === "token.recovered" && env[SESSION_RECOVERED_FLAG] !== "true") {
+    return null;
+  }
+  return spec;
+}
 
 /** Every InsightIQ event name we can emit — used to subscription-filter endpoints. */
 export const ALL_STANDARD_EVENTS: ReadonlyArray<string> = [

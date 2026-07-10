@@ -5,7 +5,7 @@ function build(account: any) {
   const webhooks = { emit: jest.fn().mockResolvedValue(undefined) };
   const standardWebhooks = { fireLifecycle: jest.fn().mockResolvedValue(undefined) };
   const svc = new TokenLifecycleEmitter(prisma as never, webhooks as never, standardWebhooks as never);
-  return { svc, webhooks };
+  return { svc, webhooks, standardWebhooks };
 }
 
 const acct = {
@@ -40,6 +40,15 @@ describe('TokenLifecycleEmitter re-auth signals', () => {
       'token.recovered',
       expect.objectContaining({ account_id: '7', reason: 'canary probe healthy' }),
     );
+  });
+
+  it('tokenRecovered also fires the thin SESSION.RECOVERED lifecycle', async () => {
+    const { svc, standardWebhooks } = build(acct);
+    await svc.tokenRecovered(7n, { reason: 'canary probe healthy' });
+    expect(standardWebhooks.fireLifecycle).toHaveBeenCalledWith({
+      accountId: 7n,
+      type: 'token.recovered',
+    });
   });
 
   it('drops test-mode accounts silently', async () => {

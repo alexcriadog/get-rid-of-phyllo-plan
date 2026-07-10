@@ -2,6 +2,7 @@ import {
   PRODUCT_EVENT_MAP,
   LIFECYCLE_EVENT_MAP,
   ALL_STANDARD_EVENTS,
+  standardLifecycleSpec,
   chunk,
 } from '../standard-webhook-events';
 
@@ -27,6 +28,25 @@ describe('InsightIQ webhook event mapping', () => {
     expect(LIFECYCLE_EVENT_MAP['account.connected'].added).toBe('ACCOUNTS.CONNECTED');
     expect(LIFECYCLE_EVENT_MAP['account.disconnected'].added).toBe('ACCOUNTS.DISCONNECTED');
     expect(LIFECYCLE_EVENT_MAP['token.expired'].added).toBe('SESSION.EXPIRED');
+    expect(LIFECYCLE_EVENT_MAP['token.recovered'].added).toBe('SESSION.RECOVERED');
+  });
+
+  test('transient token.refresh_failed never maps to a thin event', () => {
+    // A retryable refresh failure must not read as a dead session downstream —
+    // SESSION.EXPIRED triggers a hard disconnect in consumer backends.
+    expect(LIFECYCLE_EVENT_MAP['token.refresh_failed']).toBeUndefined();
+  });
+
+  test('standardLifecycleSpec gates SESSION.RECOVERED behind the env flag', () => {
+    expect(standardLifecycleSpec('token.recovered', {})).toBeNull();
+    expect(
+      standardLifecycleSpec('token.recovered', {
+        WEBHOOK_STANDARD_SESSION_RECOVERED: 'true',
+      })?.added,
+    ).toBe('SESSION.RECOVERED');
+    // Other lifecycle events ignore the flag.
+    expect(standardLifecycleSpec('token.expired', {})?.added).toBe('SESSION.EXPIRED');
+    expect(standardLifecycleSpec('unknown.event', {})).toBeNull();
   });
 
   test('ALL_STANDARD_EVENTS is the deduped union and matches InsightIQ names', () => {
@@ -36,6 +56,7 @@ describe('InsightIQ webhook event mapping', () => {
       'CONTENTS.ADDED', 'CONTENTS.UPDATED',
       'CONTENTS_COMMENTS.ADDED', 'CONTENTS_COMMENTS.UPDATED',
       'ACCOUNTS.CONNECTED', 'ACCOUNTS.DISCONNECTED', 'SESSION.EXPIRED',
+      'SESSION.RECOVERED',
     ]));
     expect(new Set(ALL_STANDARD_EVENTS).size).toBe(ALL_STANDARD_EVENTS.length);
   });
