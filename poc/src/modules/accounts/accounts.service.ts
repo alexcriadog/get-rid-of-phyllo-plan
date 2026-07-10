@@ -214,9 +214,13 @@ export class AccountsService {
           connectionFlow,
           endUserId,
         },
-        select: { id: true, syncTier: true },
+        select: { id: true, syncTier: true, status: true },
       });
       const wasPaused = existing?.syncTier === 'paused';
+      // Remember whether this re-seed is healing a dead-token account — the
+      // upsert below unconditionally resets status to 'ready', so this is the
+      // only place the previous state is still visible.
+      const wasNeedsReauth = existing?.status === 'needs_reauth';
 
       const isTest = input.isTest === true;
 
@@ -226,6 +230,10 @@ export class AccountsService {
             data: {
               handle: input.handle ?? undefined,
               status: 'ready',
+              // A fresh OAuth token voids the soft re-auth recommendation and
+              // its data-access snapshot; the health cron re-evaluates daily.
+              reauthRecommendedAt: null,
+              dataAccessExpiresAt: null,
               // Re-seeding an existing account doesn't downgrade live → test
               // (a live account that previously had webhooks fire shouldn't
               // start being silenced because someone re-OAuth'd with a test
@@ -360,6 +368,27 @@ export class AccountsService {
           accountId: account.id,
           type: 'account.connected',
         });
+
+        // A reconnect that heals a needs_reauth account is the manual
+        // counterpart of the canary's self-heal: consumers clear their
+        // "reconnect" state on token.recovered, and account.connected alone
+        // doesn't say the account was previously broken.
+        if (wasNeedsReauth) {
+          void this.outboundWebhooks.emit(workspaceId, 'token.recovered', {
+            account_id: account.id.toString(),
+            platform: input.platform,
+            workspace_id: workspaceId,
+            end_user_id: input.endUserId ?? null,
+            canonical_user_id: input.canonicalUserId,
+            reason: 'reconnected',
+            occurred_at: now.toISOString(),
+          });
+          // Thin SESSION.RECOVERED — flag-gated in standardLifecycleSpec.
+          void this.standardWebhooks?.fireLifecycle({
+            accountId: account.id,
+            type: 'token.recovered',
+          });
+        }
       }
 
       return {
