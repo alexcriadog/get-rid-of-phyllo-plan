@@ -281,6 +281,27 @@ export interface ContentChild {
   mediaUrl: string | null;
   thumbnailUrl: string | null;
   permalink?: string | null;
+  /** Accessibility alt text on the child media, when the author set one. */
+  altText?: string | null;
+}
+
+/** Location tagged on a post (Threads location tagging, coords when exposed). */
+export interface ContentLocation {
+  id: string;
+  name?: string | null;
+  city?: string | null;
+  country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  address?: string | null;
+  postalCode?: string | null;
+}
+
+/** Poll attached to a post (Threads). Percentages are 0-100 per option. */
+export interface ContentPoll {
+  options: Array<{ label: string; votesPercentage: number | null }>;
+  expiresAt?: string | null;
+  totalVotes?: number | null;
 }
 
 /**
@@ -386,6 +407,20 @@ export interface ContentData {
   quotedPost?: ReferencedContent | null;
   /** Threads repost (`REPOST_FACADE`): the post this one RE-SHARES. */
   repostedPost?: ReferencedContent | null;
+  /** Threads: topic tag shown in the post header ("World Cup 2026"). */
+  topicTag?: string | null;
+  /** Threads: location tagged on the post, with coordinates when exposed. */
+  location?: ContentLocation | null;
+  /** Threads: URL attached to a link post. */
+  linkAttachmentUrl?: string | null;
+  /** Threads: GIF attached to the post. */
+  gifUrl?: string | null;
+  /** Accessibility alt text on the post media. */
+  altText?: string | null;
+  /** Threads: media blurred as a spoiler until tapped. */
+  isSpoilerMedia?: boolean | null;
+  /** Threads: poll attachment (options + vote percentages). */
+  poll?: ContentPoll | null;
   /**
    * Reference (hash / object id) to the raw blob stored in Mongo
    * `raw_platform_responses`. Not the blob itself — keep canonical records

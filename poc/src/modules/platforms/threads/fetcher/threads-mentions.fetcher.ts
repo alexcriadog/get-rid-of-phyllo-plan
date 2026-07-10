@@ -36,7 +36,12 @@ const MENTION_FIELDS = [
   'media_url',
   'username',
   'from',
-  'children{id,media_type,media_url,thumbnail_url,permalink}',
+  'children{id,media_type,media_url,thumbnail_url,permalink,alt_text}',
+  // Max-capture pass 2026-07-10 — same content extras as the posts fetcher.
+  'topic_tag',
+  'alt_text',
+  'gif_url',
+  'link_attachment_url',
 ].join(',');
 
 const DEFAULT_LIMIT = 25;

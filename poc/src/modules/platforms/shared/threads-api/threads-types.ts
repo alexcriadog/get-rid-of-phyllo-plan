@@ -26,6 +26,36 @@ export type ThreadsMediaType =
   | 'AUDIO';
 
 /**
+ * Location tagged on a post. The `location{...}` field is an EDGE — the wire
+ * shape is `{ data: [ThreadsLocation] }`, not a plain object (verified live
+ * 2026-07-10 on a Miami-tagged post). Changelog 2025-05-27.
+ */
+export interface ThreadsLocation {
+  id: string;
+  name?: string;
+  city?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+  postal_code?: string;
+}
+
+/** Poll attachment (changelog 2025-04-14; `total_votes` added 2025-08-12). */
+export interface ThreadsPollAttachment {
+  option_a?: string;
+  option_b?: string;
+  option_c?: string;
+  option_d?: string;
+  option_a_votes_percentage?: number;
+  option_b_votes_percentage?: number;
+  option_c_votes_percentage?: number;
+  option_d_votes_percentage?: number;
+  expiration_timestamp?: string;
+  total_votes?: number;
+}
+
+/**
  * One post returned by `GET /me/threads` or `GET /{thread_id}`.
  */
 export interface ThreadsPost {
@@ -51,12 +81,32 @@ export interface ThreadsPost {
   alt_text?: string;
   /** Carousel children. */
   children?: { data: ThreadsPost[] };
+  /** Topic tag shown in the post header (changelog 2025-07-21). */
+  topic_tag?: string;
+  /** URL attached to a link post. */
+  link_attachment_url?: string;
+  /** GIF attached to the post (changelog 2025-02-13). */
+  gif_url?: string;
+  /** Media blurred as a spoiler until tapped. */
+  is_spoiler_media?: boolean;
+  /** Location tag edge — see ThreadsLocation for the `{ data: [...] }` shape. */
+  location?: { data?: ThreadsLocation[] };
+  location_id?: string;
+  poll_attachment?: ThreadsPollAttachment;
+  /** Rich-text spans (mentions/links/tags). Undocumented shape — archived raw. */
+  text_entities?: unknown;
+  text_attachment?: unknown;
+  /** Disappearing ("ghost") post state + expiry, when the feature applies. */
+  ghost_post_status?: string;
+  ghost_post_expiration_timestamp?: string;
   /** Numerator for views/likes/etc. when expanded inline. */
   views?: number;
   likes?: number;
   replies?: number;
   reposts?: number;
   quotes?: number;
+  shares?: number;
+  clicks?: number;
 }
 
 /**

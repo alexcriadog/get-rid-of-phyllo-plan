@@ -8,21 +8,28 @@
 //   views    → metrics.views
 //   likes    → metrics.likes
 //   replies  → metrics.comments      (Threads' comment product is "replies")
-//   reposts  → metrics.shares        (closest analogue)
+//   reposts  → metrics.shares        (closest analogue, kept for dashboard
+//              compat) + metrics.extra.reposts (feeds /v1 repost_count)
 //   quotes   → metrics.extra.quotes  (no canonical slot)
+//   shares   → metrics.extra.shares  (native send/share count — distinct from
+//              reposts; no canonical slot free, share_count is taken)
+//   clicks   → metrics.extra.clicks  (link clicks — feeds /v1 click_count)
 
 import { createHash } from 'node:crypto';
 import { MONGO_COLLECTIONS } from '@shared/database/mongo.service';
 import type {
   ContentChild,
   ContentData,
+  ContentLocation,
   ContentMetrics,
+  ContentPoll,
   ContentType,
   ReferencedContent,
 } from '../../shared/platform-types';
 import type {
   ThreadsInsight,
   ThreadsMediaType,
+  ThreadsPollAttachment,
   ThreadsPost,
 } from '../../shared/threads-api/threads-types';
 
@@ -48,9 +55,18 @@ export function threadsPostToContent(post: ThreadsPost): ContentData {
   if (typeof post.views === 'number') metrics.views = post.views;
   if (typeof post.likes === 'number') metrics.likes = post.likes;
   if (typeof post.replies === 'number') metrics.comments = post.replies;
-  if (typeof post.reposts === 'number') metrics.shares = post.reposts;
+  if (typeof post.reposts === 'number') {
+    metrics.shares = post.reposts;
+    metrics.extra = { ...(metrics.extra ?? {}), reposts: post.reposts };
+  }
   if (typeof post.quotes === 'number') {
     metrics.extra = { ...(metrics.extra ?? {}), quotes: post.quotes };
+  }
+  if (typeof post.shares === 'number') {
+    metrics.extra = { ...(metrics.extra ?? {}), shares: post.shares };
+  }
+  if (typeof post.clicks === 'number') {
+    metrics.extra = { ...(metrics.extra ?? {}), clicks: post.clicks };
   }
 
   return {
@@ -68,10 +84,59 @@ export function threadsPostToContent(post: ThreadsPost): ContentData {
     ownerHandle: post.username ?? null,
     quotedPost,
     repostedPost,
+    topicTag: post.topic_tag ?? undefined,
+    location: mapLocation(post),
+    linkAttachmentUrl: post.link_attachment_url ?? undefined,
+    gifUrl: post.gif_url ?? undefined,
+    altText: post.alt_text ?? undefined,
+    isSpoilerMedia: post.is_spoiler_media ?? undefined,
+    poll: mapPoll(post.poll_attachment),
     rawResponse: {
       collection: MONGO_COLLECTIONS.rawPlatformResponses,
       contentHash: hash,
     },
+  };
+}
+
+/**
+ * `location{...}` is an edge — `{ data: [loc] }` with at most one entry
+ * (verified live 2026-07-10). Flatten it to a single ContentLocation.
+ */
+function mapLocation(post: ThreadsPost): ContentLocation | undefined {
+  const loc = post.location?.data?.[0];
+  if (!loc?.id) return undefined;
+  return {
+    id: loc.id,
+    name: loc.name ?? null,
+    city: loc.city ?? null,
+    country: loc.country ?? null,
+    latitude: typeof loc.latitude === 'number' ? loc.latitude : null,
+    longitude: typeof loc.longitude === 'number' ? loc.longitude : null,
+    address: loc.address ?? null,
+    postalCode: loc.postal_code ?? null,
+  };
+}
+
+/** Compact the wire's flat option_a..option_d pairs into an options array. */
+function mapPoll(poll?: ThreadsPollAttachment): ContentPoll | undefined {
+  if (!poll) return undefined;
+  const options: ContentPoll['options'] = [];
+  const pairs: Array<[string | undefined, number | undefined]> = [
+    [poll.option_a, poll.option_a_votes_percentage],
+    [poll.option_b, poll.option_b_votes_percentage],
+    [poll.option_c, poll.option_c_votes_percentage],
+    [poll.option_d, poll.option_d_votes_percentage],
+  ];
+  for (const [label, pct] of pairs) {
+    if (typeof label === 'string' && label.length > 0) {
+      options.push({ label, votesPercentage: typeof pct === 'number' ? pct : null });
+    }
+  }
+  if (options.length === 0) return undefined;
+  return {
+    options,
+    expiresAt: poll.expiration_timestamp ?? null,
+    totalVotes: typeof poll.total_votes === 'number' ? poll.total_votes : null,
   };
 }
 
@@ -93,7 +158,10 @@ export function mergeThreadsPostInsights(
         item.metrics.comments = v;
         break;
       case 'reposts':
+        // Dual-write: metrics.shares keeps the historical dashboard mapping,
+        // extra.reposts feeds the /v1 engagement.repost_count slot.
         item.metrics.shares = v;
+        item.metrics.extra = { ...(item.metrics.extra ?? {}), reposts: v };
         break;
       case 'quotes':
         item.metrics.extra = { ...(item.metrics.extra ?? {}), quotes: v };
@@ -175,6 +243,7 @@ function mapChildren(post: ThreadsPost): ContentChild[] {
     mediaUrl: child.media_url ?? null,
     thumbnailUrl: child.thumbnail_url ?? null,
     permalink: child.permalink ?? null,
+    altText: child.alt_text ?? null,
   }));
 }
 

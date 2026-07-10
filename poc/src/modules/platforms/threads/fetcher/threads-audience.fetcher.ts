@@ -41,7 +41,7 @@ import type {
 import { buildThreadsContext } from '../threads.context';
 import { THREADS_API_CLIENT } from '../threads.tokens';
 
-type ScalarKey = 'views' | 'likes' | 'replies' | 'reposts' | 'quotes';
+type ScalarKey = 'views' | 'likes' | 'replies' | 'reposts' | 'quotes' | 'clicks';
 type Breakdown = 'country' | 'city' | 'gender' | 'age';
 
 interface MetricSpec {
@@ -60,6 +60,8 @@ const METRICS: MetricSpec[] = [
   { name: 'replies', scalar: 'replies' },
   { name: 'reposts', scalar: 'reposts' },
   { name: 'quotes', scalar: 'quotes' },
+  // Link clicks across the account's posts (changelog 2025-07-02).
+  { name: 'clicks', scalar: 'clicks' },
   { name: 'followers_count', series: 'followers' },
   // All four supported follower_demographics breakdowns. Each one is a
   // separate Threads call (the API only allows one breakdown per request).
@@ -232,6 +234,7 @@ export class ThreadsAudienceFetcher {
     }
     if (typeof scalars.reposts === 'number') extra.reposts = scalars.reposts;
     if (typeof scalars.quotes === 'number') extra.quotes = scalars.quotes;
+    if (typeof scalars.clicks === 'number') extra.clicks = scalars.clicks;
 
     return {
       countryDistribution: distributions.country,

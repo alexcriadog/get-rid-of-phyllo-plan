@@ -50,14 +50,39 @@ const LIST_FIELDS = [
   'has_replies',
   'reply_audience',
   'alt_text',
-  'children{id,media_type,media_url,thumbnail_url,permalink}',
+  'children{id,media_type,media_url,thumbnail_url,permalink,alt_text}',
   // Quote / repost: the wrapping post often has no text/media of its own, so
   // fetch the referenced post's content (else the item renders blank).
   'quoted_post{id,text,media_type,media_url,thumbnail_url,permalink,username,timestamp,shortcode}',
   'reposted_post{id,text,media_type,media_url,thumbnail_url,permalink,username,timestamp,shortcode}',
+  // Max-capture pass (fields verified live against i.am.pito 2026-07-10):
+  // topic tag, location (EDGE shape — {data:[...]}), link/GIF attachments,
+  // polls, spoiler flag and ghost-post state. Everything lands verbatim in
+  // raw_platform_responses; the mapper projects the useful subset.
+  'topic_tag',
+  'location{id,name,city,country,latitude,longitude,address,postal_code}',
+  'link_attachment_url',
+  'gif_url',
+  'is_spoiler_media',
+  'poll_attachment{option_a,option_b,option_c,option_d,option_a_votes_percentage,option_b_votes_percentage,option_c_votes_percentage,option_d_votes_percentage,expiration_timestamp,total_votes}',
+  'text_entities',
+  'text_attachment',
+  'ghost_post_status',
+  'ghost_post_expiration_timestamp',
 ].join(',');
 
-const POST_INSIGHT_METRICS = ['views', 'likes', 'replies', 'reposts', 'quotes'].join(',');
+// `shares` (native sends) and `clicks` (link clicks) confirmed valid on
+// /{id}/insights 2026-07-10 — the API's own error message enumerates the full
+// set: clicks, likes, quotes, replies, reposts, shares, views.
+const POST_INSIGHT_METRICS = [
+  'views',
+  'likes',
+  'replies',
+  'reposts',
+  'quotes',
+  'shares',
+  'clicks',
+].join(',');
 
 const DEFAULT_PAGE_SIZE = 25;
 const ENRICH_BATCH = 5;

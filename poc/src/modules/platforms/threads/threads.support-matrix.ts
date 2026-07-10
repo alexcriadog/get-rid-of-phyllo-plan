@@ -1,11 +1,12 @@
 // Threads support matrix — declarative capability statement.
 //
 // Source of truth: developers.facebook.com/docs/threads/threads-objects +
-// /threads-insights. The Threads public API exposes far less than IG/FB
-// Graph: no demographic distributions on the audience product, no per-post
-// retention curves, no city/country breakdowns. The richest product is
-// engagement_new (per-post views/likes/replies/reposts/quotes via
-// /{thread_id}/insights).
+// /threads-insights. Follower demographics (country/city/age/gender) DO
+// exist via metric=follower_demographics but only for profiles with 100+
+// followers — below that Threads rejects the call (#801/4279032), so the
+// distributions are declared empty_possible, not supported. The richest
+// product is engagement_new (per-post views/likes/replies/reposts/quotes/
+// shares/clicks via /{thread_id}/insights).
 
 import type { SupportMatrix } from '../shared/platform-types';
 
@@ -22,12 +23,13 @@ export const THREADS_SUPPORT_MATRIX: SupportMatrix = {
     verified: 'supported',              // `is_verified`
   },
   audience: {
-    // Threads insights are scalar lifetime counters — no distribution buckets
-    // exposed publicly. Country/gender/age have no API surface today.
-    countryDistribution: 'not_supported',
-    cityDistribution: 'not_supported',
-    genderDistribution: 'not_supported',
-    ageDistribution: 'not_supported',
+    // follower_demographics buckets — fetched with breakdown country/city/
+    // age/gender, but Threads gates the metric behind 100+ followers, so
+    // small accounts legitimately come back empty.
+    countryDistribution: 'empty_possible',
+    cityDistribution: 'empty_possible',
+    genderDistribution: 'empty_possible',
+    ageDistribution: 'empty_possible',
     interests: 'not_supported',
     // Lifetime account-level scalars — `views`, `likes`, `replies`, `reposts`,
     // `quotes`, `followers_count` via /me/threads_insights.

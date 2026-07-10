@@ -1,6 +1,8 @@
 import type {
   ContentData,
   ContentInsights,
+  ContentLocation,
+  ContentPoll,
   DistributionBucket,
   EngagementDeepItem,
   ReferencedContent,
@@ -12,6 +14,8 @@ import type {
   ApiContent,
   ApiContentAudience,
   ApiContentInsights,
+  ApiContentLocation,
+  ApiContentPoll,
   ApiEngagement,
   ApiEngagementAdditionalInfo,
   ApiGenderAgeBucket,
@@ -361,6 +365,46 @@ export function toApiContent(
     insights: buildInsights(content.insights, deep),
     quoted_post: referencedToApi(content.quotedPost),
     reposted_post: referencedToApi(content.repostedPost),
+    // Additive Threads extras — only present when the platform exposed them,
+    // so docs of other platforms (and older Threads docs) keep their exact
+    // shape. Consumers that don't know these keys simply ignore them.
+    ...(content.topicTag != null ? { topic_tag: content.topicTag } : {}),
+    ...(content.location ? { location: locationToApi(content.location) } : {}),
+    ...(content.altText != null ? { alt_text: content.altText } : {}),
+    ...(content.linkAttachmentUrl != null
+      ? { link_attachment_url: content.linkAttachmentUrl }
+      : {}),
+    ...(content.gifUrl != null ? { gif_url: content.gifUrl } : {}),
+    ...(content.isSpoilerMedia != null
+      ? { is_spoiler_media: content.isSpoilerMedia }
+      : {}),
+    ...(content.poll ? { poll: pollToApi(content.poll) } : {}),
+  };
+}
+
+/** Map a tagged location to the additive /v1 shape. */
+function locationToApi(loc: ContentLocation): ApiContentLocation {
+  return {
+    id: loc.id,
+    name: loc.name ?? null,
+    city: loc.city ?? null,
+    country: loc.country ?? null,
+    latitude: loc.latitude ?? null,
+    longitude: loc.longitude ?? null,
+    address: loc.address ?? null,
+    postal_code: loc.postalCode ?? null,
+  };
+}
+
+/** Map a poll attachment to the additive /v1 shape. */
+function pollToApi(poll: ContentPoll): ApiContentPoll {
+  return {
+    options: poll.options.map((o) => ({
+      label: o.label,
+      votes_percentage: o.votesPercentage,
+    })),
+    expires_at: poll.expiresAt ?? null,
+    total_votes: poll.totalVotes ?? null,
   };
 }
 

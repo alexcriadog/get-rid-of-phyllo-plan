@@ -259,6 +259,39 @@ export interface ApiContent extends ApiEnvelope {
   quoted_post?: ApiReferencedContent | null;
   /** Additive — Threads repost: the post this one RE-SHARES. */
   reposted_post?: ApiReferencedContent | null;
+  /** Additive — Threads topic tag shown in the post header. */
+  topic_tag?: string | null;
+  /** Additive — Threads tagged location (coordinates when exposed). */
+  location?: ApiContentLocation | null;
+  /** Additive — accessibility alt text on the post media. */
+  alt_text?: string | null;
+  /** Additive — Threads URL attached to a link post. */
+  link_attachment_url?: string | null;
+  /** Additive — Threads attached GIF URL. */
+  gif_url?: string | null;
+  /** Additive — Threads media blurred as a spoiler until tapped. */
+  is_spoiler_media?: boolean | null;
+  /** Additive — Threads poll (options + vote percentages 0-100). */
+  poll?: ApiContentPoll | null;
+}
+
+/** Additive — location tagged on a post (Threads location tagging). */
+export interface ApiContentLocation {
+  id: string;
+  name: string | null;
+  city: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  address: string | null;
+  postal_code: string | null;
+}
+
+/** Additive — poll attached to a post (Threads). */
+export interface ApiContentPoll {
+  options: Array<{ label: string; votes_percentage: number | null }>;
+  expires_at: string | null;
+  total_votes: number | null;
 }
 
 export interface ApiAudience extends ApiEnvelope {

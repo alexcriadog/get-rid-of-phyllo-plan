@@ -41,6 +41,14 @@ const REPLY_FIELDS = [
   'replied_to',
   'root_post',
   'hide_status',
+  // Max-capture pass 2026-07-10: replies are full media objects too — capture
+  // any image/GIF/link they carry (raw archive keeps it all verbatim).
+  'media_type',
+  'media_url',
+  'thumbnail_url',
+  'alt_text',
+  'gif_url',
+  'link_attachment_url',
 ].join(',');
 
 const POST_SCAN_FIELDS = ['id', 'has_replies', 'timestamp'].join(',');
