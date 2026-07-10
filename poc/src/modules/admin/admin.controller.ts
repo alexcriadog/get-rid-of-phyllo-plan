@@ -206,6 +206,21 @@ export class AdminController {
     );
   }
 
+  @Get('token-timeline')
+  async tokenTimeline(
+    @Query('days') days: string | undefined,
+    @Query('account_id') accountId: string | undefined,
+  ): Promise<unknown> {
+    if (accountId !== undefined && !/^\d+$/.test(accountId)) {
+      throw new BadRequestException('account_id must be numeric');
+    }
+    const parsedDays = days !== undefined ? Number(days) : undefined;
+    if (parsedDays !== undefined && !Number.isFinite(parsedDays)) {
+      throw new BadRequestException('days must be a number');
+    }
+    return this.admin.tokenTimeline({ days: parsedDays, accountId });
+  }
+
   @Post('rate-limits/replay')
   async rateLimitsReplay(@Body() body: unknown): Promise<unknown> {
     const parsed = z

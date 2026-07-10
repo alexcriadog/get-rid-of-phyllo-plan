@@ -25,6 +25,12 @@ import {
   DEFAULT_FALLBACK_SECONDS,
 } from '@modules/sync/cadence.service';
 import { buildCadenceMatrix } from './cadence-matrix';
+import {
+  buildTokenTimeline,
+  collectTimelineAccountIds,
+  TIMELINE_DELIVERY_EVENTS,
+  type TimelineEvent,
+} from './token-timeline.util';
 import { ThrottleLockService } from '@modules/sync/throttle-lock.service';
 import {
   ADAPTER_REGISTRY,
@@ -251,6 +257,65 @@ export class AdminService {
       observed += 1;
     }
     return { scanned: rows.length, observed };
+  }
+
+  /**
+   * Chronological token-lifecycle feed: connects + successful refreshes from
+   * oauth_token_history (the facts, incl. the new expiry) merged with the
+   * signal events from webhook_deliveries (refresh failed / expired / reauth
+   * recommended / recovered / disconnected). Powers the admin console's
+   * "token timeline" panel.
+   */
+  async tokenTimeline(opts: {
+    days?: number;
+    accountId?: string;
+  }): Promise<{ days: number; events: TimelineEvent[] }> {
+    const days = Math.min(Math.max(Math.trunc(opts.days ?? 14), 1), 90);
+    const since = new Date(Date.now() - days * 86_400_000);
+    const accountFilter =
+      opts.accountId !== undefined ? { accountId: BigInt(opts.accountId) } : {};
+    const [history, deliveries] = await Promise.all([
+      this.prisma.oAuthTokenHistory.findMany({
+        where: { capturedAt: { gte: since }, ...accountFilter },
+        orderBy: { capturedAt: 'desc' },
+        take: 500,
+        select: {
+          accountId: true,
+          platform: true,
+          source: true,
+          capturedAt: true,
+          expiresAt: true,
+        },
+      }),
+      this.prisma.webhookDelivery.findMany({
+        where: {
+          createdAt: { gte: since },
+          event: { in: [...TIMELINE_DELIVERY_EVENTS] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: { event: true, payload: true, createdAt: true },
+      }),
+    ]);
+    const ids = collectTimelineAccountIds(history, deliveries);
+    const accounts = ids.length
+      ? await this.prisma.account.findMany({
+          where: { id: { in: ids.map((id) => BigInt(id)) } },
+          select: { id: true, platform: true, handle: true },
+        })
+      : [];
+    const infoById = new Map(
+      accounts.map((a) => [
+        a.id.toString(),
+        { platform: a.platform, handle: a.handle },
+      ]),
+    );
+    return {
+      days,
+      events: buildTokenTimeline(history, deliveries, infoById, {
+        accountId: opts.accountId,
+      }),
+    };
   }
 
   // ──────────────────────────────────────────────────────────────────────────
