@@ -89,7 +89,7 @@ exports[`Instagram media mapper (pinning) mediaToContent REELS post 1`] = `
 {
   "caption": "New trend",
   "children": undefined,
-  "contentType": "video",
+  "contentType": "reel",
   "fetchedAt": 2026-04-28T12:00:00.000Z,
   "isSharedToFeed": null,
   "mediaProductType": "REELS",

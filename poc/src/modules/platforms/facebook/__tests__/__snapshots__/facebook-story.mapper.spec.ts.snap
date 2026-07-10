@@ -4,12 +4,12 @@ exports[`Facebook story mapper (pinning) mapStoryInsights full 9-metric set 1`] 
 {
   "extra": {
     "mystery_metric_x": 9,
+    "page_story_impressions_by_story_id": 4400,
     "sticker_interactions": 21,
     "story_replies": 12,
     "total_interactions": 117,
     "unique_media_views": 3100,
   },
-  "impressions": 4400,
   "likes": 88,
   "reach": 3300,
   "shares": 6,
@@ -22,9 +22,9 @@ exports[`Facebook story mapper (pinning) mapStoryInsights non-numeric values are
 exports[`Facebook story mapper (pinning) mapStoryInsights partial set — missing metrics are absent from output 1`] = `
 {
   "extra": {
+    "page_story_impressions_by_story_id": 100,
     "story_replies": 1,
   },
-  "impressions": 100,
 }
 `;
 
