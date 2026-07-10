@@ -38,6 +38,7 @@ describe('refresh success never persists a null expiry', () => {
     post.mockResolvedValue({ status: 200, data: { access_token: 'new-access' } });
     const prisma = { oAuthToken: { update: jest.fn().mockResolvedValue({}) } };
     const aes = { encrypt: jest.fn(() => Buffer.from('c')), decrypt: jest.fn(() => 'p') };
+    const tokenHistory = { record: jest.fn().mockResolvedValue(undefined) };
     const config = { get: jest.fn(() => 'cred') };
     const lifecycle = {
       tokenRefreshed: jest.fn().mockResolvedValue(undefined),
@@ -47,6 +48,7 @@ describe('refresh success never persists a null expiry', () => {
     await new YoutubeTokenRefreshService(
       prisma as never,
       aes as never,
+      tokenHistory as never,
       config as never,
       lifecycle as never,
     ).refresh(1n, 'rt');

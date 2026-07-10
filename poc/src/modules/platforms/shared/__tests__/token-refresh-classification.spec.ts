@@ -28,6 +28,7 @@ const get = axios.get as jest.Mock;
 interface Deps {
   prisma: { oAuthToken: { update: jest.Mock } };
   aes: { encrypt: jest.Mock; decrypt: jest.Mock };
+  tokenHistory: { record: jest.Mock };
   config: { get: jest.Mock };
   lifecycle: { tokenRefreshFailed: jest.Mock; tokenRefreshed: jest.Mock };
 }
@@ -36,6 +37,7 @@ function deps(): Deps {
   return {
     prisma: { oAuthToken: { update: jest.fn().mockResolvedValue({}) } },
     aes: { encrypt: jest.fn(() => Buffer.from('c')), decrypt: jest.fn(() => 'plain') },
+    tokenHistory: { record: jest.fn().mockResolvedValue(undefined) },
     config: { get: jest.fn(() => 'cred') },
     lifecycle: {
       tokenRefreshFailed: jest.fn().mockResolvedValue(undefined),
@@ -76,6 +78,7 @@ const CASES: Case[] = [
       new YoutubeTokenRefreshService(
         d.prisma as never,
         d.aes as never,
+        d.tokenHistory as never,
         d.config as never,
         d.lifecycle as never,
       ).refresh(1n, 'rt'),
@@ -89,6 +92,7 @@ const CASES: Case[] = [
       new TikTokTokenRefreshService(
         d.prisma as never,
         d.aes as never,
+        d.tokenHistory as never,
         d.config as never,
         d.lifecycle as never,
       ).refresh(1n, Buffer.from('rt')),
@@ -102,6 +106,7 @@ const CASES: Case[] = [
       new TwitchTokenRefreshService(
         d.prisma as never,
         d.aes as never,
+        d.tokenHistory as never,
         d.config as never,
         d.lifecycle as never,
       ).refresh(1n, 'rt'),
@@ -115,6 +120,7 @@ const CASES: Case[] = [
       new LinkedInTokenRefreshService(
         d.prisma as never,
         d.aes as never,
+        d.tokenHistory as never,
         d.config as never,
         d.lifecycle as never,
       ).refresh(1n, 'rt'),
@@ -130,6 +136,7 @@ const CASES: Case[] = [
       new ThreadsTokenRefreshService(
         d.prisma as never,
         d.aes as never,
+        d.tokenHistory as never,
         d.config as never,
         d.lifecycle as never,
       ).refresh(1n, 'long-lived'),
@@ -143,6 +150,7 @@ const CASES: Case[] = [
       new InstagramDirectTokenRefreshService(
         d.prisma as never,
         d.aes as never,
+        d.tokenHistory as never,
         d.lifecycle as never,
       ).refresh(1n, 'long-lived'),
   },
