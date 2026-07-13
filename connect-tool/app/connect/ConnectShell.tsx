@@ -89,12 +89,11 @@ export function ConnectShell(props: Props) {
       if (d?.type === 'camaleonic.oauth.error') {
         if (popupTimer.current !== null) { window.clearInterval(popupTimer.current); popupTimer.current = null; }
         setConnecting(false);
-        const raw = d.message ?? 'The connection could not be completed.';
-        setFlowError(friendlyOAuthError(raw));
-        window.parent?.postMessage(
-          { type: 'camaleonic.connect.error', code: isOAuthDenial(raw) ? 'oauth_denied' : 'unknown', message: raw },
-          props.origin || window.location.origin,
-        );
+        // Deliberately NOT forwarded to the host page: hosts toast onError
+        // messages raw (see ui-orchestrator), and the modal already shows
+        // the friendly banner. The host's busy state resolves via
+        // onExit / onSuccess as usual.
+        setFlowError(friendlyOAuthError(d.message ?? 'The connection could not be completed.'));
         return;
       }
       if (d?.type !== 'camaleonic.oauth.complete' || !d.sessionId) return;

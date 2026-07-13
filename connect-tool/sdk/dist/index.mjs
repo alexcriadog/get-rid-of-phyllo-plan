@@ -1,6 +1,6 @@
-/*! Camaleonic Connect SDK v2.0.0 — 2026-07-13 */
+/*! Camaleonic Connect SDK v2.0.0 — 2026-06-19 */
 
-// sdk/src/index.ts
+// src/index.ts
 var VERSION = "2.0.0";
 var MSG = {
   resize: "camaleonic.connect.resize",

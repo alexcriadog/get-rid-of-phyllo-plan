@@ -17,10 +17,8 @@ export interface SuccessPayload {
     accountIds: string[];
     platform: PlatformKey | null;
 }
-/** `oauth_denied` = the user cancelled / declined the provider consent screen
- *  (the modal stays open showing a retry hint — treat it as informational). */
 export interface ErrorPayload {
-    code: 'popup_blocked' | 'invalid_platform' | 'token' | 'oauth_denied' | 'unknown';
+    code: 'popup_blocked' | 'invalid_platform' | 'token' | 'unknown';
     message: string;
 }
 export interface CamaleonicConnectOptions {
