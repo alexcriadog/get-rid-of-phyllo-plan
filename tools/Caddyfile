@@ -23,8 +23,8 @@ smconnector.camaleonicanalytics.com {
 	# it is unaffected here (and is independently bearer-guarded server-side).
 	# `uri strip_prefix /api/poc` keeps the API path as /admin/* after the gate.
 	handle /api/poc/admin* {
-		basic_auth {
-			alex $2y$12$FRUN6ZltRlZsFygdSj0ED.ExibDXMV7zrDqAbflTRg6Cel0Oc7XRq
+		forward_auth web:3001 {
+			uri /api/gate
 		}
 		uri strip_prefix /api/poc
 		reverse_proxy api:3000
@@ -62,16 +62,27 @@ smconnector.camaleonicanalytics.com {
 		reverse_proxy api:3000
 	}
 
-	# Admin dashboard — operator-only. basic_auth enabled (Sec-4 hardening): the
-	# admin surface mutates security-critical config (workspace origin allow-
-	# lists, product scopes, live API keys), so it must not be anonymously
-	# reachable. Same user+hash as the /api/poc/admin* gate above so the browser
-	# authenticates once and reuses the credentials for the dashboard's XHRs.
-	# Rotate with: htpasswd -bnBC 12 "" '<newpw>'  (or caddy hash-password).
+	# Operator login + Auth.js endpoints + showroom → web. Must reach web, not
+	# the connect-tool catch-all, so they precede it. /login + /api/auth stay
+	# ungated (excluded in the web middleware); the showroom + admin are gated
+	# by the web middleware's Auth.js session check.
+	handle /login* {
+		reverse_proxy web:3001
+	}
+	handle /api/auth* {
+		reverse_proxy web:3001
+	}
+	handle /api/gate {
+		reverse_proxy web:3001
+	}
+	handle /showroom* {
+		reverse_proxy web:3001
+	}
+
+	# Admin dashboard — operator-only. Gated at the app layer by the web
+	# middleware (Auth.js operator session), which replaced the former Caddy
+	# basic_auth (closes PRODUCTION-READINESS H-7).
 	handle /admin* {
-		basic_auth {
-			alex $2y$12$FRUN6ZltRlZsFygdSj0ED.ExibDXMV7zrDqAbflTRg6Cel0Oc7XRq
-		}
 		reverse_proxy web:3001
 	}
 
@@ -94,24 +105,17 @@ smconnector.camaleonicanalytics.com {
 	# web, not the default connect-tool handler (which would 404). MUST precede
 	# the catch-all `handle {}` at the bottom.
 	handle /api/admin* {
-		basic_auth {
-			alex $2y$12$FRUN6ZltRlZsFygdSj0ED.ExibDXMV7zrDqAbflTRg6Cel0Oc7XRq
-		}
 		reverse_proxy web:3001
 	}
 
-	# Public account profile pages (e.g. /account/2, /account/2/posts).
+	# Account profile pages — gated by the web middleware (operator session),
+	# reached from the authed showroom.
 	handle /account* {
 		reverse_proxy web:3001
 	}
 
-	# Public feed (alias of web's `/`, exposed under a unique path so it
-	# doesn't collide with connect-tool's `/`).
-	handle /feed* {
-		reverse_proxy web:3001
-	}
-
-	# Public watchlist (FB Pages monitor — PPCA, app-token only).
+	# Watchlist (FB Pages monitor — PPCA, app-token only). Gated by the web
+	# middleware, linked from the showroom.
 	handle /watchlist* {
 		reverse_proxy web:3001
 	}

@@ -145,6 +145,12 @@ services:
       # (e.g. /internal/products-catalog). Server-side only. Interpolated
       # from poc/.env so it stays in sync with the api's value.
       CONNECT_TOOL_SECRET: "${CONNECT_TOOL_SECRET}"
+      # Unified operator login (Auth.js). AUTH_SECRET signs the session JWT;
+      # OPERATOR_USERS is the JSON array of {email,name,passwordHash} (bcrypt).
+      # Both from the prod .env. AUTH_SECRET MUST match connect-tool's so its
+      # /data-guide gate validates the same session cookie.
+      AUTH_SECRET: "${AUTH_SECRET}"
+      OPERATOR_USERS: "${OPERATOR_USERS}"
     expose:
       - "3001"
     depends_on:
@@ -174,6 +180,9 @@ services:
       NEXT_PUBLIC_POC_ADMIN_URL: "https://smconnector.camaleonicanalytics.com/admin"
       NODE_ENV: production
       NODE_OPTIONS: "--max-old-space-size=200"
+      # Shared with web so getToken validates the operator session cookie on
+      # /data-guide. MUST equal web's AUTH_SECRET (same signing key → same JWT).
+      AUTH_SECRET: "${AUTH_SECRET}"
     mem_limit: 256m
     mem_reservation: 48m
     cpus: 0.5

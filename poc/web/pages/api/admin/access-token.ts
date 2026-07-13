@@ -10,12 +10,14 @@
 // 401s ("connect-tool bearer token missing or invalid").
 //
 // This handler closes that gap the secure way: the browser calls this Next
-// API route (already behind Caddy's basic_auth via the same operator gate),
-// and the Next *server* forwards to the API on the internal docker network
-// with the bearer attached. CONNECT_TOOL_SECRET never leaves the server — it
-// is read from server-only env, never the NEXT_PUBLIC_* bundle.
+// API route (gated by the web middleware's operator session, AND re-checked
+// in-handler below since it returns plaintext tokens), and the Next *server*
+// forwards to the API on the internal docker network with the bearer attached.
+// CONNECT_TOOL_SECRET never leaves the server — it is read from server-only
+// env, never the NEXT_PUBLIC_* bundle.
 
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { gateStatus } from '@/lib/session-gate';
 
 // Server-only API base: in prod this is http://api:3000 (docker network),
 // NOT the public NEXT_PUBLIC_CONNECTOR_API_URL (which would loop back out
@@ -31,6 +33,13 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ): Promise<void> {
+  // Defense in depth: require a valid operator session in-handler, not just at
+  // the middleware/edge layer — this route returns plaintext OAuth tokens.
+  if ((await gateStatus(req)) !== 200) {
+    res.status(401).json({ message: 'unauthorized' });
+    return;
+  }
+
   if (req.method !== 'GET') {
     res.status(405).json({ message: 'method_not_allowed' });
     return;

@@ -1,24 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getToken } from 'next-auth/jwt';
 
 /**
- * Allow only the legitimate host app to frame the embedded connect routes,
- * and forbid framing everywhere else. The host origin arrives as ?origin=…
- * on the iframe URL (set by the SDK from window.location.origin) and is
- * forwarded across the post-OAuth page navigations.
+ * Gate `/data-guide` behind the shared operator session. The Auth.js session
+ * cookie is set by poc/web on the same host, so getToken (with the shared
+ * AUTH_SECRET) validates it here. No valid session → redirect to the poc/web
+ * login page, which lives on the same host at /login.
  */
-export function middleware(req: NextRequest): NextResponse {
+async function guardDataGuide(req: NextRequest): Promise<NextResponse | null> {
+  // Match how poc/web issues the cookie: in prod (HTTPS) it is
+  // `__Secure-authjs.session-token` with a matching salt. Without secureCookie
+  // getToken defaults to the non-secure name and rejects every real session,
+  // redirecting authenticated operators back to /login in a loop.
+  const secureCookie = process.env.NODE_ENV === 'production';
+  const token = await getToken({
+    req,
+    secret: process.env.AUTH_SECRET,
+    secureCookie,
+  });
+  if (token) return null;
+  const url = req.nextUrl.clone();
+  url.pathname = '/login';
+  url.search = '?callbackUrl=/data-guide';
+  return NextResponse.redirect(url);
+}
+
+/**
+ * Two jobs, by path:
+ *  - `/data-guide*`: require an operator session (see guardDataGuide).
+ *  - embed routes: allow only the legitimate host app to frame the embedded
+ *    connect routes, and forbid framing everywhere else. The host origin
+ *    arrives as ?origin=… on the iframe URL (set by the SDK from
+ *    window.location.origin) and is forwarded across the post-OAuth page
+ *    navigations.
+ */
+export async function middleware(req: NextRequest): Promise<NextResponse> {
+  if (req.nextUrl.pathname.startsWith('/data-guide')) {
+    const denied = await guardDataGuide(req);
+    if (denied) return denied;
+    return NextResponse.next();
+  }
+
   const res = NextResponse.next();
   const { searchParams } = req.nextUrl;
-
-  // Baseline hardening on every framed/connect route. `no-referrer` stops the
-  // token-bearing URL (?token=…) from leaking to third parties via Referer;
-  // nosniff + a locked-down Permissions-Policy are cheap defence-in-depth.
-  // (Clickjacking is enforced primarily server-side: the /connect page and
-  // /api/oauth/start fail closed on a disallowed embedder origin in prod, so a
-  // framed page for an unlisted origin renders an error with nothing to redress.)
-  res.headers.set('Referrer-Policy', 'no-referrer');
-  res.headers.set('X-Content-Type-Options', 'nosniff');
-  res.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
   if (searchParams.get('embed') === '1') {
     const origin = searchParams.get('origin');
@@ -42,5 +66,13 @@ export function middleware(req: NextRequest): NextResponse {
 }
 
 export const config = {
-  matcher: ['/connect', '/oauth/complete', '/confirm/:path*', '/facebook/pages', '/success'],
+  matcher: [
+    '/connect',
+    '/oauth/complete',
+    '/confirm/:path*',
+    '/facebook/pages',
+    '/success',
+    '/data-guide',
+    '/data-guide/:path*',
+  ],
 };
