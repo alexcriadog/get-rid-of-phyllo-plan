@@ -17,7 +17,9 @@ export type PlatformKey =
   | 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'threads' | 'twitch';
 
 export interface SuccessPayload { accountIds: string[]; platform: PlatformKey | null; }
-export interface ErrorPayload { code: 'popup_blocked' | 'invalid_platform' | 'token' | 'unknown'; message: string; }
+/** `oauth_denied` = the user cancelled / declined the provider consent screen
+ *  (the modal stays open showing a retry hint — treat it as informational). */
+export interface ErrorPayload { code: 'popup_blocked' | 'invalid_platform' | 'token' | 'oauth_denied' | 'unknown'; message: string; }
 
 export interface CamaleonicConnectOptions {
   sdkToken: string;

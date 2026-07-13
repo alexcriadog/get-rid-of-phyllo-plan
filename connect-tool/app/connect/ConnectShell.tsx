@@ -57,6 +57,11 @@ export function ConnectShell(props: Props) {
   const [platform, setPlatform] = useState<PlatformKey | undefined>(init.platform);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(props.tokenError);
+  // Non-fatal OAuth failure (user denied the consent screen, state mismatch,
+  // exchange error) relayed from the provider-login popup. Shown inline on
+  // the guidance step so the user can simply retry — unlike `error`, which
+  // replaces the whole body.
+  const [flowError, setFlowError] = useState<string | null>(null);
   const popupTimer = useRef<number | null>(null);
 
   // Size the modal to content. One-way: we post height; the host sets a
@@ -73,12 +78,25 @@ export function ConnectShell(props: Props) {
     return () => ro.disconnect();
   }, [step, error, connecting, props.origin]);
 
-  // Relay from the provider-login window → navigate the iframe to the
-  // existing confirm / page-picker page in embed mode.
+  // Relay from the provider-login window. Success → navigate the iframe to
+  // the existing confirm / page-picker page in embed mode. Error (denial,
+  // state mismatch, exchange failure) → stop waiting and show it inline so
+  // the user stays on the client's page and can retry.
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {
       if (ev.origin !== window.location.origin) return;
-      const d = ev.data as { type?: string; sessionId?: string; kind?: string; platform?: string };
+      const d = ev.data as { type?: string; sessionId?: string; kind?: string; platform?: string; message?: string };
+      if (d?.type === 'camaleonic.oauth.error') {
+        if (popupTimer.current !== null) { window.clearInterval(popupTimer.current); popupTimer.current = null; }
+        setConnecting(false);
+        const raw = d.message ?? 'The connection could not be completed.';
+        setFlowError(friendlyOAuthError(raw));
+        window.parent?.postMessage(
+          { type: 'camaleonic.connect.error', code: isOAuthDenial(raw) ? 'oauth_denied' : 'unknown', message: raw },
+          props.origin || window.location.origin,
+        );
+        return;
+      }
       if (d?.type !== 'camaleonic.oauth.complete' || !d.sessionId) return;
       const msgPlatform = isPlatformKey(d.platform) ? d.platform : platform;
       const originQ = props.origin ? `&origin=${encodeURIComponent(props.origin)}` : '';
@@ -101,6 +119,7 @@ export function ConnectShell(props: Props) {
   }
 
   function login(p: PlatformKey, direct = false) {
+    setFlowError(null);
     const sp: string = direct && p === 'instagram' ? 'instagram_direct' : startPlatform(p);
     const qs = new URLSearchParams({ ws: props.ws, token: props.token, origin: props.origin, embed: '1' });
     const popup = window.open(`/api/oauth/start/${sp}?${qs.toString()}`, 'camaleonic-oauth', 'popup=yes,width=560,height=720');
@@ -220,6 +239,7 @@ export function ConnectShell(props: Props) {
           </div>
         ) : step === 'guidance' && platform ? (
           <div className="cml-step cml-center">
+            {flowError && <div className="cml-banner cml-banner--danger">{flowError}</div>}
             <div className="cml-hero"><PlatformIcon platform={platform} large /></div>
             <h2 className="cml-title">{guidance(platform, igDirectMode).title}</h2>
             <p className="cml-sub">{guidance(platform, igDirectMode).body}</p>
@@ -263,6 +283,21 @@ export function ConnectShell(props: Props) {
       </div>
     </div>
   );
+}
+
+/** Did the user decline / abandon the provider consent screen (as opposed
+ *  to a technical failure)? Message shapes come from the OAuth callback:
+ *  "<platform> denied: access_denied — …" and "… callback missing ?code". */
+function isOAuthDenial(raw: string): boolean {
+  const m = raw.toLowerCase();
+  return m.includes('denied:') || m.includes('access_denied') || m.includes('missing ?code');
+}
+
+function friendlyOAuthError(raw: string): string {
+  if (isOAuthDenial(raw)) {
+    return 'The login was cancelled before finishing, so no account was connected. You can try again whenever you’re ready.';
+  }
+  return raw;
 }
 
 function guidance(p: PlatformKey, direct = false): { title: string; body: string } {

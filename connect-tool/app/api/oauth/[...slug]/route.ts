@@ -13,7 +13,12 @@ import {
   type CallbackResult,
   type PlatformKey,
 } from '../../../../lib/platforms';
-import { putSession, getOAuthContextSession, attachContext } from '../../../../lib/session';
+import {
+  putSession,
+  getOAuthContextSession,
+  attachContext,
+  type OAuthContextSession,
+} from '../../../../lib/session';
 import {
   setContextCookie,
   verifySdkToken,
@@ -24,6 +29,7 @@ import {
   isOriginAllowedStrict,
   shouldRequireAllowList,
 } from '../../../../lib/origin-allowlist';
+import { oauthErrorTarget } from '../../../../lib/oauth-error-target';
 import {
   computeOAuthScopes,
   fetchProductsCatalog,
@@ -135,9 +141,14 @@ function redirectUriFor(platform: PlatformKey, baseUrl: string): string {
   }
 }
 
-function errorRedirect(baseUrl: string, message: string): NextResponse {
+function errorRedirect(
+  baseUrl: string,
+  platform: string,
+  message: string,
+  embedded: boolean,
+): NextResponse {
   return NextResponse.redirect(
-    `${baseUrl}/?error=${encodeURIComponent(message)}`,
+    oauthErrorTarget(baseUrl, platform, message, embedded),
     { status: 302 },
   );
 }
@@ -224,6 +235,9 @@ export async function GET(
     const sp = req.nextUrl.searchParams;
     const ws = sp.get('ws');
     const token = sp.get('token');
+    // Embedded (SDK modal) flows must surface errors back inside the modal,
+    // not on the connector's own pages — see oauthErrorTarget.
+    const embedded = sp.get('embed') === '1';
     let contextSessionId: string | null = null;
     let productsConfig: ProductsConfig = null;
     let connectionProducts: Record<string, ReadonlyArray<string>> | undefined;
@@ -272,7 +286,6 @@ export async function GET(
             `Origin "${origin ?? '(none provided)'}" is not allowed for workspace "${ws}". Add it under the workspace's allowed origins.`,
           );
         }
-        const embedded = sp.get('embed') === '1';
         contextSessionId = await putSession({
           kind: 'oauth-context',
           workspaceId: claims.ws,
@@ -287,7 +300,9 @@ export async function GET(
       } catch (err) {
         return errorRedirect(
           baseUrl,
+          platform,
           err instanceof Error ? err.message : String(err),
+          embedded,
         );
       }
     }
@@ -296,7 +311,12 @@ export async function GET(
     // workspace's enabled products need; the consent screen only shows those.
     const catalog = await fetchProductsCatalog();
     if (!catalog) {
-      return errorRedirect(baseUrl, 'Products catalog temporarily unavailable');
+      return errorRedirect(
+        baseUrl,
+        platform,
+        'Products catalog temporarily unavailable',
+        embedded,
+      );
     }
     // Narrow to the per-connection scope (if the SDK token carried one) before
     // computing OAuth scopes — a "basic" connection then only asks the provider
@@ -313,7 +333,9 @@ export async function GET(
     } catch (err) {
       return errorRedirect(
         baseUrl,
+        platform,
         err instanceof Error ? err.message : String(err),
+        embedded,
       );
     }
     // Sec C-2: bind this flow to the browser with a CSRF state we verify at
@@ -331,15 +353,29 @@ export async function GET(
 
   if (action === 'callback') {
     const sp = req.nextUrl.searchParams;
+    // Resolve the embed context BEFORE error handling: a denial needs to know
+    // where "back" is just as much as a success does. Defensive catch — if the
+    // session store is unreachable we fall back to the standalone error page
+    // rather than a 500.
+    let oauthCtx: OAuthContextSession | null = null;
+    try {
+      const ctxId = getContextCookie(req);
+      oauthCtx = ctxId ? await getOAuthContextSession(ctxId) : null;
+    } catch {
+      oauthCtx = null;
+    }
+    const embedded = !!oauthCtx?.embedded;
+    const failRedirect = (message: string): NextResponse => {
+      const res = errorRedirect(baseUrl, platform, message, embedded);
+      clearStateCookie(res);
+      return res;
+    };
     const error = sp.get('error');
     if (error) {
       const desc = sp.get('error_description') ?? '';
-      const res = errorRedirect(
-        baseUrl,
+      return failRedirect(
         `${platform} denied: ${error}${desc ? ` — ${desc}` : ''}`,
       );
-      clearStateCookie(res);
-      return res;
     }
     // Sec C-2: the returned ?state MUST match the cookie we set at /start.
     // Reject before touching the authorization code so a code injected by an
@@ -348,16 +384,13 @@ export async function GET(
     const returnedState = sp.get('state');
     const cookieState = req.cookies.get(OAUTH_STATE_COOKIE)?.value ?? null;
     if (!statesMatch(returnedState, cookieState)) {
-      const res = errorRedirect(
-        baseUrl,
+      return failRedirect(
         `${platform} callback failed state verification — please retry the connection.`,
       );
-      clearStateCookie(res);
-      return res;
     }
     const code = sp.get('code');
     if (!code) {
-      return errorRedirect(baseUrl, `${platform} callback missing ?code`);
+      return failRedirect(`${platform} callback missing ?code`);
     }
     try {
       pruneCallbackCache();
@@ -372,23 +405,20 @@ export async function GET(
         callbackInFlight.set(cacheKey, entry);
       }
       const result = await entry.promise;
-      const ctxId = getContextCookie(req);
-      const ctx = ctxId ? await getOAuthContextSession(ctxId) : null;
-      const embedded = !!ctx?.embedded;
 
       // Persist tenant context ON the result session (keyed by sessionId,
       // which is forwarded via the URL). The seed handlers read it from the
       // session instead of the context cookie, which a third-party iframe
       // withholds (SameSite=Lax). This callback runs top-level in the popup,
       // so the cookie is still readable here.
-      if (ctx) {
+      if (oauthCtx) {
         await attachContext(result.sessionId, {
-          workspaceId: ctx.workspaceId,
-          endUserId: ctx.endUserId,
-          environment: ctx.environment,
-          openerOrigin: ctx.openerOrigin,
-          workspaceSlug: ctx.workspaceSlug,
-          connectionProducts: ctx.connectionProducts,
+          workspaceId: oauthCtx.workspaceId,
+          endUserId: oauthCtx.endUserId,
+          environment: oauthCtx.environment,
+          openerOrigin: oauthCtx.openerOrigin,
+          workspaceSlug: oauthCtx.workspaceSlug,
+          connectionProducts: oauthCtx.connectionProducts,
         });
       }
 
@@ -407,10 +437,7 @@ export async function GET(
       clearStateCookie(res);
       return res;
     } catch (err) {
-      return errorRedirect(
-        baseUrl,
-        err instanceof Error ? err.message : String(err),
-      );
+      return failRedirect(err instanceof Error ? err.message : String(err));
     }
   }
 
