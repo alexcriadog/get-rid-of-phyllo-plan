@@ -323,6 +323,28 @@ export class AdminSaasController {
     return { slug, branding: isClear ? null : parsed.data };
   }
 
+  @Patch('workspaces/:slug/name')
+  async renameWorkspace(
+    @Param('slug') slug: string,
+    @Body() body: unknown,
+  ): Promise<unknown> {
+    const parsed = z
+      .object({ name: z.string().trim().min(1).max(120) })
+      .safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException({
+        message: 'Invalid name payload',
+        issues: parsed.error.issues,
+      });
+    }
+    const ws = await this.workspaces.findBySlug(slug);
+    const updated = await this.prisma.workspace.update({
+      where: { id: ws.id },
+      data: { name: parsed.data.name },
+    });
+    return { slug, name: updated.name };
+  }
+
   @Patch('workspaces/:slug/products')
   async updateProducts(
     @Param('slug') slug: string,

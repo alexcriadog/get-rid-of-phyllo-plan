@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
-import { Building2, Plus } from 'lucide-react';
+import { Building2, Pencil, Plus } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
-import { adminPost } from '../../lib/api';
+import { adminPost, adminPatch } from '../../lib/api';
 import { fmtRelative } from '../../lib/format';
 import { Empty } from '@/components/admin/empty';
 import { Badge } from '@/components/ui/badge';
@@ -138,9 +138,38 @@ export default function WorkspacesPage() {
                         {w.slug}
                       </div>
                     </div>
-                    <Badge variant="default" className="capitalize">
-                      {w.plan_tier}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        aria-label={`Rename ${w.name}`}
+                        title="Rename workspace"
+                        className="text-muted-foreground transition-colors hover:text-foreground"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const next = window.prompt(
+                            `Rename workspace "${w.name}" (${w.slug})`,
+                            w.name,
+                          );
+                          const trimmed = next?.trim();
+                          if (!trimmed || trimmed === w.name) return;
+                          adminPatch(`/admin/workspaces/${w.slug}/name`, {
+                            name: trimmed,
+                          })
+                            .then(() => refresh())
+                            .catch((err) =>
+                              window.alert(
+                                `Rename failed: ${(err as Error).message}`,
+                              ),
+                            );
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <Badge variant="default" className="capitalize">
+                        {w.plan_tier}
+                      </Badge>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <Stat label="Accounts" value={w.account_count} />
