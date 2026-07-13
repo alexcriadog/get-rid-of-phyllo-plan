@@ -143,66 +143,104 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
 
   try {
     const db = await getDb();
-    const accountFilter = { $or: [{ account_id: id }, { account_id: Number(id) || id }] };
+    const accountPk = String(id);
+    const accountFilter = { account_pk: accountPk };
 
-    // Resolve the connected account's own handle so we can keep mentions
-    // (posts authored by other users that @-tag us) out of this archive.
-    // The dedicated /mentions page surfaces them.
-    const identityDoc = await db
-      .collection('identity_snapshots')
-      .findOne(accountFilter);
-    const ownerHandle =
-      (identityDoc?.data as { username?: string } | undefined)?.username ??
-      null;
+    // Identity comes from the canonical `profiles` collection (keyed by
+    // account_pk); the account's own content lives in `contents`. The legacy
+    // `identity_snapshots`/`posts` collections are no longer written — reading
+    // them returned an empty archive for every account.
+    const profileDoc = await db.collection('profiles').findOne(accountFilter);
+    const pdoc =
+      ((profileDoc as { doc?: Record<string, unknown> } | null)?.doc ?? {}) as Record<
+        string,
+        unknown
+      >;
+    const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+    const num = (v: unknown): number | undefined =>
+      typeof v === 'number' ? v : undefined;
     const platform =
-      (identityDoc as { platform?: string } | null)?.platform ?? null;
-    // IMPORTANT: accountFilter and ownPostsFilter both use `$or`. Spreading
-    // them into the same object would silently drop the first `$or` (last
-    // key wins), letting posts from other accounts leak in. Compose with
-    // `$and` so both predicates apply.
-    const ownPostsClause: Record<string, unknown> | null = ownerHandle
-      ? {
-          $or: [
-            { 'data.ownerHandle': ownerHandle },
-            { 'data.ownerHandle': null },
-            { 'data.ownerHandle': { $exists: false } },
-          ],
-        }
-      : null;
+      str((profileDoc as { platform?: unknown } | null)?.platform) ??
+      str(pdoc.platform);
+    const ownerHandle =
+      str(pdoc.platform_username) ?? str(pdoc.username) ?? null;
 
     const dateFilter: Record<string, unknown> = {};
     if (from) dateFilter.$gte = new Date(`${from}T00:00:00.000Z`);
     if (to) dateFilter.$lte = new Date(`${to}T23:59:59.999Z`);
+    const dateQuery: Record<string, unknown> =
+      Object.keys(dateFilter).length > 0
+        ? { account_pk: accountPk, 'doc.published_at': dateFilter }
+        : { account_pk: accountPk };
 
-    const buildQuery = (
-      includeDate: boolean,
-    ): Record<string, unknown> => {
-      const clauses: Record<string, unknown>[] = [accountFilter];
-      if (ownPostsClause) clauses.push(ownPostsClause);
-      if (includeDate && Object.keys(dateFilter).length > 0) {
-        clauses.push({ 'data.publishedAt': dateFilter });
+    const [rawContents, totalAll, totalMatching, engagementDeepDoc] =
+      await Promise.all([
+        db
+          .collection('contents')
+          .find(dateQuery)
+          .sort({ 'doc.published_at': -1, updated_at: -1 })
+          .skip((page - 1) * PAGE_SIZE)
+          .limit(PAGE_SIZE)
+          .toArray(),
+        db.collection('contents').countDocuments({ account_pk: accountPk }),
+        db.collection('contents').countDocuments(dateQuery),
+        // Optional. Adapters that don't implement fetchEngagementDeep simply
+        // don't deposit anything here, so this lookup returns null.
+        db
+          .collection('engagement_deep_snapshots')
+          .findOne(accountFilter, { sort: { updated_at: -1 } }),
+      ]);
+
+    // Map each canonical content doc → the Post shape the page renders.
+    const raw: Post[] = rawContents.map((c) => {
+      const doc = ((c as { doc?: Record<string, unknown> }).doc ?? {}) as Record<
+        string,
+        unknown
+      >;
+      const eng = (doc.engagement ?? {}) as Record<string, unknown>;
+      const mediaUrls = Array.isArray(doc.media_urls)
+        ? (doc.media_urls as string[])
+        : str(doc.media_url)
+          ? [str(doc.media_url) as string]
+          : [];
+      const extra: Record<string, number> = {};
+      const ai = (eng.additional_info ?? {}) as Record<string, unknown>;
+      for (const [k, v] of Object.entries(ai)) {
+        if (typeof v === 'number') extra[k] = v;
       }
-      return clauses.length === 1 ? clauses[0] : { $and: clauses };
-    };
-    const query = buildQuery(true);
-    const ownTotalFilter = buildQuery(false);
-
-    const [raw, totalAll, totalMatching, engagementDeepDoc] = await Promise.all([
-      db
-        .collection('posts')
-        .find(query)
-        .sort({ 'data.publishedAt': -1, updated_at: -1 })
-        .skip((page - 1) * PAGE_SIZE)
-        .limit(PAGE_SIZE)
-        .toArray(),
-      db.collection('posts').countDocuments(ownTotalFilter),
-      db.collection('posts').countDocuments(query),
-      // Optional. Adapters that don't implement fetchEngagementDeep simply
-      // don't deposit anything here, so this lookup returns null.
-      db
-        .collection('engagement_deep_snapshots')
-        .findOne(accountFilter, { sort: { updated_at: -1 } }),
-    ]);
+      return {
+        account_id: accountPk,
+        platform: platform ?? '',
+        platform_content_id: String(
+          str(doc.external_id) ??
+            str((c as { external_id?: unknown }).external_id) ??
+            str((c as { id?: unknown }).id) ??
+            '',
+        ),
+        updated_at: str((c as { updated_at?: unknown }).updated_at) ?? undefined,
+        created_at: str((c as { created_at?: unknown }).created_at) ?? undefined,
+        data: {
+          caption: str(doc.title) ?? str(doc.description) ?? null,
+          permalink: str(doc.url),
+          thumbnailUrl:
+            str(doc.thumbnail_url) ?? str(doc.persistent_thumbnail_url) ?? null,
+          mediaUrls,
+          contentType: str(doc.type) ?? str(doc.format) ?? undefined,
+          publishedAt: str(doc.published_at),
+          ownerHandle: str(doc.platform_profile_name) ?? ownerHandle,
+          metrics: {
+            likes: num(eng.like_count),
+            comments: num(eng.comment_count),
+            views: num(eng.view_count),
+            shares: num(eng.share_count),
+            saves: num(eng.save_count),
+            reach: num(eng.reach_organic_count),
+            impressions: num(eng.impression_organic_count),
+            extra: Object.keys(extra).length ? extra : undefined,
+          },
+        },
+      };
+    });
 
     // Build the (contentId → item) lookup once, in SSR, so the PostDialog
     // can do a single O(1) read per open post.
