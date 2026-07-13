@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { CONNECTOR_API_URL } from '../lib/api';
@@ -221,6 +222,13 @@ export default function Home({ workspaces, selected, cards: initialCards }: Page
           <Link href="/admin" className="v-pill-outline-mint">
             Admin console
           </Link>
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: '/login' })}
+            className="v-pill-outline-mint"
+          >
+            Sign out
+          </button>
         </header>
 
         {/* Controls row */}

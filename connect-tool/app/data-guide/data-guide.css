@@ -160,6 +160,25 @@
   cursor: pointer;
 }
 
+/* Back-to-console link — mirrors .iconbtn so it reads as part of the bar. */
+.dg-root .backbtn {
+  font-family: var(--dg-mono);
+  font-size: 0.72rem;
+  color: var(--dg-dim);
+  background: var(--dg-panel-2);
+  border: 1px solid var(--dg-line);
+  border-radius: 7px;
+  padding: 0.42rem 0.7rem;
+  margin-right: 0.85rem;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.dg-root .backbtn:hover {
+  color: var(--dg-text);
+  border-color: var(--dg-accent, var(--dg-dim));
+}
+
 /* ── Tabs ─────────────────────────────────────────────────── */
 .dg-root .tabs {
   height: var(--dg-tabs);

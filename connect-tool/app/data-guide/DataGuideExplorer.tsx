@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './data-guide.css';
 import {
   PLATFORMS,
@@ -102,7 +102,28 @@ export function DataGuideExplorer({ guide }: Props) {
   const [onlyOffered, setOnlyOffered] = useState(false);
   const [query, setQuery] = useState('');
   const [collapsedFamilies, setCollapsedFamilies] = useState<Set<string>>(new Set());
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  // Default to dark (the operator console's default) and inherit the admin's
+  // saved theme from same-origin localStorage so the guide stays consistent
+  // with the rest of the app instead of forcing white.
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('admin.theme.v1');
+      if (stored === 'light' || stored === 'dark') setTheme(stored);
+    } catch {
+      // localStorage unavailable — keep the dark default.
+    }
+  }, []);
+  const toggleTheme = () =>
+    setTheme((t) => {
+      const next = t === 'dark' ? 'light' : 'dark';
+      try {
+        localStorage.setItem('admin.theme.v1', next);
+      } catch {
+        // ignore persistence failures
+      }
+      return next;
+    });
 
   const visiblePlatforms = useMemo(
     () => PLATFORMS.filter((p) => !hiddenPlatforms.has(p)),
@@ -138,6 +159,9 @@ export function DataGuideExplorer({ guide }: Props) {
   return (
     <div className="dg-root" data-theme={theme}>
       <div className="bar">
+        <a className="backbtn" href="/admin" aria-label="Back to admin console">
+          ← Back
+        </a>
         <span className="brand">
           <span className="dot" />
           Camaleonic Connect
@@ -157,7 +181,7 @@ export function DataGuideExplorer({ guide }: Props) {
         />
         <button
           className="iconbtn"
-          onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          onClick={toggleTheme}
           aria-label="Toggle theme"
         >
           ◐

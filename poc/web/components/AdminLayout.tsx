@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import { signOut } from 'next-auth/react';
 import { ReactNode, useState } from 'react';
 import {
   Activity,
@@ -14,6 +15,7 @@ import {
   LayoutDashboard,
   ListOrdered,
   Lock,
+  LogOut,
   Menu,
   Plug2,
   Repeat,
@@ -248,6 +250,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <ExternalLink className="h-3.5 w-3.5" />
           Data Guide
         </a>
+        <button
+          type="button"
+          onClick={() => signOut({ callbackUrl: '/login' })}
+          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Sign out
+        </button>
       </div>
     </div>
   );
