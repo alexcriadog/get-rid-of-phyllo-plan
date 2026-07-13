@@ -3,9 +3,10 @@ import Link from 'next/link';
 import { Building2, Pencil, Plus } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
 import { useLive } from '../../lib/useLive';
-import { adminPost, adminPatch } from '../../lib/api';
+import { adminPost } from '../../lib/api';
 import { fmtRelative } from '../../lib/format';
 import { Empty } from '@/components/admin/empty';
+import { WorkspaceEditDialog } from '@/components/admin/WorkspaceEditDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -31,6 +32,7 @@ export default function WorkspacesPage() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Workspace | null>(null);
 
   const onCreate = async () => {
     setBusy(true);
@@ -141,27 +143,13 @@ export default function WorkspacesPage() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        aria-label={`Rename ${w.name}`}
-                        title="Rename workspace"
+                        aria-label={`Edit ${w.name}`}
+                        title="Edit workspace"
                         className="text-muted-foreground transition-colors hover:text-foreground"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          const next = window.prompt(
-                            `Rename workspace "${w.name}" (${w.slug})`,
-                            w.name,
-                          );
-                          const trimmed = next?.trim();
-                          if (!trimmed || trimmed === w.name) return;
-                          adminPatch(`/admin/workspaces/${w.slug}/name`, {
-                            name: trimmed,
-                          })
-                            .then(() => refresh())
-                            .catch((err) =>
-                              window.alert(
-                                `Rename failed: ${(err as Error).message}`,
-                              ),
-                            );
+                          setEditing(w);
                         }}
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -183,6 +171,17 @@ export default function WorkspacesPage() {
             </Link>
           ))}
         </div>
+      )}
+
+      {editing && (
+        <WorkspaceEditDialog
+          workspace={{ slug: editing.slug, name: editing.name }}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            refresh();
+          }}
+        />
       )}
     </AdminLayout>
   );
