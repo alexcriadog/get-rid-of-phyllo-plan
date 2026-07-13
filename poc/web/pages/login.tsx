@@ -52,11 +52,11 @@ export default function LoginPage() {
             className="mb-1 block font-mono text-[10px] uppercase tracking-[0.12em] text-term-muted"
             htmlFor="email"
           >
-            Email
+            User
           </label>
           <input
             id="email"
-            type="email"
+            type="text"
             autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
