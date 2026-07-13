@@ -5,6 +5,7 @@
 // We forward those params to every tile href so the dispatcher can verify
 // the JWT and stash the workspace context in a cookie before the redirect.
 
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import axios from 'axios';
 import { PlatformTile, type PlatformInfo } from '../components/PlatformTile';
@@ -143,6 +144,17 @@ export default async function Index({
   const ws = first(sp.ws);
   const token = first(sp.token);
   const origin = first(sp.origin);
+
+  // A plain visit to the bare domain (no SDK connect-flow params) is no longer
+  // a useful landing — it was the early PoC's "connect an account" screen.
+  // Send operators to the console; the web middleware gates /admin, so no
+  // session → /login?callbackUrl=/admin → back to /admin after sign-in, and a
+  // live session lands straight on /admin. SDK-launched popups always arrive
+  // with ws/token/origin (and error callbacks carry ?error=), so those flows
+  // still render the tiles below.
+  if (!ws && !token && !origin && !errorBanner) {
+    redirect('/admin');
+  }
 
   const adminUrl = process.env.POC_ADMIN_URL ?? 'http://localhost:3001/admin';
   const pocFeedUrl = adminUrl.replace(/\/admin\/?$/, '/feed');
