@@ -26,6 +26,7 @@ const ALLOWED_PLATFORMS: ReadonlyArray<string> = [
   'threads',
   'youtube',
   'twitch',
+  'twitter',
 ];
 
 export interface MintSdkTokenInput {

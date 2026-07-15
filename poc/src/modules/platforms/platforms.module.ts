@@ -9,6 +9,8 @@ import { ThreadsAdapter } from './threads/threads.adapter';
 import { ThreadsModule } from './threads/threads.module';
 import { TwitchAdapter } from './twitch/twitch.adapter';
 import { TwitchModule } from './twitch/twitch.module';
+import { TwitterAdapter } from './twitter/twitter.adapter';
+import { TwitterModule } from './twitter/twitter.module';
 import { LinkedInAdapter } from './linkedin/linkedin.adapter';
 import { LinkedInModule } from './linkedin/linkedin.module';
 import { YoutubeAdapter } from './youtube/youtube.adapter';
@@ -39,6 +41,7 @@ export type { AdapterRegistry };
     YoutubeModule,
     TwitchModule,
     LinkedInModule,
+    TwitterModule,
   ],
   providers: [
     {
@@ -51,6 +54,7 @@ export type { AdapterRegistry };
         yt: YoutubeAdapter,
         tw: TwitchAdapter,
         li: LinkedInAdapter,
+        x: TwitterAdapter,
       ): AdapterRegistry => ({
         instagram: ig,
         facebook: fb,
@@ -59,6 +63,7 @@ export type { AdapterRegistry };
         youtube: yt,
         twitch: tw,
         linkedin: li,
+        twitter: x,
       }),
       inject: [
         InstagramAdapter,
@@ -68,6 +73,7 @@ export type { AdapterRegistry };
         YoutubeAdapter,
         TwitchAdapter,
         LinkedInAdapter,
+        TwitterAdapter,
       ],
     },
   ],
@@ -80,6 +86,7 @@ export type { AdapterRegistry };
     YoutubeModule,
     TwitchModule,
     LinkedInModule,
+    TwitterModule,
   ],
 })
 export class PlatformsModule {}

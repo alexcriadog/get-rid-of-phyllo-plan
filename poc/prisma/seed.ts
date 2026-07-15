@@ -147,6 +147,10 @@ const CADENCE_DEFAULTS: CadenceRow[] = [
   // so daily; mentions daily too.
   { platform: 'linkedin', product: 'comments', defaultIntervalSeconds: 86400 },
   { platform: 'linkedin', product: 'mentions', defaultIntervalSeconds: 86400 },
+  // X is login-only: `identity` re-reads the snapshot captured at connect and
+  // makes no API call, so it can only change when the user reconnects. Daily
+  // is already generous; anything tighter would just be busywork.
+  { platform: 'twitter', product: 'identity', defaultIntervalSeconds: 86400 },
 ];
 
 async function seedCadences(): Promise<number> {
@@ -324,6 +328,7 @@ const PRODUCTS_BY_PLATFORM_FOR_BACKFILL: Record<string, string[]> = {
   ],
   // Twitch — see accounts.service.ts PRODUCTS_BY_PLATFORM for rationale.
   twitch: ['identity', 'engagement_new'],
+  twitter: ['identity'],
   linkedin: ['identity', 'audience', 'engagement_new', 'comments', 'mentions'],
 };
 

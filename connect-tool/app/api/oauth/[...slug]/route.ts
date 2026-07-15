@@ -31,6 +31,11 @@ import {
 } from '../../../../lib/origin-allowlist';
 import { oauthErrorTarget } from '../../../../lib/oauth-error-target';
 import {
+  callbackDedupeKey,
+  newPkceVerifier,
+  pkceChallenge,
+} from '../../../../lib/pkce';
+import {
   computeOAuthScopes,
   fetchProductsCatalog,
   fetchWorkspaceProducts,
@@ -47,6 +52,7 @@ const VALID_PLATFORMS = new Set<PlatformKey>([
   'youtube',
   'twitch',
   'linkedin',
+  'twitter',
 ]);
 
 // IG-direct is rolled out opt-in (docs/instagram-direct-oauth.md §8 "Opción
@@ -131,6 +137,10 @@ function redirectUriFor(platform: PlatformKey, baseUrl: string): string {
       return (
         env('LINKEDIN_REDIRECT_URI') ?? `${baseUrl}/api/oauth/callback/linkedin`
       );
+    case 'twitter':
+      return (
+        env('TWITTER_REDIRECT_URI') ?? `${baseUrl}/api/oauth/callback/twitter`
+      );
     case 'instagram_direct':
       return (
         env('INSTAGRAM_REDIRECT_URI') ??
@@ -201,6 +211,36 @@ function statesMatch(a: string | null, b: string | null): boolean {
   const bb = Buffer.from(b);
   if (ba.length !== bb.length) return false;
   return timingSafeEqual(ba, bb);
+}
+
+// ─── PKCE (platforms with `pkce: true` — X today) ────────────────────────
+//
+// Sibling of the CSRF state cookie above: same TTL, same lifecycle, cleared
+// on the same exits. Why the verifier travels this way: lib/pkce.ts.
+const OAUTH_PKCE_COOKIE = 'camaleonic_oauth_pkce';
+
+function setPkceCookie(res: NextResponse, verifier: string): void {
+  res.cookies.set(OAUTH_PKCE_COOKIE, verifier, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: OAUTH_STATE_TTL_SECONDS,
+    // The verifier is the PKCE secret — never let it cross a cleartext hop.
+    // Prod is HTTPS-only (middleware reads the __Secure- next-auth cookie
+    // there); local dev is http, hence the env gate. NOTE: the sibling state
+    // and context cookies predate this and still lack the flag.
+    secure: process.env.NODE_ENV === 'production',
+  });
+}
+
+function clearPkceCookie(res: NextResponse): void {
+  res.cookies.set(OAUTH_PKCE_COOKIE, '', {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 0,
+    secure: process.env.NODE_ENV === 'production',
+  });
 }
 
 export async function GET(
@@ -327,9 +367,17 @@ export async function GET(
     );
     const scopes = computeOAuthScopes(catalog, effectiveConfig, platform);
 
+    // PKCE platforms (X): mint the verifier BEFORE building the URL so the
+    // S256 challenge rides the authorize redirect while the verifier rides
+    // an HttpOnly cookie back to the callback.
+    const pkceVerifier = PLATFORMS[platform].pkce ? newPkceVerifier() : null;
     let authorizeUrl: string;
     try {
-      authorizeUrl = PLATFORMS[platform].buildAuthorizeUrl(redirectUri, scopes);
+      authorizeUrl = PLATFORMS[platform].buildAuthorizeUrl(
+        redirectUri,
+        scopes,
+        pkceVerifier ? { challenge: pkceChallenge(pkceVerifier) } : undefined,
+      );
     } catch (err) {
       return errorRedirect(
         baseUrl,
@@ -345,6 +393,9 @@ export async function GET(
     authorizeUrl = withForcedState(authorizeUrl, state);
     const response = NextResponse.redirect(authorizeUrl, { status: 302 });
     setStateCookie(response, state);
+    if (pkceVerifier) {
+      setPkceCookie(response, pkceVerifier);
+    }
     if (contextSessionId) {
       setContextCookie(response, contextSessionId);
     }
@@ -368,6 +419,7 @@ export async function GET(
     const failRedirect = (message: string): NextResponse => {
       const res = errorRedirect(baseUrl, platform, message, embedded);
       clearStateCookie(res);
+      clearPkceCookie(res);
       return res;
     };
     const error = sp.get('error');
@@ -392,12 +444,34 @@ export async function GET(
     if (!code) {
       return failRedirect(`${platform} callback missing ?code`);
     }
+    // PKCE platforms: the verifier cookie must have survived the provider
+    // round-trip (same lifecycle as the state cookie checked above).
+    const pkceVerifier = req.cookies.get(OAUTH_PKCE_COOKIE)?.value ?? null;
+    if (PLATFORMS[platform].pkce && !pkceVerifier) {
+      return failRedirect(
+        `${platform} callback missing its PKCE verifier — please retry the connection.`,
+      );
+    }
     try {
       pruneCallbackCache();
-      const cacheKey = `${platform}:${code}`;
+      // Keyed on the verifier for PKCE platforms — the state check above only
+      // proves the caller owns their OWN state cookie, so without this a
+      // replayed `code` would collect someone else's exchange straight from
+      // the cache. See callbackDedupeKey.
+      const cacheKey = callbackDedupeKey(
+        platform,
+        code,
+        PLATFORMS[platform].pkce ? pkceVerifier : null,
+      );
       let entry = callbackInFlight.get(cacheKey);
       if (!entry) {
-        const promise = PLATFORMS[platform].handleCallback(code, redirectUri);
+        const promise = PLATFORMS[platform].handleCallback(
+          code,
+          redirectUri,
+          PLATFORMS[platform].pkce && pkceVerifier
+            ? { verifier: pkceVerifier }
+            : undefined,
+        );
         entry = {
           promise,
           clearAt: Date.now() + CALLBACK_CACHE_TTL_MS,
@@ -428,6 +502,7 @@ export async function GET(
           : `${baseUrl}/facebook/pages?session=${result.sessionId}`;
         const res = NextResponse.redirect(target, { status: 302 });
         clearStateCookie(res);
+        clearPkceCookie(res);
         return res;
       }
       const target = embedded
@@ -435,6 +510,7 @@ export async function GET(
         : `${baseUrl}/confirm/${result.platform}?session=${result.sessionId}`;
       const res = NextResponse.redirect(target, { status: 302 });
       clearStateCookie(res);
+      clearPkceCookie(res);
       return res;
     } catch (err) {
       return failRedirect(err instanceof Error ? err.message : String(err));

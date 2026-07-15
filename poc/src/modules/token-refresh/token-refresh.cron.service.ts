@@ -52,6 +52,12 @@ const LOCK_TTL_MS = 10 * 60_000;
 
 const REFRESHABLE = new Set(['tiktok', 'twitch', 'youtube', 'threads']);
 const META = new Set(['facebook', 'instagram']);
+// Login-only platforms: the access token intentionally lapses right after
+// connect (X: 2h, no offline.access requested) and is never used again.
+// Excluded at the query level — otherwise every run would re-scan their
+// permanently-expired rows, sorted FIRST by `expiresAt asc`, crowding the
+// batch ahead of tokens that actually need refreshing.
+const LOGIN_ONLY = ['twitter'];
 // LinkedIn: 60-day access token. refresh_token (365d) only exists when
 // LinkedIn enabled programmatic refresh for the app — rows that have one
 // refresh with the 7-day lead; rows without behave like Meta (needs_reauth
@@ -128,7 +134,7 @@ export class TokenRefreshCronService implements OnApplicationBootstrap {
         // Only connected accounts. Excludes disconnected / needs_reauth (no
         // point) but includes syncTier='paused' on purpose — a paused
         // account's token must stay alive for when it resumes.
-        account: { is: { status: 'ready' } },
+        account: { is: { status: 'ready', platform: { notIn: LOGIN_ONLY } } },
         // Sweep tokens due within the horizon AND tokens with an UNKNOWN
         // expiry (null). A null expiresAt would otherwise be excluded from
         // every proactive path forever (edge 4): the refreshable branches

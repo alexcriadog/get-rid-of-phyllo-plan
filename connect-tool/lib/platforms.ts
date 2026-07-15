@@ -79,6 +79,11 @@ const IG_DIRECT_GRAPH_V = 'https://graph.instagram.com/v22.0';
 const THREADS_AUTHORIZE = 'https://www.threads.net/oauth/authorize';
 const THREADS_TOKEN = 'https://graph.threads.net/oauth/access_token';
 const THREADS_LL_TOKEN = 'https://graph.threads.net/access_token';
+// X (Twitter) OAuth 2.0 — authorization-code + mandatory PKCE (S256).
+// twitter.com hosts still redirect, but x.com/api.x.com are canonical.
+const X_AUTHORIZE = 'https://x.com/i/oauth2/authorize';
+const X_TOKEN = 'https://api.x.com/2/oauth2/token';
+const X_USERS_ME = 'https://api.x.com/2/users/me';
 
 // Per-platform scopes are no longer hardcoded here — they're computed
 // per-workspace from PLATFORM_CATALOG (see poc/src/modules/accounts/
@@ -108,7 +113,8 @@ export type PlatformKey =
   | 'threads'
   | 'youtube'
   | 'twitch'
-  | 'linkedin';
+  | 'linkedin'
+  | 'twitter';
 
 export type CallbackResult =
   | {
@@ -136,8 +142,21 @@ export type CallbackResult =
 
 interface PlatformDef {
   key: PlatformKey;
-  buildAuthorizeUrl(redirectUri: string, scopes: ReadonlyArray<string>): string;
-  handleCallback(code: string, redirectUri: string): Promise<CallbackResult>;
+  /**
+   * Set when the provider mandates PKCE on the authorization-code flow (X).
+   * The dispatcher owns the verifier round-trip — see lib/pkce.ts.
+   */
+  pkce?: boolean;
+  buildAuthorizeUrl(
+    redirectUri: string,
+    scopes: ReadonlyArray<string>,
+    pkce?: { challenge: string },
+  ): string;
+  handleCallback(
+    code: string,
+    redirectUri: string,
+    pkce?: { verifier: string },
+  ): Promise<CallbackResult>;
 }
 
 // ─── Facebook (covers Instagram via Page picker) ───────────────────────
@@ -1047,6 +1066,182 @@ const linkedin: PlatformDef = {
   },
 };
 
+// ─── X (Twitter) — LOGIN-ONLY ──────────────────────────────────────────
+// The OAuth proves account ownership and captures an identity snapshot; the
+// connector never calls the X API again (the free tier couldn't sustain
+// live sync — content for X accounts is scraped by the consuming backend).
+// We deliberately do NOT request offline.access: no refresh token, so the
+// ~2h access token lapses right after login and the POC's token-refresh
+// cron excludes the platform. X also mandates PKCE (see the `pkce` flag).
+
+const twitter: PlatformDef = {
+  key: 'twitter',
+  pkce: true,
+  buildAuthorizeUrl(redirectUri, scopes, pkce) {
+    const clientId = requireEnv('TWITTER_CLIENT_ID');
+    if (!pkce) {
+      throw new Error(
+        'X OAuth requires PKCE — the dispatcher must supply a code challenge.',
+      );
+    }
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      // X wants space-separated scopes.
+      scope: [...scopes].join(' '),
+      state: cryptoRandomState(),
+      code_challenge: pkce.challenge,
+      code_challenge_method: 'S256',
+    });
+    return `${X_AUTHORIZE}?${params.toString()}`;
+  },
+  async handleCallback(code, redirectUri, pkce) {
+    const clientId = requireEnv('TWITTER_CLIENT_ID');
+    const clientSecret = requireEnv('TWITTER_CLIENT_SECRET');
+    if (!pkce) {
+      throw new Error(
+        'X callback missing its PKCE verifier — please retry the connection.',
+      );
+    }
+
+    // 1. Code → access token (~2h). Confidential clients authenticate with
+    //    HTTP Basic; code_verifier completes the PKCE handshake.
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: pkce.verifier,
+    });
+    const tokenRes = await axios.post<{
+      access_token?: string;
+      expires_in?: number;
+      scope?: string;
+      token_type?: string;
+      error?: string;
+      error_description?: string;
+    }>(X_TOKEN, body, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${Buffer.from(
+          `${clientId}:${clientSecret}`,
+        ).toString('base64')}`,
+      },
+      timeout: 15_000,
+      validateStatus: () => true,
+      // Bypass any HTTPS_PROXY env var (OrbStack) — same hardening as Twitch.
+      proxy: false,
+    });
+    const t = tokenRes.data;
+    if (tokenRes.status < 200 || tokenRes.status >= 300 || !t.access_token) {
+      const msg = t?.error_description || t?.error || `HTTP ${tokenRes.status}`;
+      throw new Error(`X exchange failed: ${msg}`);
+    }
+    const accessToken = t.access_token;
+
+    // 2. Identity snapshot — the ONLY X API call this integration ever
+    //    makes (per connect). Free tier covers it.
+    const meRes = await axios.get<{
+      data?: {
+        id?: string;
+        name?: string;
+        username?: string;
+        created_at?: string;
+        description?: string;
+        profile_image_url?: string;
+        url?: string;
+        verified?: boolean;
+        verified_type?: string;
+        public_metrics?: {
+          followers_count?: number;
+          following_count?: number;
+          tweet_count?: number;
+          listed_count?: number;
+        };
+      };
+      title?: string;
+      detail?: string;
+    }>(X_USERS_ME, {
+      params: {
+        'user.fields':
+          'id,name,username,created_at,description,profile_image_url,public_metrics,verified,verified_type,url',
+      },
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 15_000,
+      validateStatus: () => true,
+      proxy: false,
+    });
+    const u = meRes.data?.data;
+    if (meRes.status < 200 || meRes.status >= 300 || !u?.id || !u.username) {
+      const msg =
+        meRes.data?.detail ?? meRes.data?.title ?? `HTTP ${meRes.status}`;
+      throw new Error(`X /2/users/me failed: ${msg}`);
+    }
+    // X serves a 48px `_normal` avatar by default; stripping the suffix
+    // yields the full-size original.
+    const avatarUrl = u.profile_image_url
+      ? u.profile_image_url.replace('_normal.', '.')
+      : undefined;
+    const metrics = u.public_metrics ?? {};
+
+    // `canonical_user_id` is X's numeric user id: immutable across renames and
+    // never reissued. `handle` is a DISPLAY value — X frees a username the
+    // moment its owner renames, and a stranger can then register it. Anything
+    // attributing scraped content back to this connection MUST join on
+    // canonical_user_id, or a recycled @handle silently attributes someone
+    // else's posts to this account. We can't detect that here: this flow makes
+    // its only X API call at connect, so a later rename leaves the stored
+    // handle stale until the user reconnects (which upserts this same row on
+    // the canonical id and refreshes both).
+    const seedBody: SeedBody = {
+      platform: 'twitter',
+      access_token: accessToken,
+      // No expires_at ON PURPOSE. X's token dies ~2h from here and we never
+      // use it again, so there is no expiry anyone will ever act on. Recording
+      // one would just make every X account render a red `expired` token badge
+      // forever (admin/accounts.tsx TokenBadge) — poisoning a signal that's
+      // supposed to mean "this needs attention". A null expiry states the
+      // truth: this system does not track that token's life.
+      canonical_user_id: u.id,
+      handle: u.username,
+      // The POC TwitterAdapter serves the identity product FROM this
+      // snapshot (login-only platform, no live API reads) — keys mirror
+      // poc/src/modules/platforms/twitter/twitter.adapter.ts's reader.
+      metadata: {
+        username: u.username,
+        display_name: u.name,
+        description: u.description,
+        avatar_url: avatarUrl,
+        website: u.url,
+        verified: u.verified,
+        verified_type: u.verified_type,
+        created_at: u.created_at,
+        followers_count: metrics.followers_count,
+        following_count: metrics.following_count,
+        tweet_count: metrics.tweet_count,
+        listed_count: metrics.listed_count,
+        scopes: t.scope ? t.scope.split(' ') : undefined,
+      },
+    };
+    const preview = {
+      handle: u.username,
+      name: u.name,
+      extras: {
+        user_id: u.id,
+        followers: metrics.followers_count,
+        login_only: true,
+      },
+    };
+    const sessionId = await putSession({
+      kind: 'simple',
+      platform: 'twitter',
+      seedBody,
+      preview,
+    });
+    return { kind: 'confirm', platform: 'twitter', sessionId, preview };
+  },
+};
+
 export const PLATFORMS: Record<PlatformKey, PlatformDef> = {
   facebook,
   instagram,
@@ -1056,6 +1251,7 @@ export const PLATFORMS: Record<PlatformKey, PlatformDef> = {
   youtube,
   twitch,
   linkedin,
+  twitter,
 };
 
 /**

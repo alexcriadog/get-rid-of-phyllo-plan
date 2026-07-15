@@ -150,6 +150,7 @@
     --term-tag-th: 180 83 9;
     --term-tag-fb: 29 78 216;
     --term-tag-tw: 124 58 237;
+    --term-tag-x: 15 23 42;        /* X monochrome — near-black on light */
   }
 
   .dark {
@@ -174,6 +175,7 @@
     --term-tag-th: 255 178 36;
     --term-tag-fb: 91 141 239;     /* #5b8def */
     --term-tag-tw: 169 112 255;    /* #a970ff */
+    --term-tag-x: 226 232 240;     /* X monochrome — near-white on dark */
   }
 }
 

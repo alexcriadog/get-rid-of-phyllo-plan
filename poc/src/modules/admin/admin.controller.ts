@@ -103,6 +103,7 @@ const ConnectSeedSchema = z
       'youtube',
       'twitch',
       'linkedin',
+      'twitter',
     ]),
     // Either a raw token (connect-tool, manual paste) OR a single-use broker
     // ref minted by /admin/connect/discover (Sec C-3 — keeps live Page tokens

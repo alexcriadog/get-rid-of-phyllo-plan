@@ -4,7 +4,7 @@ import { PLATFORM_TAGS, platformTag } from '../platforms';
 describe('platformTag', () => {
   it('maps every connector platform', () => {
     expect(Object.keys(PLATFORM_TAGS).sort()).toEqual([
-      'facebook', 'instagram', 'linkedin', 'threads', 'tiktok', 'twitch', 'youtube',
+      'facebook', 'instagram', 'linkedin', 'threads', 'tiktok', 'twitch', 'twitter', 'youtube',
     ]);
   });
   it('returns the spec for a known platform', () => {

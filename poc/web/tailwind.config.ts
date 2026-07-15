@@ -76,6 +76,7 @@ const config: Config = {
           th: 'rgb(var(--term-tag-th) / <alpha-value>)',
           fb: 'rgb(var(--term-tag-fb) / <alpha-value>)',
           tw: 'rgb(var(--term-tag-tw) / <alpha-value>)',
+          x: 'rgb(var(--term-tag-x) / <alpha-value>)',
         },
       },
       borderRadius: {

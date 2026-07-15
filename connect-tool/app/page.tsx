@@ -129,6 +129,19 @@ function buildPlatforms(): PlatformInfo[] {
           ? 'LINKEDIN_CLIENT_SECRET'
           : undefined,
     },
+    {
+      key: 'twitter',
+      label: 'X',
+      subtitle: 'Sign in to verify the account',
+      accent: 'x',
+      enabled:
+        !!process.env.TWITTER_CLIENT_ID && !!process.env.TWITTER_CLIENT_SECRET,
+      missing: !process.env.TWITTER_CLIENT_ID
+        ? 'TWITTER_CLIENT_ID'
+        : !process.env.TWITTER_CLIENT_SECRET
+          ? 'TWITTER_CLIENT_SECRET'
+          : undefined,
+    },
   ];
 }
 

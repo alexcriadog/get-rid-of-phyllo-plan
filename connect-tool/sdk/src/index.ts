@@ -14,7 +14,7 @@
  */
 
 export type PlatformKey =
-  | 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'threads' | 'twitch';
+  | 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'threads' | 'twitch' | 'twitter';
 
 export interface SuccessPayload { accountIds: string[]; platform: PlatformKey | null; }
 export interface ErrorPayload { code: 'popup_blocked' | 'invalid_platform' | 'token' | 'unknown'; message: string; }

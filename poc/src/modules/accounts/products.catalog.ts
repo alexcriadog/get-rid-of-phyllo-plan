@@ -21,7 +21,8 @@ export type Platform =
   | 'threads'
   | 'youtube'
   | 'twitch'
-  | 'linkedin';
+  | 'linkedin'
+  | 'twitter';
 
 export type ProductId =
   | 'identity'
@@ -42,6 +43,7 @@ export const PLATFORM_IDS = [
   'youtube',
   'twitch',
   'linkedin',
+  'twitter',
 ] as const satisfies ReadonlyArray<Platform>;
 
 export const PRODUCT_IDS = [
@@ -313,6 +315,25 @@ export const PLATFORM_CATALOG: Readonly<
       // Helix VOD/clip endpoints are public read; no extra scope beyond
       // identity's user:read:email.
       scopes: [],
+    },
+  ],
+  // X (Twitter) is LOGIN-ONLY: the OAuth proves account ownership and captures
+  // an identity snapshot (GET /2/users/me at connect time — free tier covers
+  // it). No ongoing X API sync exists: post/metric data for X accounts is
+  // produced by the consuming backend via scraping, keyed on the handle this
+  // connection captures. The TwitterAdapter therefore re-emits the snapshot
+  // from account.metadata and never calls the X API (see
+  // platforms/twitter/twitter.adapter.ts).
+  twitter: [
+    {
+      id: 'identity',
+      label: 'Profile (login only)',
+      hint: 'Identity captured at connect; content via external scraping',
+      required: true,
+      default: true,
+      // users.read + tweet.read are both required by GET /2/users/me — the
+      // only X API call we ever make, once, during the OAuth callback.
+      scopes: ['users.read', 'tweet.read'],
     },
   ],
   linkedin: [

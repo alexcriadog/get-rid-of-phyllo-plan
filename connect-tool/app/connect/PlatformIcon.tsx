@@ -51,6 +51,10 @@ export const BRAND: Record<PlatformKey, Brand> = {
     label: 'LinkedIn', provider: 'LinkedIn', bg: '#0A66C2',
     glyph: f('M6.94 5a2 2 0 1 1-4-.002 2 2 0 0 1 4 .002zM7 8.48H3V21h4V8.48zm6.32 0H9.34V21h3.94v-6.57c0-3.66 4.77-4 4.77 0V21H22v-7.93c0-6.17-7.06-5.94-8.72-2.91l.04-1.68z'),
   },
+  twitter: {
+    label: 'X', provider: 'X', bg: '#000000',
+    glyph: f('M17.9 3.5h2.9l-6.4 7.3 7.5 9.7h-5.9l-4.6-6-5.2 6H3.3l6.8-7.8-7.2-9.2h6l4.1 5.5 5-5.5zm-1 15.3h1.6L8 5.1H6.2l10.7 13.7z'),
+  },
 };
 
 export function PlatformIcon({ platform, large }: { platform: PlatformKey; large?: boolean }) {

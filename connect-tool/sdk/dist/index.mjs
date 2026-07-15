@@ -1,4 +1,4 @@
-/*! Camaleonic Connect SDK v2.0.0 — 2026-07-13 */
+/*! Camaleonic Connect SDK v2.0.0 — 2026-07-15 */
 
 // sdk/src/index.ts
 var VERSION = "2.0.0";

@@ -11,7 +11,8 @@ export interface SeedBody {
     | 'threads'
     | 'youtube'
     | 'twitch'
-    | 'linkedin';
+    | 'linkedin'
+    | 'twitter';
   access_token: string;
   canonical_user_id: string;
   handle?: string;

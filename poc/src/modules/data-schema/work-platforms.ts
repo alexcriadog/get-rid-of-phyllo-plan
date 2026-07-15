@@ -48,6 +48,13 @@ export const WORK_PLATFORMS: Record<Platform, ApiWorkPlatformRef> = {
     name: "Threads",
     logo_url: LOGO("threads"),
   },
+  // InsightIQ's real "X" platform UUID (work-platforms.json) so consumers
+  // that still map on Phyllo-era work_platform ids recognise the account.
+  twitter: {
+    id: "7645460a-96e0-4192-a3ce-a1fc30641f72",
+    name: "X",
+    logo_url: LOGO("x"),
+  },
 };
 
 export function workPlatformRef(platform: Platform): ApiWorkPlatformRef {

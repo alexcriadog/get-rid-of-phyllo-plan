@@ -5,6 +5,7 @@ export type PlatformId =
   | 'threads'
   | 'tiktok'
   | 'twitch'
+  | 'twitter'
   | 'youtube';
 
 export interface PlatformTagSpec {
@@ -22,6 +23,7 @@ export const PLATFORM_TAGS: Record<PlatformId, PlatformTagSpec> = {
   threads: { abbr: 'TH', label: 'threads', className: 'text-tag-th' },
   facebook: { abbr: 'FB', label: 'facebook', className: 'text-tag-fb' },
   twitch: { abbr: 'TW', label: 'twitch', className: 'text-tag-tw' },
+  twitter: { abbr: 'X', label: 'twitter', className: 'text-tag-x' },
 };
 
 export function platformTag(platform: string): PlatformTagSpec {

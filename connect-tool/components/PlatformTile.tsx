@@ -1,8 +1,15 @@
 export type PlatformInfo = {
-  key: 'facebook' | 'tiktok' | 'threads' | 'youtube' | 'twitch' | 'linkedin';
+  key:
+    | 'facebook'
+    | 'tiktok'
+    | 'threads'
+    | 'youtube'
+    | 'twitch'
+    | 'linkedin'
+    | 'twitter';
   label: string;
   subtitle: string;
-  accent: 'blue' | 'red' | 'cyan' | 'mint' | 'purple' | 'linkedin';
+  accent: 'blue' | 'red' | 'cyan' | 'mint' | 'purple' | 'linkedin' | 'x';
   enabled: boolean;
   /** Name of the missing env var, when enabled === false. */
   missing?: string;
@@ -17,6 +24,9 @@ const ACCENT_HEX: Record<PlatformInfo['accent'], string> = {
   purple: '#9146ff',
   // LinkedIn brand blue.
   linkedin: '#0A66C2',
+  // X is monochrome black; the tile accent needs contrast against the dark
+  // canvas, so use the off-white side of the brand instead.
+  x: '#e7e9ea',
 };
 
 export function PlatformTile({

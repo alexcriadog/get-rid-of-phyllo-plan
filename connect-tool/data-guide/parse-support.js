@@ -1,8 +1,8 @@
-// Parse the 7 <platform>.support-matrix.ts files into clean capability states.
+// Parse the 8 <platform>.support-matrix.ts files into clean capability states.
 // Output: capability.json = { Platform: { product: { sourceKey: 'supported'|'empty_possible'|'not_supported' } } }
 const fs = require('fs'); const path = require('path');
 const ROOT = '/Users/alexcriadogonzalez/Camaleonic/get-rid-of-phyllo/poc/src/modules/platforms';
-const MAP = { instagram:'Instagram', facebook:'Facebook', tiktok:'TikTok', threads:'Threads', youtube:'YouTube', twitch:'Twitch', linkedin:'LinkedIn' };
+const MAP = { instagram:'Instagram', facebook:'Facebook', tiktok:'TikTok', threads:'Threads', youtube:'YouTube', twitch:'Twitch', linkedin:'LinkedIn', twitter:'X' };
 const out = {};
 for (const [dir, name] of Object.entries(MAP)) {
   const file = path.join(ROOT, dir, dir + '.support-matrix.ts');

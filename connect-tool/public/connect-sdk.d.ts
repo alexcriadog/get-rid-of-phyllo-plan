@@ -12,7 +12,7 @@
  *   });
  *   button.onclick = () => handle.open();  // or handle.open("tiktok")
  */
-export type PlatformKey = 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'threads' | 'twitch';
+export type PlatformKey = 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'threads' | 'twitch' | 'twitter';
 export interface SuccessPayload {
     accountIds: string[];
     platform: PlatformKey | null;

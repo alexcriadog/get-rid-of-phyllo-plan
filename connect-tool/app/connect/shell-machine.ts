@@ -1,10 +1,10 @@
 export type Step = 'consent' | 'chooser' | 'connections' | 'guidance';
 
 export type PlatformKey =
-  | 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'threads' | 'twitch' | 'linkedin';
+  | 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'threads' | 'twitch' | 'linkedin' | 'twitter';
 
 export const PLATFORM_KEYS: readonly PlatformKey[] = [
-  'facebook', 'instagram', 'youtube', 'tiktok', 'threads', 'twitch', 'linkedin',
+  'facebook', 'instagram', 'youtube', 'tiktok', 'threads', 'twitch', 'linkedin', 'twitter',
 ];
 
 export function isPlatformKey(v: unknown): v is PlatformKey {
