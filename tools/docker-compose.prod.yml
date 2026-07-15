@@ -151,6 +151,13 @@ services:
       # /data-guide gate validates the same session cookie.
       AUTH_SECRET: "${AUTH_SECRET}"
       OPERATOR_USERS: "${OPERATOR_USERS}"
+      # Canonical public origin for Auth.js URL construction. Without it,
+      # trustHost derives the origin from x-forwarded-host — which Next.js
+      # overwrites with the server's own bind (0.0.0.0:3001) on the internal
+      # middleware hop, so sign-in/sign-out redirects pointed at
+      # https://0.0.0.0:3001 instead of the site (verified live via
+      # /api/auth/providers before this fix).
+      AUTH_URL: "https://smconnector.camaleonicanalytics.com"
     expose:
       - "3001"
     depends_on:
