@@ -113,7 +113,7 @@ for (const table of Object.keys(guide.fields)) {
   out.tables[table] = { product, offered, fields };
 }
 
-out.audienceNote = 'Offered = the platform’s API exposes it to us (from our per-platform support matrices). TikTok audience is offered too — gated above the ≥100-follower threshold (✓△). Threads & Twitch expose no audience demographics. LinkedIn audience is organization-only.';
+out.audienceNote = 'Offered = our /v1 API serves it (support matrices reconciled against real captured data, 2026-07-15). TikTok audience is gated above the ≥100-follower threshold (✓△); YouTube demographics need sufficient channel watch time (✓△). Threads & Twitch expose no audience demographics. LinkedIn audience is organization-only. Per-post audience exists only on TikTok (viewer threshold) and YouTube (deep analytics, owner-only) — Instagram has none.';
 
 fs.writeFileSync('../app/data-guide/guide.json', JSON.stringify(out, null, 2));
 const tally = { yes: 0, caveat: 0, no: 0 };

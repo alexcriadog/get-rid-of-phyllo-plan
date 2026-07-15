@@ -29,7 +29,9 @@ export const TWITCH_SUPPORT_MATRIX: SupportMatrix = {
     followingCount: 'not_supported',
     postsCount: 'not_supported',
     verified: 'not_supported',
-    accountType: 'supported',
+    // empty_possible: broadcaster_type is "" for regular channels — only
+    // affiliate/partner tiers carry a value.
+    accountType: 'empty_possible',
     website: 'not_supported',
     category: 'not_supported',
     subscriberCount: 'supported',

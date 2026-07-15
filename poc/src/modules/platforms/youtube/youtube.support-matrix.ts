@@ -30,9 +30,12 @@ export const YOUTUBE_SUPPORT_MATRIX: SupportMatrix = {
     category: 'empty_possible',
   },
   audience: {
-    genderDistribution: 'supported',
-    ageDistribution: 'supported',
-    countryDistribution: 'supported',
+    // empty_possible: YouTube Analytics returns viewer demographics only
+    // once the channel accumulates enough watch time — small channels get
+    // empty rows (verified live: 0/1 prod channels populated as of 2026-07).
+    genderDistribution: 'empty_possible',
+    ageDistribution: 'empty_possible',
+    countryDistribution: 'empty_possible',
     cityDistribution: 'not_supported',
     interests: 'not_supported',
     views: 'supported',

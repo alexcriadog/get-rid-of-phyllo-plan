@@ -41,5 +41,16 @@ export function toApiComment(
       url: contentJoin?.url ?? null,
       published_at: naiveUtc(contentJoin?.publishedAt ?? null),
     },
+    // Additive, only-when-present (see ApiComment) — threading + publish
+    // time + owner signals the InsightIQ shape drops but the UI needs.
+    ...(comment.publishedAt
+      ? { published_at: naiveUtc(comment.publishedAt) }
+      : {}),
+    ...(comment.parentCommentId
+      ? { parent_comment_id: comment.parentCommentId }
+      : {}),
+    ...(comment.pinned === true ? { pinned: true } : {}),
+    ...(comment.likedByCreator === true ? { liked_by_creator: true } : {}),
+    ...(comment.isOwnerReply === true ? { is_owner_reply: true } : {}),
   };
 }

@@ -273,6 +273,17 @@ export interface ApiContent extends ApiEnvelope {
   is_spoiler_media?: boolean | null;
   /** Additive — Threads poll (options + vote percentages 0-100). */
   poll?: ApiContentPoll | null;
+  /**
+   * Additive, only-when-present — author handle when the item was authored
+   * by someone other than the connected account (mentions product). Own
+   * posts omit it.
+   */
+  owner_username?: string;
+  /**
+   * Additive, only-when-present — official embeddable player URL (TikTok).
+   * Distinct from `media_url`, which InsightIQ reserves for downloadables.
+   */
+  embed_url?: string;
 }
 
 /** Additive — location tagged on a post (Threads location tagging). */
@@ -319,6 +330,16 @@ export interface ApiComment extends ApiEnvelope {
   reply_count: number | null;
   external_id: string;
   content: ApiCommentContentRef;
+  /**
+   * Additive, only-when-present — comment metadata InsightIQ's shape drops
+   * but our UI needs (threading, publish time, owner signals). Comments
+   * synced before 2026-07-15 lack these until their next refresh.
+   */
+  published_at?: string | null;
+  parent_comment_id?: string;
+  pinned?: boolean;
+  liked_by_creator?: boolean;
+  is_owner_reply?: boolean;
 }
 
 /** Standard list envelope. */

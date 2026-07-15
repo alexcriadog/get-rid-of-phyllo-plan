@@ -61,35 +61,73 @@ export default async function handler(
 
   try {
     const db = await getDb();
-    const docs = await db
+    // Canonical comment wrappers ({account_pk, content_external_id,
+    // external_id, doc}) — the live store since the 2026-06-08 canonical
+    // cutover. Threading/publish-time/owner signals arrive as additive doc
+    // keys; comments synced before 2026-07-15 lack them until re-synced.
+    const canonicalDocs = await db
       .collection('comments')
-      .find({
-        $or: [{ account_id: accountId }, { account_id: Number(accountId) || accountId }],
-        platform_content_id: contentId,
-      })
-      .sort({ 'data.publishedAt': -1 })
+      .find({ account_pk: accountId, content_external_id: contentId })
       .limit(500)
       .toArray();
 
-    // Project to the wire shape — we keep the raw Mongo docs lightweight by
-    // unwrapping `data` (where the worker stored the canonical `CommentData`).
-    const comments: CommentDoc[] = docs.map((d) => {
-      const data = (d.data ?? {}) as Record<string, unknown>;
-      return {
-        platformCommentId: String(data.platformCommentId ?? d.platform_comment_id ?? ''),
-        platformContentId: String(data.platformContentId ?? d.platform_content_id ?? ''),
-        parentCommentId: (data.parentCommentId as string | null | undefined) ?? null,
-        authorHandle: (data.authorHandle as string | null | undefined) ?? null,
-        authorDisplayName: (data.authorDisplayName as string | null | undefined) ?? null,
-        text: String(data.text ?? ''),
-        publishedAt: toIso(data.publishedAt),
-        fetchedAt: toIso(data.fetchedAt),
-        metrics: (data.metrics as CommentMetrics) ?? {},
-        pinned: data.pinned === true ? true : undefined,
-        likedByCreator: data.likedByCreator === true ? true : undefined,
-        isOwnerReply: data.isOwnerReply === true ? true : undefined,
-      };
-    });
+    let comments: CommentDoc[];
+    if (canonicalDocs.length > 0) {
+      comments = canonicalDocs.map((d) => {
+        const doc = (d.doc ?? {}) as Record<string, unknown>;
+        return {
+          platformCommentId: String(d.external_id ?? doc.external_id ?? ''),
+          platformContentId: String(d.content_external_id ?? contentId),
+          parentCommentId:
+            (doc.parent_comment_id as string | undefined) ?? null,
+          authorHandle:
+            (doc.commenter_username as string | null | undefined) ?? null,
+          authorDisplayName:
+            (doc.commenter_display_name as string | null | undefined) ?? null,
+          text: String(doc.text ?? ''),
+          publishedAt: toIso(doc.published_at),
+          fetchedAt: toIso(doc.updated_at ?? d.updated_at),
+          metrics: {
+            likes:
+              typeof doc.like_count === 'number' ? doc.like_count : undefined,
+            replies:
+              typeof doc.reply_count === 'number' ? doc.reply_count : undefined,
+          },
+          pinned: doc.pinned === true ? true : undefined,
+          likedByCreator: doc.liked_by_creator === true ? true : undefined,
+          isOwnerReply: doc.is_owner_reply === true ? true : undefined,
+        };
+      });
+    } else {
+      // Legacy fallback — accounts whose comments never re-synced after the
+      // canonical cutover still have only raw {account_id, data} docs.
+      const docs = await db
+        .collection('comments')
+        .find({
+          $or: [{ account_id: accountId }, { account_id: Number(accountId) || accountId }],
+          platform_content_id: contentId,
+        })
+        .sort({ 'data.publishedAt': -1 })
+        .limit(500)
+        .toArray();
+      comments = docs.map((d) => {
+        const data = (d.data ?? {}) as Record<string, unknown>;
+        return {
+          platformCommentId: String(data.platformCommentId ?? d.platform_comment_id ?? ''),
+          platformContentId: String(data.platformContentId ?? d.platform_content_id ?? ''),
+          parentCommentId: (data.parentCommentId as string | null | undefined) ?? null,
+          authorHandle: (data.authorHandle as string | null | undefined) ?? null,
+          authorDisplayName: (data.authorDisplayName as string | null | undefined) ?? null,
+          text: String(data.text ?? ''),
+          publishedAt: toIso(data.publishedAt),
+          fetchedAt: toIso(data.fetchedAt),
+          metrics: (data.metrics as CommentMetrics) ?? {},
+          pinned: data.pinned === true ? true : undefined,
+          likedByCreator: data.likedByCreator === true ? true : undefined,
+          isOwnerReply: data.isOwnerReply === true ? true : undefined,
+        };
+      });
+    }
 
     // Group: pinned first, then top-level (parentCommentId == null) by date desc,
     // each followed by its replies (also by date desc within the group).

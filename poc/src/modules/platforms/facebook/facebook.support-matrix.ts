@@ -18,8 +18,11 @@ export const FACEBOOK_SUPPORT_MATRIX: SupportMatrix = {
     // Country + city via the modern page_follows_country / _city metrics
     // (replaced the deprecated page_fans_* family in 2024). Gender/age never
     // got a replacement — Meta sunsetted them with no successor.
-    countryDistribution: 'supported',
-    cityDistribution: 'supported',
+    // empty_possible: Meta returns fan-location breakdowns only above a
+    // minimum fan count — small Pages get empty maps (verified live: 0/2
+    // prod Pages populated as of 2026-07).
+    countryDistribution: 'empty_possible',
+    cityDistribution: 'empty_possible',
     genderDistribution: 'not_supported',
     ageDistribution: 'not_supported',
     interests: 'not_supported',
@@ -32,7 +35,9 @@ export const FACEBOOK_SUPPORT_MATRIX: SupportMatrix = {
     comments: 'supported',
     shares: 'supported',
     saves: 'not_supported',
-    impressions: 'supported',
+    // Meta retired post_impressions on v22 — folded into the new `views`
+    // metric (see ContentMetrics, which dropped the `impressions` key).
+    impressions: 'not_supported',
     reach: 'supported',
     views: 'supported',
   },
