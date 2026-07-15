@@ -71,11 +71,31 @@ it:
   *"This platform isn't available for workspace …"*
   (`platformReachableAtOAuthStart`).
 
-Enable it with:
+**⚠️ The PATCH REPLACES the whole allow-list — it is not a merge.** Any platform
+you omit is removed, and `updateProducts` then deletes *every* sync_job of that
+platform's accounts in the workspace (`admin-saas.controller.ts` — the `else`
+branch prunes by `accountId` alone). So `{"twitter":["identity"]}` on its own
+would silently wipe the workspace's other platforms.
 
+Always GET first and send back the full object plus X:
+
+```bash
+# inside poc-api (loopback bypasses the Caddy admin gate)
+docker exec poc-api node -e '
+const url = "http://localhost:3000/admin/workspaces/<slug>";
+(async () => {
+  const cur = await (await fetch(url)).json();
+  const next = { ...cur.products, twitter: ["identity"] };   // additive
+  const res = await fetch(url + "/products", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(next),
+  });
+  console.log(res.status, JSON.stringify(await res.json()));
+})();'
 ```
-PATCH /admin/workspaces/:slug/products    { "twitter": ["identity"] }
-```
+
+`pruned_sync_jobs: 0` in the response confirms nothing was collaterally dropped.
 
 `identity` is the only valid product for X — `resolveWorkspaceProducts` filters
 against the catalog, so nothing else can be granted even by mistake.
