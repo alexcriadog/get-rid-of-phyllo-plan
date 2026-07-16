@@ -214,6 +214,14 @@ describe("toApiContent — max-capture additive keys (all platforms)", () => {
     expect(doc.live_broadcast_content).toBe("none");
   });
 
+  it("caption-derived mentions keep duplicates when nothing is declared (historical behavior)", () => {
+    const doc = toApiContent(
+      ctx,
+      baseContent({ caption: "hi @bob thanks @bob again @carol" }),
+    );
+    expect(doc.mentions).toEqual(["bob", "bob", "carol"]);
+  });
+
   it("Facebook: declared mentions union caption-derived, place → location, reactions breakdown, share_count", () => {
     const doc = toApiContent(
       ctx,

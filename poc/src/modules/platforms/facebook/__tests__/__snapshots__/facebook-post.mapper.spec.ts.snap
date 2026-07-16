@@ -129,7 +129,6 @@ exports[`Facebook post mapper (pinning) postToContent carousel/album post with s
   },
   "permalink": "https://facebook.com/12345/posts/222",
   "platformContentId": "12345_222",
-  "privacyStatus": null,
   "publishedAt": 2026-04-22T18:15:00.000Z,
   "rawResponse": {
     "collection": "raw_platform_responses",
@@ -159,7 +158,6 @@ exports[`Facebook post mapper (pinning) postToContent image post with full_pictu
   },
   "permalink": "https://facebook.com/12345/posts/67890",
   "platformContentId": "12345_67890",
-  "privacyStatus": null,
   "publishedAt": 2026-04-20T10:30:00.000Z,
   "rawResponse": {
     "collection": "raw_platform_responses",
@@ -187,7 +185,6 @@ exports[`Facebook post mapper (pinning) postToContent text-only post (no media) 
   },
   "permalink": "https://facebook.com/12345/posts/111",
   "platformContentId": "12345_111",
-  "privacyStatus": null,
   "publishedAt": 2026-04-21T09:00:00.000Z,
   "rawResponse": {
     "collection": "raw_platform_responses",
@@ -217,7 +214,6 @@ exports[`Facebook post mapper (pinning) postToContent video post (attachments.me
   },
   "permalink": "https://facebook.com/12345/posts/333",
   "platformContentId": "12345_333",
-  "privacyStatus": null,
   "publishedAt": 2026-04-23T08:00:00.000Z,
   "rawResponse": {
     "collection": "raw_platform_responses",

@@ -42,7 +42,6 @@ export interface FacebookPost {
    */
   shares?: { count?: number };
   status_type?: string;
-  is_published?: boolean;
   message_tags?: Array<{ id?: string; name?: string; type?: string }>;
   place?: {
     id?: string;

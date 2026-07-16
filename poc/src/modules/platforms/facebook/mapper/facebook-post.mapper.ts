@@ -43,9 +43,6 @@ export function postToContent(post: FacebookPost): ContentData {
     location: placeToLocation(post.place),
     linkAttachmentUrl: linkAttachment?.url ?? null,
     linkAttachmentTitle: linkAttachment?.title ?? null,
-    // /posts returns published Page posts; the flag only matters when Graph
-    // explicitly says false (scheduled/unpublished surfaced edge cases).
-    privacyStatus: post.is_published === false ? 'unpublished' : null,
     rawResponse: {
       collection: MONGO_COLLECTIONS.rawPlatformResponses,
       contentHash: hash,

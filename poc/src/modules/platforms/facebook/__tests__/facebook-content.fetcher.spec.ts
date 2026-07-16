@@ -58,7 +58,7 @@ describe('FacebookContentFetcher — extended fields with degrade', () => {
     expect(items).toHaveLength(1);
     const postsCall = calls.find((c) => c.endpoint === '/page1/posts');
     const fields = fieldsOfCall(postsCall!);
-    for (const f of ['shares', 'status_type', 'is_published', 'message_tags', 'place']) {
+    for (const f of ['shares', 'status_type', 'message_tags', 'place']) {
       expect(fields).toContain(f);
     }
     expect(items[0].metrics.shares).toBe(4);
@@ -77,7 +77,7 @@ describe('FacebookContentFetcher — extended fields with degrade', () => {
     expect(postsCalls).toHaveLength(2);
     const retryFields = fieldsOfCall(postsCalls[1]);
     expect(retryFields).not.toContain('status_type');
-    for (const f of ['shares', 'is_published', 'message_tags', 'place']) {
+    for (const f of ['shares', 'message_tags', 'place']) {
       expect(retryFields).toContain(f);
     }
   });
@@ -92,7 +92,7 @@ describe('FacebookContentFetcher — extended fields with degrade', () => {
     const postsCalls = calls.filter((c) => c.endpoint === '/page1/posts');
     expect(postsCalls).toHaveLength(2);
     const retryFields = fieldsOfCall(postsCalls[1]);
-    for (const f of ['shares', 'status_type', 'is_published', 'message_tags', 'place']) {
+    for (const f of ['shares', 'status_type', 'message_tags', 'place']) {
       expect(retryFields).not.toContain(f);
     }
     expect(retryFields).toContain('comments.summary(total_count)');

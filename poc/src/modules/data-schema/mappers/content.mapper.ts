@@ -496,23 +496,26 @@ function liveDetailsToApi(
 
 /**
  * Union platform-declared mentions (FB message_tags) with caption-derived
- * @mentions — declared first, duplicates dropped. Null when neither exists
- * (Phyllo parity: the field is null, not []).
+ * @mentions — declared first, caption duplicates of declared names dropped.
+ * With no declared mentions the caption-derived list passes through
+ * UNTOUCHED (duplicates included) — exact historical behavior for every
+ * platform that doesn't declare mentions. Null when neither exists (Phyllo
+ * parity: the field is null, not []).
  */
 function mergeMentions(
   declared: string[] | null | undefined,
   derived: string[] | null,
 ): string[] | null {
-  const base = declared ?? [];
-  const seen = new Set(base);
-  const out = [...base];
+  if (!declared || declared.length === 0) return derived;
+  const seen = new Set(declared);
+  const out = [...declared];
   for (const m of derived ?? []) {
     if (!seen.has(m)) {
       seen.add(m);
       out.push(m);
     }
   }
-  return out.length > 0 ? out : null;
+  return out;
 }
 
 /** Map a tagged location to the additive /v1 shape. */

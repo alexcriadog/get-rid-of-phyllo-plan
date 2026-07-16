@@ -36,13 +36,17 @@ import { mergeVideoInsights } from '../mapper/facebook-video.mapper';
 
 /**
  * Max-capture /posts fields beyond the lite set. Standard Page-post fields:
- * native share count, post kind (status_type), publish state, tagged
- * people/pages and the tagged place. Each one degrades independently.
+ * native share count, post kind (status_type), tagged people/pages and the
+ * tagged place. Each one degrades independently.
+ *
+ * `is_published` deliberately NOT requested: /posts only returns published
+ * Page posts, and a field that is only meaningful when false would freeze a
+ * stale UNPUBLISHED visibility in the stored doc (coalesce-merge keeps
+ * last-known-good when a value goes back to null).
  */
 const EXTRA_POST_FIELDS = [
   'shares',
   'status_type',
-  'is_published',
   'message_tags',
   'place',
 ] as const;

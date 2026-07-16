@@ -27,7 +27,6 @@ pattern to every other platform, with three invariants:
 | Facebook | `shares.count` (new fetch field) | `engagement.share_count` |
 | Facebook | `place` (new fetch field) | `location` (existing additive key, tagged-place shape) |
 | Facebook | `message_tags` names (new fetch field) | `mentions` (union with caption-derived) |
-| Facebook | `is_published === false` | `visibility` = `UNPUBLISHED` |
 | TikTok | `video_duration` | `duration` (int seconds) |
 | TikTok | `is_ad` | `sponsored: { is_sponsored, tags: null }` |
 | Instagram | `collaborators{username}` (already fetched) | `collaboration: { has_collaboration: true }` + `authors: string[]` |
@@ -105,6 +104,23 @@ pattern to every other platform, with three invariants:
   `engagement.additional_info.{story_replies, sticker_interactions, unique_media_views}`.
 - Tests: extend `oauth-content.max-capture.spec.ts` pattern for new fields + a cross-platform
   parser spec asserting every parser persists the superset.
+
+## Known semantics (review-accepted trade-offs)
+
+- **Last-known-good merge**: `coalesce-merge` keeps the stored value when a fresh sync
+  yields null/absent (protection against partial-fetch clobbering). State-like additive
+  fields inherit this: if an IG collaborator is later REMOVED from a post, the stored
+  `collaboration`/`authors` keep their last captured value — same class as the
+  pre-existing Threads `location`/`poll` behavior. Boolean flips (e.g. `is_ad`,
+  `is_comment_enabled`) are safe: `false` is a real value and always wins.
+  FB `is_published` was dropped from the plan for exactly this reason: it is only
+  meaningful when `false`, so a post transitioning to published would freeze a stale
+  `UNPUBLISHED` visibility (and `/posts` only returns published posts anyway).
+- **Phyllo-standard fields newly persisted by the backend**: `visibility`,
+  `engagement.dislike_count` and the story metrics are part of the Phyllo contract too,
+  so Phyllo payloads that carry them (YouTube/Twitch `visibility` does) now persist
+  them as well. Deliberate — the goal is to store everything; the "no new keys" clause
+  applies to the *connector superset* keys, which stay only-when-present.
 
 ## 6. Explicitly deferred (documented, not lost)
 
