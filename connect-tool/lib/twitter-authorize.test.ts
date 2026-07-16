@@ -1,72 +1,51 @@
-// X (Twitter) authorize-URL construction. X is our only PKCE-mandatory
-// provider and our only login-only platform, so both invariants are pinned
-// here: the S256 challenge must reach the consent screen, and the flow must
-// refuse to start without one (a PKCE-less authorize URL would be rejected
-// by X at exchange time, after the user already logged in).
-//
-// Only buildAuthorizeUrl is exercised — it's pure. handleCallback talks to
-// api.x.com and is covered by a live connect, not by unit tests.
+// X (Twitter) login mode. X is our only OAuth 1.0a platform (login-only,
+// free — see lib/oauth1a.ts). These pin the mode invariants: the dispatcher
+// must drive the 1.0a flow (startOAuth1a/handleCallback1a), and the OAuth 2.0
+// methods are unreachable stubs that fail loudly if ever called. The signed
+// request construction is covered by lib/oauth1a.test.ts; the live HTTP steps
+// are covered by a real connect, not unit tests.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { PLATFORMS } from './platforms';
 
-const REDIRECT = 'https://connect.example.com/api/oauth/callback/twitter';
-const CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
-
-function authorizeUrl(scopes: string[] = ['users.read', 'tweet.read']): URL {
-  return new URL(
-    PLATFORMS.twitter.buildAuthorizeUrl(REDIRECT, scopes, {
-      challenge: CHALLENGE,
-    }),
-  );
-}
-
-describe('twitter.buildAuthorizeUrl', () => {
-  beforeEach(() => {
-    process.env.TWITTER_CLIENT_ID = 'test-client-id';
-  });
+describe('twitter — OAuth 1.0a login mode', () => {
   afterEach(() => {
-    delete process.env.TWITTER_CLIENT_ID;
+    delete process.env.TWITTER_CONSUMER_KEY;
+    delete process.env.TWITTER_CONSUMER_SECRET;
   });
 
-  it('declares PKCE so the dispatcher mints a verifier for it', () => {
-    expect(PLATFORMS.twitter.pkce).toBe(true);
+  it('is flagged oauth1a (and not pkce/OAuth2)', () => {
+    expect(PLATFORMS.twitter.oauth1a).toBe(true);
+    expect(PLATFORMS.twitter.pkce).toBeFalsy();
   });
 
-  it('targets the X authorize endpoint with an authorization-code request', () => {
-    const u = authorizeUrl();
-    expect(u.origin + u.pathname).toBe('https://x.com/i/oauth2/authorize');
-    expect(u.searchParams.get('response_type')).toBe('code');
-    expect(u.searchParams.get('client_id')).toBe('test-client-id');
-    expect(u.searchParams.get('redirect_uri')).toBe(REDIRECT);
+  it('exposes the 1.0a step methods the dispatcher calls', () => {
+    expect(typeof PLATFORMS.twitter.startOAuth1a).toBe('function');
+    expect(typeof PLATFORMS.twitter.handleCallback1a).toBe('function');
   });
 
-  it('carries the S256 code challenge', () => {
-    const u = authorizeUrl();
-    expect(u.searchParams.get('code_challenge')).toBe(CHALLENGE);
-    expect(u.searchParams.get('code_challenge_method')).toBe('S256');
-  });
-
-  it('sends scopes space-separated, as X expects', () => {
-    const u = authorizeUrl(['users.read', 'tweet.read']);
-    expect(u.searchParams.get('scope')).toBe('users.read tweet.read');
-  });
-
-  it('never requests offline.access — the token is meant to lapse', () => {
-    // Login-only platform: no refresh token, so the POC token-refresh cron
-    // skips it instead of trying to keep a dead credential alive.
-    const u = authorizeUrl();
-    expect(u.searchParams.get('scope')).not.toContain('offline.access');
-  });
-
-  it('refuses to build a URL without a PKCE challenge', () => {
+  it('OAuth 2.0 stubs throw — they must never be reached for X', () => {
     expect(() =>
-      PLATFORMS.twitter.buildAuthorizeUrl(REDIRECT, ['users.read']),
-    ).toThrow(/PKCE/i);
+      PLATFORMS.twitter.buildAuthorizeUrl('https://cb', []),
+    ).toThrow(/OAuth 1\.0a/);
+    return expect(
+      PLATFORMS.twitter.handleCallback('code', 'https://cb'),
+    ).rejects.toThrow(/OAuth 1\.0a/);
   });
 
-  it('fails loudly when the app credentials are not configured', () => {
-    delete process.env.TWITTER_CLIENT_ID;
-    expect(() => authorizeUrl()).toThrow(/TWITTER_CLIENT_ID/);
+  it('startOAuth1a fails loudly (before any network) without app credentials', async () => {
+    // requireEnv runs before the request_token HTTP call, so a missing
+    // Consumer Key rejects synchronously — no live call.
+    await expect(
+      PLATFORMS.twitter.startOAuth1a!(
+        'https://smconnector.example.com/api/oauth/callback/twitter',
+      ),
+    ).rejects.toThrow(/TWITTER_CONSUMER_KEY/);
+  });
+
+  it('handleCallback1a also requires the app credentials', async () => {
+    await expect(
+      PLATFORMS.twitter.handleCallback1a!('token', 'verifier', 'secret'),
+    ).rejects.toThrow(/TWITTER_CONSUMER_KEY/);
   });
 });

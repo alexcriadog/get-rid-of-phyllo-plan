@@ -347,6 +347,40 @@ export async function GET(
       }
     }
 
+    // OAuth 1.0a platforms (X): a different flow — mint a request token
+    // server-side, stash its secret, and redirect to the sign-in page. No
+    // catalog/scopes (1.0a has none) and no PKCE. See lib/oauth1a.ts.
+    if (PLATFORMS[platform].oauth1a) {
+      let started: {
+        redirectUrl: string;
+        requestToken: string;
+        requestTokenSecret: string;
+      };
+      try {
+        started = await PLATFORMS[platform].startOAuth1a!(redirectUri);
+      } catch (err) {
+        return errorRedirect(
+          baseUrl,
+          platform,
+          err instanceof Error ? err.message : String(err),
+          embedded,
+        );
+      }
+      const response = NextResponse.redirect(started.redirectUrl, {
+        status: 302,
+      });
+      // CSRF: the callback's oauth_token must match this request token — the
+      // attacker can't forge the HttpOnly cookie. Reuse the state cookie.
+      setStateCookie(response, started.requestToken);
+      // The request-token secret completes step 3. Reuse the per-flow secret
+      // cookie (named for its PKCE origin; here it carries the 1.0a secret).
+      setPkceCookie(response, started.requestTokenSecret);
+      if (contextSessionId) {
+        setContextCookie(response, contextSessionId);
+      }
+      return response;
+    }
+
     // Per-workspace scope reduction. We pass the minimum set of scopes the
     // workspace's enabled products need; the consent screen only shows those.
     const catalog = await fetchProductsCatalog();
@@ -429,6 +463,85 @@ export async function GET(
         `${platform} denied: ${error}${desc ? ` — ${desc}` : ''}`,
       );
     }
+
+    // OAuth 1.0a platforms (X): the callback returns oauth_token + oauth_verifier
+    // (or ?denied on cancel), not code/state. Handle it end-to-end here; the
+    // OAuth 2.0 path below is untouched.
+    if (PLATFORMS[platform].oauth1a) {
+      if (sp.get('denied')) {
+        return failRedirect(`${platform} denied: the sign-in was cancelled.`);
+      }
+      const oauthToken = sp.get('oauth_token');
+      const oauthVerifier = sp.get('oauth_verifier');
+      if (!oauthToken || !oauthVerifier) {
+        return failRedirect(
+          `${platform} callback missing oauth_token/oauth_verifier`,
+        );
+      }
+      // CSRF: the returned oauth_token must match the request token we stashed
+      // in the state cookie at /start (attacker can't forge the HttpOnly cookie).
+      const cookieToken = req.cookies.get(OAUTH_STATE_COOKIE)?.value ?? null;
+      if (!statesMatch(oauthToken, cookieToken)) {
+        return failRedirect(
+          `${platform} callback failed verification — please retry the connection.`,
+        );
+      }
+      // The request-token secret (stashed in the per-flow secret cookie)
+      // completes step 3.
+      const requestTokenSecret =
+        req.cookies.get(OAUTH_PKCE_COOKIE)?.value ?? null;
+      if (!requestTokenSecret) {
+        return failRedirect(
+          `${platform} callback missing its request-token secret — please retry the connection.`,
+        );
+      }
+      try {
+        pruneCallbackCache();
+        // Dedupe by (platform, verifier, secret) — a replayed verifier from a
+        // different browser can't collect this exchange without the matching
+        // secret cookie. Same rationale as the OAuth 2.0 path.
+        const cacheKey = callbackDedupeKey(
+          platform,
+          oauthVerifier,
+          requestTokenSecret,
+        );
+        let entry = callbackInFlight.get(cacheKey);
+        if (!entry) {
+          const promise = PLATFORMS[platform].handleCallback1a!(
+            oauthToken,
+            oauthVerifier,
+            requestTokenSecret,
+          );
+          entry = { promise, clearAt: Date.now() + CALLBACK_CACHE_TTL_MS };
+          callbackInFlight.set(cacheKey, entry);
+        }
+        const result = await entry.promise;
+        if (result.kind !== 'confirm') {
+          // X only ever produces a 'confirm' result; anything else is a bug.
+          return failRedirect(`${platform} returned an unexpected result`);
+        }
+        if (oauthCtx) {
+          await attachContext(result.sessionId, {
+            workspaceId: oauthCtx.workspaceId,
+            endUserId: oauthCtx.endUserId,
+            environment: oauthCtx.environment,
+            openerOrigin: oauthCtx.openerOrigin,
+            workspaceSlug: oauthCtx.workspaceSlug,
+            connectionProducts: oauthCtx.connectionProducts,
+          });
+        }
+        const target = embedded
+          ? `${baseUrl}/oauth/complete?session=${result.sessionId}&kind=confirm&platform=${result.platform}`
+          : `${baseUrl}/confirm/${result.platform}?session=${result.sessionId}`;
+        const res = NextResponse.redirect(target, { status: 302 });
+        clearStateCookie(res);
+        clearPkceCookie(res);
+        return res;
+      } catch (err) {
+        return failRedirect(err instanceof Error ? err.message : String(err));
+      }
+    }
+
     // Sec C-2: the returned ?state MUST match the cookie we set at /start.
     // Reject before touching the authorization code so a code injected by an
     // attacker (who can't forge the victim's HttpOnly cookie) is never

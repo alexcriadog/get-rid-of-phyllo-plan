@@ -1,29 +1,42 @@
 # X (Twitter)
 
 **Status:** Login-only — no API sync
-**Last updated:** 2026-07-15
-**Platform API:** X API v2 (free tier), OAuth 2.0 + PKCE
+**Last updated:** 2026-07-16
+**Platform API:** OAuth 1.0a "Sign in with Twitter" (free)
 
 X is the only platform here whose OAuth exists purely to **prove account
-ownership**. It captures the handle and a profile snapshot, and then stops. Post
-and metric data for X accounts is produced by scraping in `socialmedia-backend`
-— the connector never polls the X API, because the free tier can't sustain it.
+ownership**. It captures the @handle and then stops. Post and metric data for X
+accounts is produced by scraping in `socialmedia-backend` — the connector never
+polls the X API.
 
 Everything below follows from that one decision.
 
 ---
 
+## Why OAuth 1.0a, not 2.0
+
+X removed its free API tier (Feb 2026): OAuth 2.0 login needs `GET /2/users/me`
+to learn who signed in, and that read is **metered** under Pay-Per-Use. We don't
+want to pay per login, and we don't need the profile (it's scraped).
+
+**OAuth 1.0a "Sign in with Twitter" returns `user_id` + `screen_name` in the
+access-token response itself — for free, no read call, no Pay-Per-Use project.**
+That's exactly a login-only integration. The implementation is
+`connect-tool/lib/oauth1a.ts` (HMAC-SHA1 signing) driven by the dispatcher's
+`oauth1a` branch.
+
 ## What the connect actually does
 
-1. OAuth 2.0 authorization-code + PKCE (S256 — X mandates it).
-2. Exactly **one** X API call, ever: `GET /2/users/me` in the callback, which
-   fills the identity snapshot. The free tier covers it.
-3. Seeds an account with the `identity` product only, and fires
-   `ACCOUNTS.CONNECTED` carrying `canonical_user_id` + `handle`.
+1. 3-legged OAuth 1.0a: `POST /oauth/request_token` → redirect to
+   `/oauth/authenticate` → `POST /oauth/access_token`.
+2. The access-token response carries `user_id` + `screen_name` — **no X API
+   read is ever made.** No rich profile (display name, avatar, followers): that
+   is scraped.
+3. Seeds an account with the `identity` product only, storing `canonical_user_id`
+   (= `user_id`) + `handle` (= `screen_name`), and fires `ACCOUNTS.CONNECTED`.
 
-Scopes: `users.read tweet.read` (both are required by `/2/users/me`).
-**`offline.access` is deliberately NOT requested** → no refresh token → the
-~2h access token lapses right after login and is never used again.
+The 1.0a access token is long-lived and **never used** (login-only). No
+`expires_at` is stored, so the admin token badge never shows a false "expired".
 
 ---
 
@@ -52,12 +65,15 @@ on `canonical_user_id`; treat `handle` as a refreshable display hint.**
 
 ## Setup
 
-1. Create an app at <https://developer.x.com> — the free tier is enough.
-2. In *User authentication settings*: enable OAuth 2.0, type **Web App**
-   (confidential client), and register the callback:
+1. Create an app at <https://developer.x.com>. It does **not** need to be in a
+   Pay-Per-Use project — OAuth 1.0a login works on the free/standalone app.
+2. In *User authentication settings*: enable **OAuth 1.0a**, request **Read**
+   permission, type **Web App**, and register the callback:
    `${PUBLIC_BASE_URL}/api/oauth/callback/twitter`
-3. Set `TWITTER_CLIENT_ID` / `TWITTER_CLIENT_SECRET` in `connect-tool/.env`
-   (see `.env.example`; `TWITTER_REDIRECT_URI` is an optional override).
+3. Set `TWITTER_CONSUMER_KEY` / `TWITTER_CONSUMER_SECRET` in `connect-tool/.env`
+   — these are the app's **OAuth 1.0a Consumer keys** (shown as "API Key" /
+   "API Key Secret" under Keys & Tokens), NOT the OAuth 2.0 Client ID/Secret.
+   `TWITTER_REDIRECT_URI` is an optional override.
 
 ### Required: enable X per workspace
 
