@@ -67,7 +67,9 @@ export function videoToContent(
     metrics,
     publishedAt: safeDate(video.published_at ?? video.created_at),
     fetchedAt: new Date(),
-    mediaProductType: 'VOD',
+    // Helix video type: archive (past broadcast) / highlight / upload.
+    // Falls back to the historical constant when Helix omits it.
+    mediaProductType: video.type ? video.type.toUpperCase() : 'VOD',
     shortcode: id || null,
     tags: null,
     // Twitch VODs don't carry per-VOD game/category data via Helix; the game
@@ -117,6 +119,10 @@ export function clipToContent(
     tags: null,
     categoryId: clip.game_id || null,
     defaultLanguage: clip.language || null,
+    // Max-capture (docs/max-capture-all-platforms.md): featured flag and the
+    // source VOD this clip was cut from (empty string → null).
+    isFeatured: typeof clip.is_featured === 'boolean' ? clip.is_featured : null,
+    sourceVideoId: clip.video_id || null,
     // ownerHandle deliberately NOT set: we fetch via /clips?broadcaster_id
     // (clips OF this channel), so every clip belongs to the connected
     // broadcaster regardless of who hit the clip button. Setting it to

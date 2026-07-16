@@ -7,6 +7,7 @@ import { MONGO_COLLECTIONS } from '@shared/database/mongo.service';
 import type {
   ContentChild,
   ContentData,
+  ContentLocation,
   ContentMetrics,
   ContentType,
 } from '../../shared/platform-types';
@@ -21,6 +22,8 @@ export function postToContent(post: FacebookPost): ContentData {
   const serialized = JSON.stringify(post);
   const hash = createHash('sha256').update(serialized).digest('hex');
 
+  const linkAttachment = extractLinkAttachment(post);
+
   return {
     platformContentId: post.id,
     contentType,
@@ -32,10 +35,65 @@ export function postToContent(post: FacebookPost): ContentData {
     publishedAt: post.created_time ? new Date(post.created_time) : null,
     fetchedAt: new Date(),
     children: children.length > 0 ? children : undefined,
+    // Max-capture (docs/max-capture-all-platforms.md). All null-safe: the
+    // fetcher degrades field-by-field when Graph rejects one, so any of
+    // these may be absent.
+    mediaProductType: post.status_type ? post.status_type.toUpperCase() : null,
+    mentions: extractMessageTagNames(post),
+    location: placeToLocation(post.place),
+    linkAttachmentUrl: linkAttachment?.url ?? null,
+    linkAttachmentTitle: linkAttachment?.title ?? null,
+    // /posts returns published Page posts; the flag only matters when Graph
+    // explicitly says false (scheduled/unpublished surfaced edge cases).
+    privacyStatus: post.is_published === false ? 'unpublished' : null,
     rawResponse: {
       collection: MONGO_COLLECTIONS.rawPlatformResponses,
       contentHash: hash,
     },
+  };
+}
+
+/**
+ * Outbound link on link-share posts. Only attachments whose kind says
+ * "link/share" qualify — photo/video posts keep their attachment URLs in
+ * mediaUrls, never here. `unshimmed_url` is the real destination;
+ * `url` is Facebook's l.php shim fallback.
+ */
+function extractLinkAttachment(
+  post: FacebookPost,
+): { url: string | null; title: string | null } | null {
+  for (const a of post.attachments?.data ?? []) {
+    const kind = (a.media_type ?? a.type ?? '').toLowerCase();
+    if (kind.includes('link') || kind === 'share') {
+      const url = a.unshimmed_url ?? a.url ?? null;
+      const title = a.title ?? null;
+      if (url || title) return { url, title };
+    }
+  }
+  return null;
+}
+
+/** Distinct tagged names from message_tags (people/pages tagged in the text). */
+function extractMessageTagNames(post: FacebookPost): string[] | null {
+  const names = (post.message_tags ?? [])
+    .map((t) => t.name)
+    .filter((n): n is string => typeof n === 'string' && n.length > 0);
+  return names.length > 0 ? [...new Set(names)] : null;
+}
+
+/** Graph `place` → canonical tagged-location (same shape Threads uses). */
+function placeToLocation(place: FacebookPost['place']): ContentLocation | null {
+  if (!place?.id) return null;
+  const loc = place.location ?? {};
+  return {
+    id: place.id,
+    name: place.name ?? null,
+    city: loc.city ?? null,
+    country: loc.country ?? null,
+    latitude: typeof loc.latitude === 'number' ? loc.latitude : null,
+    longitude: typeof loc.longitude === 'number' ? loc.longitude : null,
+    address: loc.street ?? null,
+    postalCode: loc.zip ?? null,
   };
 }
 
@@ -77,6 +135,10 @@ export function extractPostMetrics(post: FacebookPost): ContentMetrics {
   if (typeof commentsTotal === 'number') out.comments = commentsTotal;
   const reactionsTotal = post.reactions?.summary?.total_count;
   if (typeof reactionsTotal === 'number') out.likes = reactionsTotal;
+  // Max-capture: native share count rides free on the extended /posts call
+  // and fills the Phyllo-canonical share_count slot (was always null on FB).
+  const sharesCount = post.shares?.count;
+  if (typeof sharesCount === 'number') out.shares = sharesCount;
   for (const insight of post.insights?.data ?? []) {
     const first = insight.values?.[0]?.value;
     // post_impressions retired 2025-11-15. Replacement post_media_view

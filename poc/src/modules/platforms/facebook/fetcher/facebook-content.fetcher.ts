@@ -19,6 +19,7 @@ import {
   GraphInsight,
   GraphListResponse,
   extractAccountId,
+  extractGraphError,
   extractMetaError,
   parseNextUrl,
 } from '../../shared/meta-graph';
@@ -32,6 +33,19 @@ import {
   postToContent,
 } from '../mapper/facebook-post.mapper';
 import { mergeVideoInsights } from '../mapper/facebook-video.mapper';
+
+/**
+ * Max-capture /posts fields beyond the lite set. Standard Page-post fields:
+ * native share count, post kind (status_type), publish state, tagged
+ * people/pages and the tagged place. Each one degrades independently.
+ */
+const EXTRA_POST_FIELDS = [
+  'shares',
+  'status_type',
+  'is_published',
+  'message_tags',
+  'place',
+] as const;
 
 @Injectable()
 export class FacebookContentFetcher {
@@ -171,20 +185,39 @@ export class FacebookContentFetcher {
     const liteFields =
       'id,message,created_time,permalink_url,full_picture,attachments,' +
       'comments.summary(total_count),reactions.summary(total_count)';
+    // Max-capture extras (docs/max-capture-all-platforms.md) ride on the
+    // same call. If Graph rejects one (#100 — permissions or API-version
+    // drift), dropRejectedField() removes JUST that field and the page is
+    // retried, so a bad field can never break the sync or the other extras.
+    let extraFields: string[] = [...EXTRA_POST_FIELDS];
+    const fieldsOf = (): string =>
+      extraFields.length > 0
+        ? `${liteFields},${extraFields.join(',')}`
+        : liteFields;
 
     let nextParams: Record<string, string | number | undefined> = {
-      fields: liteFields,
       limit: Math.min(limit, DEFAULT_PAGE_SIZE),
     };
 
     while (collected.length < limit && nextEndpoint) {
-      const body = await this.client.call<GraphListResponse<FacebookPost>>({
-        endpoint: nextEndpoint,
-        params: nextParams,
-        accessToken,
-        context: ctx,
-        accountId,
-      });
+      let body: GraphListResponse<FacebookPost>;
+      try {
+        body = await this.client.call<GraphListResponse<FacebookPost>>({
+          endpoint: nextEndpoint,
+          params: { ...nextParams, fields: fieldsOf() },
+          accessToken,
+          context: ctx,
+          accountId,
+        });
+      } catch (err) {
+        rethrowCritical(err);
+        const remaining = this.dropRejectedField(extraFields, err);
+        if (remaining !== null) {
+          extraFields = remaining;
+          continue; // retry the SAME page without the rejected field(s)
+        }
+        throw err;
+      }
 
       for (const post of body.data ?? []) {
         if (!withinTimeWindow(post.created_time, opts)) continue;
@@ -196,10 +229,36 @@ export class FacebookContentFetcher {
       if (!nextUrl || collected.length >= limit) break;
       const parsed = parseNextUrl(nextUrl);
       nextEndpoint = parsed.endpoint;
-      nextParams = { ...parsed.params, fields: liteFields };
+      nextParams = { ...parsed.params };
+      delete nextParams.fields; // fieldsOf() decides, not the paging URL
     }
 
     return collected;
+  }
+
+  /**
+   * When Graph rejects the extended /posts field list, work out which extra
+   * field(s) to drop. Returns the reduced list (retry), or null when this
+   * isn't a droppable field error (rethrow). Each drop removes ≥1 field, so
+   * retries are bounded by EXTRA_POST_FIELDS.length.
+   */
+  private dropRejectedField(
+    extraFields: string[],
+    err: unknown,
+  ): string[] | null {
+    if (extraFields.length === 0) return null;
+    const { code } = extractGraphError(err);
+    const msg = extractMetaError(err);
+    const looksLikeFieldError =
+      code === 100 || /nonexisting field|invalid field/i.test(msg);
+    if (!looksLikeFieldError) return null;
+    const named = extraFields.filter((f) => new RegExp(`\\b${f}\\b`).test(msg));
+    // Error didn't name a field we sent → drop all extras in one step.
+    const toDrop = named.length > 0 ? named : extraFields;
+    this.logger.warn(
+      `extended /posts fields rejected (${msg}) — dropping [${toDrop.join(', ')}] for this run`,
+    );
+    return extraFields.filter((f) => !toDrop.includes(f));
   }
 
   /**

@@ -120,6 +120,11 @@ export interface ApiEngagementAdditionalInfo {
   story_replies?: number | null;
   sticker_interactions?: number | null;
   unique_media_views?: number | null;
+  /**
+   * Facebook per-reaction breakdown ({ like, love, wow, haha, sad, angry,
+   * care } — only reactions with a count). Additive, only-when-present.
+   */
+  reactions_breakdown?: Record<string, number> | null;
 }
 
 export interface ApiEngagement {
@@ -273,6 +278,74 @@ export interface ApiContent extends ApiEnvelope {
   is_spoiler_media?: boolean | null;
   /** Additive — Threads poll (options + vote percentages 0-100). */
   poll?: ApiContentPoll | null;
+  /**
+   * Max-capture additive keys (all platforms — see
+   * docs/max-capture-all-platforms.md). Same contract as the Threads keys
+   * above: present ONLY when the platform exposed the datum, so existing
+   * docs keep their exact shape and consumers that don't know a key ignore
+   * it. One concept = one key across platforms.
+   */
+  /** Additive — title of an attached link/article (LinkedIn, Facebook). */
+  link_attachment_title?: string | null;
+  /** Additive — product surface: FEED/REELS/STORY (IG), status_type (FB),
+   *  VIDEO/SHORTS (YouTube), ARCHIVE/HIGHLIGHT/UPLOAD/CLIP (Twitch). */
+  media_product_type?: string | null;
+  /** Additive — official embeddable player URL (TikTok, YouTube, Twitch). */
+  embed_url?: string | null;
+  /** Additive — YouTube videoCategoryId / Twitch clip game_id. */
+  category_id?: string | null;
+  /** Additive — content language (YouTube, Twitch). */
+  default_language?: string | null;
+  /** Additive — audio language when distinct (YouTube). */
+  default_audio_language?: string | null;
+  /** Additive — upload/lifecycle state (YouTube uploadStatus, LinkedIn
+   *  lifecycleState). */
+  upload_status?: string | null;
+  /** Additive — whether comments are open (Instagram). */
+  is_comment_enabled?: boolean | null;
+  /** Additive — Reel shared to the feed (Instagram). */
+  is_shared_to_feed?: boolean | null;
+  /** Additive — hd/sd (YouTube). */
+  definition?: string | null;
+  /** Additive — 2d/3d (YouTube). */
+  dimension?: string | null;
+  /** Additive — captions available (YouTube). */
+  has_captions?: boolean | null;
+  /** Additive — licensed content flag (YouTube). */
+  licensed_content?: boolean | null;
+  /** Additive — youtube / creativeCommon (YouTube). */
+  license?: string | null;
+  /** Additive — third-party embeds allowed (YouTube). */
+  embeddable?: boolean | null;
+  /** Additive — public like/view counters visible (YouTube). */
+  public_stats_viewable?: boolean | null;
+  /** Additive — made-for-kids self declaration (YouTube). */
+  made_for_kids?: boolean | null;
+  /** Additive — none/upcoming/live (YouTube; Twitch emits 'none'). */
+  live_broadcast_content?: string | null;
+  /** Additive — topic category URLs (YouTube). */
+  topic_categories?: string[] | null;
+  /** Additive — recording timestamp (YouTube). */
+  recording_date?: string | null;
+  /** Additive — recording GPS (YouTube). Distinct from `location`
+   *  (a user-TAGGED place with id/name). */
+  recording_location?: {
+    latitude: number | null;
+    longitude: number | null;
+    altitude: number | null;
+  } | null;
+  /** Additive — live window + concurrent viewers (YouTube). */
+  live_streaming_details?: {
+    actual_start_time: string | null;
+    actual_end_time: string | null;
+    scheduled_start_time: string | null;
+    scheduled_end_time: string | null;
+    concurrent_viewers: number | null;
+  } | null;
+  /** Additive — Twitch clip featured flag. */
+  is_featured?: boolean | null;
+  /** Additive — Twitch clip's source VOD id. */
+  source_video_id?: string | null;
 }
 
 /** Additive — location tagged on a post (Threads location tagging). */

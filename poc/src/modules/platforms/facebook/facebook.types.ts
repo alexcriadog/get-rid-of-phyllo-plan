@@ -7,6 +7,11 @@ import type { GraphInsight } from '../shared/meta-graph';
 export interface FacebookAttachment {
   media_type?: string;
   media?: { image?: { src?: string }; source?: string };
+  /** Link-share attachments: outbound title/description + de-shimmed URL.
+   *  Returned by the default `attachments` expansion — no extra field cost. */
+  title?: string;
+  description?: string;
+  unshimmed_url?: string;
   subattachments?: { data: FacebookAttachment[] };
   /**
    * For video posts, `target.id` IS the video_id (matches /{page_id}/videos).
@@ -30,6 +35,27 @@ export interface FacebookPost {
   /** Free summary count via `?fields=comments.summary(total_count)`. */
   comments?: { summary?: { total_count?: number } };
   reactions?: { summary?: { total_count?: number } };
+  /**
+   * Max-capture fields (docs/max-capture-all-platforms.md). Requested via
+   * the extended /posts field list; the fetcher degrades field-by-field if
+   * Graph rejects one, so all of these stay optional.
+   */
+  shares?: { count?: number };
+  status_type?: string;
+  is_published?: boolean;
+  message_tags?: Array<{ id?: string; name?: string; type?: string }>;
+  place?: {
+    id?: string;
+    name?: string;
+    location?: {
+      city?: string;
+      country?: string;
+      latitude?: number;
+      longitude?: number;
+      street?: string;
+      zip?: string;
+    };
+  };
 }
 
 export interface FacebookVideo {

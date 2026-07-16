@@ -61,11 +61,32 @@ export function mediaToContent(media: GraphMedia): ContentData {
         ? media.is_shared_to_feed
         : null,
     ownerHandle: media.owner?.username ?? null,
+    // Max-capture: fields the /media call already returns but we used to
+    // leave in the raw blob only (docs/max-capture-all-platforms.md).
+    altText: media.alt_text ?? null,
+    isCommentEnabled:
+      typeof media.is_comment_enabled === 'boolean'
+        ? media.is_comment_enabled
+        : null,
+    collaborators: extractCollaborators(media),
     rawResponse: {
       collection: MONGO_COLLECTIONS.rawPlatformResponses,
       contentHash: hash,
     },
   };
+}
+
+/**
+ * Co-author usernames on collab posts (fetched on the FB-graph flow only).
+ * Null when the field is absent or carries no usable username — the /v1
+ * `collaboration`/`authors` keys then stay null, exactly as before.
+ */
+function extractCollaborators(media: GraphMedia): string[] | null {
+  const entries = media.collaborators?.data ?? [];
+  const usernames = entries
+    .map((c) => c.username)
+    .filter((u): u is string => typeof u === 'string' && u.length > 0);
+  return usernames.length > 0 ? usernames : null;
 }
 
 export function extractMetrics(media: GraphMedia): ContentMetrics {
