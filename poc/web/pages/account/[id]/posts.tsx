@@ -3,6 +3,10 @@ import { useRouter } from 'next/router';
 import { useEffect, useRef, useState } from 'react';
 import type { GetServerSideProps } from 'next';
 import { getDb } from '../../../lib/mongo';
+import {
+  canonicalToPost,
+  type CanonicalContentWrapper,
+} from '../../../lib/canonical-content';
 import { fmtRelative, fmtNumber, fmtDateTime, truncate } from '../../../lib/format';
 import { MetricTile } from '../../../components/account/MetricTile';
 import { RelativeTime } from '../../../components/RelativeTime';
@@ -157,32 +161,58 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
         unknown
       >;
     const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
-    const num = (v: unknown): number | undefined =>
-      typeof v === 'number' ? v : undefined;
     const platform =
       str((profileDoc as { platform?: unknown } | null)?.platform) ??
       str(pdoc.platform);
     const ownerHandle =
       str(pdoc.platform_username) ?? str(pdoc.username) ?? null;
 
+    // Keep mentions (items authored by other users that @-tag us) out of
+    // this archive — the dedicated /mentions page surfaces them. Two
+    // signals, both write-time: is_owned_by_platform_user === false and
+    // the additive owner_username (present only on mention docs). Mention
+    // docs synced before 2026-07-15 carry neither and self-heal on their
+    // next refresh.
+    const ownPostsClauses: Record<string, unknown>[] = [
+      { 'doc.is_owned_by_platform_user': { $ne: false } },
+    ];
+    if (ownerHandle) {
+      ownPostsClauses.push({
+        $or: [
+          { 'doc.owner_username': { $exists: false } },
+          { 'doc.owner_username': ownerHandle },
+        ],
+      });
+    }
+
+    // Date filtering + sort use the top-level `published_at` (a real Date,
+    // covered by the {account_pk, published_at} index) rather than the
+    // naive-UTC string inside `doc`.
     const dateFilter: Record<string, unknown> = {};
     if (from) dateFilter.$gte = new Date(`${from}T00:00:00.000Z`);
     if (to) dateFilter.$lte = new Date(`${to}T23:59:59.999Z`);
-    const dateQuery: Record<string, unknown> =
-      Object.keys(dateFilter).length > 0
-        ? { account_pk: accountPk, 'doc.published_at': dateFilter }
-        : { account_pk: accountPk };
+    const buildQuery = (includeDate: boolean): Record<string, unknown> => {
+      const clauses: Record<string, unknown>[] = [
+        { account_pk: accountPk },
+        ...ownPostsClauses,
+      ];
+      if (includeDate && Object.keys(dateFilter).length > 0) {
+        clauses.push({ published_at: dateFilter });
+      }
+      return { $and: clauses };
+    };
+    const dateQuery = buildQuery(true);
 
     const [rawContents, totalAll, totalMatching, engagementDeepDoc] =
       await Promise.all([
         db
           .collection('contents')
           .find(dateQuery)
-          .sort({ 'doc.published_at': -1, updated_at: -1 })
+          .sort({ published_at: -1, updated_at: -1 })
           .skip((page - 1) * PAGE_SIZE)
           .limit(PAGE_SIZE)
           .toArray(),
-        db.collection('contents').countDocuments({ account_pk: accountPk }),
+        db.collection('contents').countDocuments(buildQuery(false)),
         db.collection('contents').countDocuments(dateQuery),
         // Optional. Adapters that don't implement fetchEngagementDeep simply
         // don't deposit anything here, so this lookup returns null.
@@ -192,55 +222,12 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
       ]);
 
     // Map each canonical content doc → the Post shape the page renders.
-    const raw: Post[] = rawContents.map((c) => {
-      const doc = ((c as { doc?: Record<string, unknown> }).doc ?? {}) as Record<
-        string,
-        unknown
-      >;
-      const eng = (doc.engagement ?? {}) as Record<string, unknown>;
-      const mediaUrls = Array.isArray(doc.media_urls)
-        ? (doc.media_urls as string[])
-        : str(doc.media_url)
-          ? [str(doc.media_url) as string]
-          : [];
-      const extra: Record<string, number> = {};
-      const ai = (eng.additional_info ?? {}) as Record<string, unknown>;
-      for (const [k, v] of Object.entries(ai)) {
-        if (typeof v === 'number') extra[k] = v;
-      }
-      return {
-        account_id: accountPk,
-        platform: platform ?? '',
-        platform_content_id: String(
-          str(doc.external_id) ??
-            str((c as { external_id?: unknown }).external_id) ??
-            str((c as { id?: unknown }).id) ??
-            '',
-        ),
-        updated_at: str((c as { updated_at?: unknown }).updated_at) ?? undefined,
-        created_at: str((c as { created_at?: unknown }).created_at) ?? undefined,
-        data: {
-          caption: str(doc.title) ?? str(doc.description) ?? null,
-          permalink: str(doc.url),
-          thumbnailUrl:
-            str(doc.thumbnail_url) ?? str(doc.persistent_thumbnail_url) ?? null,
-          mediaUrls,
-          contentType: str(doc.type) ?? str(doc.format) ?? undefined,
-          publishedAt: str(doc.published_at),
-          ownerHandle: str(doc.platform_profile_name) ?? ownerHandle,
-          metrics: {
-            likes: num(eng.like_count),
-            comments: num(eng.comment_count),
-            views: num(eng.view_count),
-            shares: num(eng.share_count),
-            saves: num(eng.save_count),
-            reach: num(eng.reach_organic_count),
-            impressions: num(eng.impression_organic_count),
-            extra: Object.keys(extra).length ? extra : undefined,
-          },
-        },
-      };
-    });
+    // canonicalToPost carries the full doc: metrics + extra tiles, per-post
+    // insights/audience (TikTok in-band + YouTube deep join), carousel
+    // children, and the TikTok embed player URL.
+    const raw: Post[] = rawContents.map(
+      (c) => canonicalToPost(c as CanonicalContentWrapper, accountPk, platform) as Post,
+    );
 
     // Build the (contentId → item) lookup once, in SSR, so the PostDialog
     // can do a single O(1) read per open post.
@@ -1184,10 +1171,30 @@ function PostDialog({
                     className="v-body"
                     style={{ color: 'var(--v-text-muted)', fontSize: 13 }}
                   >
-                    No per-post insights captured yet. TikTok exposes them
-                    via <code>ContentInsights</code>; YouTube via the
-                    <code>engagement_deep</code> product (next sync window
-                    will populate this).
+                    {post.platform === 'tiktok' ? (
+                      <>
+                        No per-post insights captured for this video yet.
+                        TikTok returns them in-band on sync; audience
+                        breakdowns stay empty below TikTok&apos;s per-video
+                        viewer threshold.
+                      </>
+                    ) : post.platform === 'youtube' ? (
+                      <>
+                        No deep analytics captured for this video yet.
+                        YouTube per-video insights arrive via the
+                        <code>engagement_deep</code> product (owner-only) on
+                        its sync window.
+                      </>
+                    ) : (
+                      <>
+                        {post.platform
+                          ? post.platform.charAt(0).toUpperCase() +
+                            post.platform.slice(1)
+                          : 'This platform'}{' '}
+                        does not expose per-post insights via its API — the
+                        aggregate engagement metrics live under Stats.
+                      </>
+                    )}
                   </div>
                 )}
             </>

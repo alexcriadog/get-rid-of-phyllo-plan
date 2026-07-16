@@ -33,7 +33,9 @@ export const LINKEDIN_SUPPORT_MATRIX: SupportMatrix = {
   engagement_new: {
     caption: 'supported',
     permalink: 'supported',
-    mediaUrls: 'not_supported', // media URN decoration is a follow-up
+    // empty_possible: media URLs resolve for image/article posts; present on
+    // multi-image posts as media_urls (verified live 23/112 as of 2026-07).
+    mediaUrls: 'empty_possible',
     likes: 'supported',
     comments: 'supported',
     shares: 'supported',

@@ -354,7 +354,17 @@ export function toApiContent(
     platform_profile_name: ctx.platformUsername,
     sponsored: null,
     collaboration: null,
-    is_owned_by_platform_user: true,
+    // Mentions land in `contents` too (kind: "content"); the only ownership
+    // signal is ContentData.ownerHandle, set by the mentions fetchers to the
+    // actual author. Own posts either omit it or set it to the connected
+    // account's handle.
+    is_owned_by_platform_user:
+      content.ownerHandle && ctx.platformUsername
+        ? content.ownerHandle.toLowerCase() ===
+          ctx.platformUsername.toLowerCase()
+        : true,
+    ...(content.ownerHandle ? { owner_username: content.ownerHandle } : {}),
+    ...(content.embedUrl ? { embed_url: content.embedUrl } : {}),
     hashtags:
       content.tags && content.tags.length > 0
         ? content.tags

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-22",
+  "generatedAt": "2026-07-15",
   "productsByPlatform": {
     "YouTube": [
       "identity",
@@ -90,7 +90,7 @@
             "Instagram": false,
             "TikTok": false,
             "Threads": false,
-            "Facebook": true,
+            "Facebook": false,
             "LinkedIn": false,
             "Twitch": false
           },
@@ -304,13 +304,14 @@
             "Instagram": true,
             "TikTok": true,
             "Threads": false,
-            "Facebook": false,
+            "Facebook": true,
             "LinkedIn": true,
             "Twitch": true
           },
           "caveat": {
             "YouTube": "derived from accountType (empty_possible) — channel type not always set",
-            "Instagram": "derived from accountType (empty_possible) — business/creator flag may be empty"
+            "Instagram": "derived from accountType (empty_possible) — business/creator flag may be empty",
+            "Twitch": "derived from broadcaster tier - empty for non-affiliate/partner channels"
           }
         },
         {
@@ -394,7 +395,8 @@
           },
           "caveat": {
             "YouTube": "accountType empty_possible — channel type not always set",
-            "Instagram": "accountType empty_possible — business/creator flag may be empty"
+            "Instagram": "accountType empty_possible — business/creator flag may be empty",
+            "Twitch": "broadcaster tier (affiliate/partner) - empty for regular channels"
           }
         },
         {
@@ -436,7 +438,7 @@
           "family": "core",
           "maturity": "production",
           "support": {
-            "YouTube": false,
+            "YouTube": true,
             "Instagram": false,
             "TikTok": false,
             "Threads": false,
@@ -617,7 +619,7 @@
           "support": {
             "YouTube": false,
             "Instagram": false,
-            "TikTok": true,
+            "TikTok": false,
             "Threads": false,
             "Facebook": false,
             "LinkedIn": false,
@@ -735,7 +737,7 @@
           "maturity": "production",
           "support": {
             "YouTube": false,
-            "Instagram": false,
+            "Instagram": true,
             "TikTok": false,
             "Threads": false,
             "Facebook": false,
@@ -784,7 +786,7 @@
           "maturity": "production",
           "support": {
             "YouTube": true,
-            "Instagram": true,
+            "Instagram": false,
             "TikTok": true,
             "Threads": false,
             "Facebook": false,
@@ -793,7 +795,6 @@
           },
           "caveat": {
             "YouTube": "per-video viewer demographics via deep analytics (demographics empty_possible, owner-only)",
-            "Instagram": "per-post audience breakdowns are access/threshold gated, may be empty",
             "TikTok": "per-video audience breakdowns gated by per-video viewer threshold"
           }
         },
@@ -983,11 +984,11 @@
           "support": {
             "YouTube": true,
             "Instagram": false,
-            "TikTok": true,
+            "TikTok": false,
             "Threads": false,
             "Facebook": false,
             "LinkedIn": false,
-            "Twitch": true
+            "Twitch": false
           }
         },
         {
@@ -1018,7 +1019,7 @@
           "support": {
             "YouTube": false,
             "Instagram": true,
-            "TikTok": true,
+            "TikTok": false,
             "Threads": false,
             "Facebook": false,
             "LinkedIn": false,
@@ -1173,12 +1174,13 @@
             "Instagram": true,
             "TikTok": false,
             "Threads": false,
-            "Facebook": false,
+            "Facebook": true,
             "LinkedIn": false,
             "Twitch": false
           },
           "caveat": {
-            "Instagram": "total interactions present only on eligible media"
+            "Instagram": "total interactions present only on eligible media",
+            "Facebook": "video posts only"
           }
         },
         {
@@ -1192,12 +1194,13 @@
             "Instagram": true,
             "TikTok": false,
             "Threads": false,
-            "Facebook": false,
+            "Facebook": true,
             "LinkedIn": false,
             "Twitch": false
           },
           "caveat": {
-            "Instagram": "unique media views present only on eligible media"
+            "Instagram": "unique media views present only on eligible media",
+            "Facebook": "video posts only"
           }
         },
         {
@@ -1310,7 +1313,7 @@
             "Instagram": false,
             "TikTok": false,
             "Threads": false,
-            "Facebook": true,
+            "Facebook": false,
             "LinkedIn": false,
             "Twitch": false
           }
@@ -1359,7 +1362,7 @@
             "TikTok": true,
             "Threads": false,
             "Facebook": true,
-            "LinkedIn": false,
+            "LinkedIn": true,
             "Twitch": false
           }
         },
@@ -1403,12 +1406,15 @@
           "maturity": "production",
           "support": {
             "YouTube": false,
-            "Instagram": false,
+            "Instagram": true,
             "TikTok": false,
             "Threads": true,
             "Facebook": false,
             "LinkedIn": false,
             "Twitch": false
+          },
+          "caveat": {
+            "Instagram": "present where Meta exposes reshare counts (mainly reels)"
           }
         },
         {
@@ -1559,6 +1565,9 @@
             "Facebook": true,
             "LinkedIn": true,
             "Twitch": true
+          },
+          "caveat": {
+            "Twitch": "derived from the VOD title - present only when the title contains #tags"
           }
         },
         {
@@ -1626,6 +1635,9 @@
             "Facebook": false,
             "LinkedIn": false,
             "Twitch": false
+          },
+          "caveat": {
+            "YouTube": "deep-analytics join; empty without sufficient per-video traffic"
           }
         },
         {
@@ -2122,8 +2134,11 @@
             "TikTok": true,
             "Threads": true,
             "Facebook": true,
-            "LinkedIn": false,
+            "LinkedIn": true,
             "Twitch": true
+          },
+          "caveat": {
+            "LinkedIn": "present when the post carries an image, video, or shared-article preview"
           }
         },
         {
@@ -2133,13 +2148,16 @@
           "family": "core",
           "maturity": "production",
           "support": {
-            "YouTube": true,
+            "YouTube": false,
             "Instagram": true,
             "TikTok": false,
             "Threads": true,
             "Facebook": true,
-            "LinkedIn": false,
-            "Twitch": true
+            "LinkedIn": true,
+            "Twitch": false
+          },
+          "caveat": {
+            "LinkedIn": "multi-image posts only (2+ media items)"
           }
         },
         {
@@ -2156,6 +2174,9 @@
             "Facebook": true,
             "LinkedIn": true,
             "Twitch": true
+          },
+          "caveat": {
+            "Twitch": "derived from the VOD title - present only when the title contains @mentions"
           }
         },
         {
@@ -2368,6 +2389,7 @@
             "Twitch": false
           },
           "caveat": {
+            "YouTube": "YouTube Analytics returns audience demographics only once the channel has sufficient watch time",
             "TikTok": "ageDistribution empty_possible — populated only when account ≥ 100 followers"
           }
         },
@@ -2387,7 +2409,8 @@
             "Twitch": false
           },
           "caveat": {
-            "TikTok": "cityDistribution empty_possible — populated only when account ≥ 100 followers"
+            "TikTok": "cityDistribution empty_possible — populated only when account ≥ 100 followers",
+            "Facebook": "Page fan demographics require a minimum fan count (Meta gate)"
           }
         },
         {
@@ -2406,7 +2429,9 @@
             "Twitch": false
           },
           "caveat": {
-            "TikTok": "countryDistribution empty_possible — populated only when account ≥ 100 followers"
+            "YouTube": "YouTube Analytics returns audience demographics only once the channel has sufficient watch time",
+            "TikTok": "countryDistribution empty_possible — populated only when account ≥ 100 followers",
+            "Facebook": "Page fan demographics require a minimum fan count (Meta gate)"
           }
         },
         {
@@ -2416,16 +2441,13 @@
           "family": "core",
           "maturity": "production",
           "support": {
-            "YouTube": true,
-            "Instagram": true,
-            "TikTok": true,
+            "YouTube": false,
+            "Instagram": false,
+            "TikTok": false,
             "Threads": false,
             "Facebook": false,
             "LinkedIn": false,
             "Twitch": false
-          },
-          "caveat": {
-            "TikTok": "demographics empty_possible — populated only when account ≥ 100 followers"
           }
         },
         {
@@ -2444,6 +2466,7 @@
             "Twitch": false
           },
           "caveat": {
+            "YouTube": "YouTube Analytics returns audience demographics only once the channel has sufficient watch time",
             "TikTok": "genderDistribution empty_possible — populated only when account ≥ 100 followers"
           }
         }
@@ -2471,10 +2494,13 @@
             "YouTube": true,
             "Instagram": false,
             "TikTok": true,
-            "Threads": true,
+            "Threads": false,
             "Facebook": true,
             "LinkedIn": false,
             "Twitch": false
+          },
+          "caveat": {
+            "Facebook": "Meta reveals commenter identity only for the Page itself and app-permissioned users"
           }
         },
         {
@@ -2523,6 +2549,9 @@
             "Facebook": true,
             "LinkedIn": true,
             "Twitch": false
+          },
+          "caveat": {
+            "Facebook": "Meta reveals commenter identity only for the Page itself and app-permissioned users"
           }
         },
         {
@@ -2548,12 +2577,12 @@
           "family": "content",
           "maturity": "production",
           "support": {
-            "YouTube": true,
+            "YouTube": false,
             "Instagram": false,
-            "TikTok": true,
-            "Threads": true,
-            "Facebook": true,
-            "LinkedIn": true,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
             "Twitch": false
           }
         },
@@ -2564,12 +2593,12 @@
           "family": "content",
           "maturity": "production",
           "support": {
-            "YouTube": true,
+            "YouTube": false,
             "Instagram": false,
-            "TikTok": true,
-            "Threads": true,
-            "Facebook": true,
-            "LinkedIn": true,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": false,
+            "LinkedIn": false,
             "Twitch": false
           }
         },
@@ -2598,10 +2627,10 @@
           "support": {
             "YouTube": true,
             "Instagram": false,
-            "TikTok": true,
-            "Threads": true,
+            "TikTok": false,
+            "Threads": false,
             "Facebook": true,
-            "LinkedIn": true,
+            "LinkedIn": false,
             "Twitch": false
           }
         },
@@ -2614,10 +2643,10 @@
           "support": {
             "YouTube": true,
             "Instagram": false,
-            "TikTok": true,
-            "Threads": true,
-            "Facebook": false,
-            "LinkedIn": true,
+            "TikTok": false,
+            "Threads": false,
+            "Facebook": true,
+            "LinkedIn": false,
             "Twitch": false
           }
         },
@@ -2640,5 +2669,5 @@
       ]
     }
   },
-  "audienceNote": "Offered = the platform’s API exposes it to us (from our per-platform support matrices). TikTok audience is offered too — gated above the ≥100-follower threshold (✓△). Threads & Twitch expose no audience demographics. LinkedIn audience is organization-only."
+  "audienceNote": "Offered = our /v1 API serves it (support matrices reconciled against real captured data, 2026-07-15). TikTok audience is gated above the ≥100-follower threshold (✓△); YouTube demographics need sufficient channel watch time (✓△). Threads & Twitch expose no audience demographics. LinkedIn audience is organization-only. Per-post audience exists only on TikTok (viewer threshold) and YouTube (deep analytics, owner-only) — Instagram has none."
 }

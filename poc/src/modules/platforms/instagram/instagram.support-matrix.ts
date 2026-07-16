@@ -20,6 +20,7 @@ export const INSTAGRAM_SUPPORT_MATRIX: SupportMatrix = {
     postsCount: 'supported',
     verified: 'not_supported',
     accountType: 'empty_possible',
+    website: 'supported', // business-discovery website field (verified live 5/5)
   },
   audience: {
     genderDistribution: 'supported',

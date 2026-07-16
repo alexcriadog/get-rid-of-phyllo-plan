@@ -1,1409 +1,1409 @@
 {
-  "generatedAt": "2026-06-22",
-  "productsByPlatform": {
-    "YouTube": [
-      "identity",
-      "audience",
-      "engagement_new",
-      "engagement_deep",
-      "comments",
-      "ads"
-    ],
-    "Instagram": [
-      "identity",
-      "audience",
-      "engagement_new",
-      "stories"
-    ],
-    "TikTok": [
-      "identity",
-      "audience",
-      "engagement_new",
-      "comments"
-    ],
-    "Threads": [
-      "identity",
-      "audience",
-      "engagement_new",
-      "comments",
-      "mentions"
-    ],
-    "Facebook": [
-      "identity",
-      "audience",
-      "engagement_new",
-      "stories",
-      "mentions",
-      "comments",
-      "ratings",
-      "ads"
-    ],
-    "LinkedIn": [
-      "identity",
-      "audience",
-      "engagement_new",
-      "comments",
-      "mentions"
-    ],
-    "Twitch": [
-      "identity",
-      "engagement_new"
-    ]
+ "generatedAt": "2026-07-15",
+ "productsByPlatform": {
+  "YouTube": [
+   "identity",
+   "audience",
+   "engagement_new",
+   "engagement_deep",
+   "comments",
+   "ads"
+  ],
+  "Instagram": [
+   "identity",
+   "audience",
+   "engagement_new",
+   "stories"
+  ],
+  "TikTok": [
+   "identity",
+   "audience",
+   "engagement_new",
+   "comments"
+  ],
+  "Threads": [
+   "identity",
+   "audience",
+   "engagement_new",
+   "comments",
+   "mentions"
+  ],
+  "Facebook": [
+   "identity",
+   "audience",
+   "engagement_new",
+   "stories",
+   "mentions",
+   "comments",
+   "ratings",
+   "ads"
+  ],
+  "LinkedIn": [
+   "identity",
+   "audience",
+   "engagement_new",
+   "comments",
+   "mentions"
+  ],
+  "Twitch": [
+   "identity",
+   "engagement_new"
+  ]
+ },
+ "fields": {
+  "Identity": {
+   "addresses": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "category": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "certifications": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "country": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "date_of_birth": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "education": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "emails": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "external_id": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "first_name": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "full_name": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "gender": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "honors": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "image_url": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "introduction": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "is_business": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "is_verified": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "last_name": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "nick_name": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "phone_numbers": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "platform_account_type": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "platform_profile_id": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "platform_profile_name": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "platform_profile_published_at": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": true
+   },
+   "platform_username": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "projects": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "publications": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "reputation.average_click_rate": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "reputation.average_open_rate": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "reputation.connection_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "reputation.content_count": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "reputation.content_group_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "reputation.follower_count": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "reputation.following_count": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "reputation.like_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "reputation.paid_subscriber_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "reputation.subscriber_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": true
+   },
+   "reputation.watch_time_in_hours": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "url": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "username": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "volunteer_experiences": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "website": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "work_experiences": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   }
   },
-  "fields": {
-    "Identity": {
-      "addresses": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "category": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "certifications": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "country": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "date_of_birth": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "education": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "emails": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "external_id": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "first_name": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "full_name": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "gender": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "honors": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "image_url": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "introduction": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "is_business": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "is_verified": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "last_name": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "nick_name": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "phone_numbers": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "platform_account_type": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "platform_profile_id": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "platform_profile_name": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "platform_profile_published_at": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": true
-      },
-      "platform_username": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "projects": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "publications": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "reputation.average_click_rate": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "reputation.average_open_rate": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "reputation.connection_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "reputation.content_count": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "reputation.content_group_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "reputation.follower_count": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "reputation.following_count": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "reputation.like_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "reputation.paid_subscriber_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "reputation.subscriber_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": true
-      },
-      "reputation.watch_time_in_hours": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "url": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "username": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "volunteer_experiences": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "website": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "work_experiences": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      }
-    },
-    "Engagement": {
-      "audience": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "audience.age_distribution": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "audience.audience_types": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "audience.cities": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "audience.countries": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "audience.gender_age_distribution": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "audience.gender_distribution": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "authors": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "collaboration": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "content_tags": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "description": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "duration": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info.bio_link_clicked": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info.completion_rate": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info.followers_gained": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info.profile_visits": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info.reels_skip_rate": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info.sticker_interactions": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info.story_navigation": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info.story_replies": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": true,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info.total_interactions": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": true,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.additional_info.unique_media_views": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": true,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.avg_watch_time_in_sec": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.click_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "engagement.comment_count": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "engagement.dislike_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.email_click_rate": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.email_open_rate": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.impression_organic_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.impression_paid_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.like_count": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "engagement.reach_organic_count": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "engagement.reach_paid_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.replay_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.repost_count": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.save_count": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.share_count": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "engagement.spam_report_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.unsubscribe_count": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "engagement.view_count": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "engagement.watch_time_in_hours": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "external_id": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "format": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "hashtags": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "insights": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.audience_retention": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.devices": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.countries": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.annotationClickThroughRate": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.annotationClicks": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.annotationImpressions": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.averageViewDuration": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.averageViewPercentage": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.cardClickRate": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.cardClicks": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.cardImpressions": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.cardTeaserClickRate": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.cardTeaserClicks": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.cardTeaserImpressions": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.comments": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.dislikes": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.engagedViews": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.estimatedMinutesWatched": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.likes": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.shares": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.subscribersGained": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.subscribersLost": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.videosAddedToPlaylists": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.videosRemovedFromPlaylists": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.extra.metrics.views": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.likes_timeline": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.retention_curve": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.sharing": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.traffic_sources": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.viewer_demographics": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "insights.viewer_types": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "is_owned_by_platform_user": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "media_url": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "media_urls": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": false,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "mentions": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": false
-      },
-      "persistent_thumbnail_url": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "platform": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "platform_profile_id": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "platform_profile_name": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "published_at": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "sponsored": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false,
-        "Twitch": false
-      },
-      "thumbnail_url": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "title": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "type": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "url": {
-        "YouTube": true,
-        "Instagram": true,
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true,
-        "Twitch": true
-      },
-      "visibility": {
-        "YouTube": true,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": true,
-        "Twitch": true
-      }
-    },
-    "Audience": {
-      "age_distribution": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false
-      },
-      "cities": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false
-      },
-      "countries": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": true
-      },
-      "gender_age_distribution": {
-        "YouTube": false,
-        "Instagram": false,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false
-      },
-      "gender_distribution": {
-        "YouTube": false,
-        "Instagram": true,
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false
-      }
-    },
-    "Comments": {
-      "commenter_display_name": {
-        "TikTok": true,
-        "Threads": false,
-        "Facebook": true,
-        "LinkedIn": false
-      },
-      "commenter_id": {
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false
-      },
-      "commenter_profile_url": {
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false
-      },
-      "commenter_username": {
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true
-      },
-      "content.id": {
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true
-      },
-      "content.published_at": {
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false
-      },
-      "content.url": {
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": false,
-        "LinkedIn": false
-      },
-      "external_id": {
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true
-      },
-      "like_count": {
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": true,
-        "LinkedIn": false
-      },
-      "reply_count": {
-        "TikTok": false,
-        "Threads": false,
-        "Facebook": true,
-        "LinkedIn": false
-      },
-      "text": {
-        "TikTok": true,
-        "Threads": true,
-        "Facebook": true,
-        "LinkedIn": true
-      }
-    }
+  "Engagement": {
+   "audience": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "audience.age_distribution": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "audience.audience_types": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "audience.cities": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "audience.countries": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "audience.gender_age_distribution": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "audience.gender_distribution": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "authors": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "collaboration": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "content_tags": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "description": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "duration": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info.bio_link_clicked": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info.completion_rate": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info.followers_gained": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info.profile_visits": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info.reels_skip_rate": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info.sticker_interactions": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info.story_navigation": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info.story_replies": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": true,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info.total_interactions": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": true,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.additional_info.unique_media_views": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": true,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.avg_watch_time_in_sec": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.click_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "engagement.comment_count": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "engagement.dislike_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.email_click_rate": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.email_open_rate": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.impression_organic_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.impression_paid_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.like_count": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "engagement.reach_organic_count": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "engagement.reach_paid_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.replay_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.repost_count": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.save_count": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.share_count": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "engagement.spam_report_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.unsubscribe_count": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "engagement.view_count": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "engagement.watch_time_in_hours": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "external_id": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "format": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "hashtags": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "insights": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.audience_retention": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.devices": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.countries": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.annotationClickThroughRate": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.annotationClicks": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.annotationImpressions": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.averageViewDuration": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.averageViewPercentage": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.cardClickRate": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.cardClicks": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.cardImpressions": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.cardTeaserClickRate": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.cardTeaserClicks": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.cardTeaserImpressions": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.comments": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.dislikes": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.engagedViews": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.estimatedMinutesWatched": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.likes": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.shares": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.subscribersGained": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.subscribersLost": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.videosAddedToPlaylists": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.videosRemovedFromPlaylists": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.extra.metrics.views": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.likes_timeline": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.retention_curve": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.sharing": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.traffic_sources": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.viewer_demographics": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "insights.viewer_types": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "is_owned_by_platform_user": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "media_url": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "media_urls": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": false,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "mentions": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": false
+   },
+   "persistent_thumbnail_url": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "platform": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "platform_profile_id": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "platform_profile_name": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "published_at": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "sponsored": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false,
+    "Twitch": false
+   },
+   "thumbnail_url": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "title": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "type": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "url": {
+    "YouTube": true,
+    "Instagram": true,
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true,
+    "Twitch": true
+   },
+   "visibility": {
+    "YouTube": true,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": true,
+    "Twitch": true
+   }
   },
-  "samples": {
-    "Identity": {
-      "YouTube": 1,
-      "Instagram": 5,
-      "TikTok": 3,
-      "Threads": 2,
-      "Facebook": 2,
-      "LinkedIn": 2,
-      "Twitch": 2
-    },
-    "Engagement": {
-      "YouTube": 8,
-      "Instagram": 986,
-      "TikTok": 74,
-      "Threads": 44,
-      "Facebook": 69,
-      "LinkedIn": 112,
-      "Twitch": 2
-    },
-    "Audience": {
-      "YouTube": 1,
-      "Instagram": 5,
-      "TikTok": 3,
-      "Threads": 2,
-      "Facebook": 2,
-      "LinkedIn": 2
-    },
-    "Comments": {
-      "TikTok": 19,
-      "Threads": 10,
-      "Facebook": 20,
-      "LinkedIn": 12
-    }
+  "Audience": {
+   "age_distribution": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false
+   },
+   "cities": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false
+   },
+   "countries": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": true
+   },
+   "gender_age_distribution": {
+    "YouTube": false,
+    "Instagram": false,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false
+   },
+   "gender_distribution": {
+    "YouTube": false,
+    "Instagram": true,
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false
+   }
+  },
+  "Comments": {
+   "commenter_display_name": {
+    "TikTok": true,
+    "Threads": false,
+    "Facebook": true,
+    "LinkedIn": false
+   },
+   "commenter_id": {
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false
+   },
+   "commenter_profile_url": {
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false
+   },
+   "commenter_username": {
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true
+   },
+   "content.id": {
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true
+   },
+   "content.published_at": {
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false
+   },
+   "content.url": {
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": false,
+    "LinkedIn": false
+   },
+   "external_id": {
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true
+   },
+   "like_count": {
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": true,
+    "LinkedIn": false
+   },
+   "reply_count": {
+    "TikTok": false,
+    "Threads": false,
+    "Facebook": true,
+    "LinkedIn": false
+   },
+   "text": {
+    "TikTok": true,
+    "Threads": true,
+    "Facebook": true,
+    "LinkedIn": true
+   }
   }
+ },
+ "samples": {
+  "Identity": {
+   "YouTube": 1,
+   "Instagram": 5,
+   "TikTok": 3,
+   "Threads": 2,
+   "Facebook": 2,
+   "LinkedIn": 2,
+   "Twitch": 2
+  },
+  "Engagement": {
+   "YouTube": 8,
+   "Instagram": 986,
+   "TikTok": 74,
+   "Threads": 44,
+   "Facebook": 69,
+   "LinkedIn": 112,
+   "Twitch": 2
+  },
+  "Audience": {
+   "YouTube": 1,
+   "Instagram": 5,
+   "TikTok": 3,
+   "Threads": 2,
+   "Facebook": 2,
+   "LinkedIn": 2
+  },
+  "Comments": {
+   "TikTok": 19,
+   "Threads": 10,
+   "Facebook": 20,
+   "LinkedIn": 12
+  }
+ }
 }

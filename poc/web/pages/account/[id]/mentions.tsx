@@ -1,11 +1,16 @@
-// Mentions page — lists every Threads/IG/FB post in the `posts` collection
-// whose `data.ownerHandle` is NOT the connected account's handle. These are
-// the posts of OTHER authors that @-mentioned us.
+// Mentions page — lists every canonical `contents` doc authored by someone
+// other than the connected account (is_owned_by_platform_user === false).
+// These are the posts of OTHER authors that @-mentioned us.
 
 import Link from 'next/link';
 import { useMemo, useState, useEffect } from 'react';
 import type { GetServerSideProps } from 'next';
 import { getDb } from '../../../lib/mongo';
+import {
+  canonicalToPost,
+  platformOfDoc,
+  type CanonicalContentWrapper,
+} from '../../../lib/canonical-content';
 import { fmtNumber, fmtDate } from '../../../lib/format';
 import { RelativeTime } from '../../../components/RelativeTime';
 
@@ -48,34 +53,50 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
   const id = String(ctx.params?.id || '');
   try {
     const db = await getDb();
-    const filters = [{ account_id: id }, { account_id: Number(id) || id }];
-    const [identityDoc, postDocs] = await Promise.all([
-      db.collection('identity_snapshots').findOne({ $or: filters }),
+    // Canonical store — the raw `posts` collection froze on 2026-06-08 when
+    // the sync worker went canonical-only. A "mention" is a `contents` doc
+    // authored by someone else: is_owned_by_platform_user === false, with
+    // the author in the additive owner_username key. Docs synced before
+    // 2026-07-15 lack both keys and reappear here after their next refresh.
+    const [profileDoc, mentionDocs] = await Promise.all([
+      db.collection('profiles').findOne({ account_pk: id }),
       db
-        .collection('posts')
-        .find({ $or: filters })
-        .sort({ 'data.publishedAt': -1, updated_at: -1 })
+        .collection('contents')
+        .find({ account_pk: id, 'doc.is_owned_by_platform_user': false })
+        .sort({ published_at: -1, updated_at: -1 })
+        .limit(200)
         .toArray(),
     ]);
-    const identity = identityDoc ? (toPlainJson(identityDoc) as IdentitySnapshot) : null;
+    const profile = (profileDoc?.doc ?? {}) as {
+      platform_username?: string | null;
+      username?: string | null;
+      full_name?: string | null;
+    };
+    const platform = platformOfDoc(profile as Record<string, unknown>);
+    const identity: IdentitySnapshot | null = profileDoc
+      ? {
+          account_id: id,
+          platform,
+          data: {
+            username: profile.platform_username ?? profile.username ?? undefined,
+            displayName: profile.full_name ?? undefined,
+          },
+        }
+      : null;
     // Gate: this page only makes sense for platforms whose adapters implement
-    // fetchMentions (tiktok / threads). For instagram / facebook redirect to
-    // the account overview so users don't land on an empty mentions panel.
+    // fetchMentions (tiktok / threads / facebook). Otherwise redirect to the
+    // account overview so users don't land on an empty mentions panel.
     if (identity && !PLATFORMS_WITH_MENTIONS.has(identity.platform)) {
       return {
         redirect: { destination: `/account/${id}`, permanent: false },
       };
     }
-    const ownerHandle = identity?.data?.username ?? null;
-    const all = postDocs.map((p) => toPlainJson(p) as Post);
-    // A "mention" is any post whose ownerHandle differs from the connected
-    // account's handle. Posts without ownerHandle (older snapshots, or
-    // platforms that don't surface an author) are excluded.
-    const mentions = ownerHandle
-      ? all.filter(
-          (p) => p.data?.ownerHandle && p.data.ownerHandle !== ownerHandle,
-        )
-      : all.filter((p) => !!p.data?.ownerHandle);
+    const mentions = mentionDocs.map(
+      (p) =>
+        toPlainJson(
+          canonicalToPost(p as CanonicalContentWrapper, id, platform),
+        ) as Post,
+    );
     return { props: { id, identity, mentions } };
   } catch (err) {
     // eslint-disable-next-line no-console
