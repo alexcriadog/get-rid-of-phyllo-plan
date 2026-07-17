@@ -270,3 +270,97 @@ describe('Facebook post mapper (pinning)', () => {
     });
   });
 });
+
+// Max-capture extraction against realistic Graph payload shapes
+// (docs/max-capture-all-platforms.md). Explicit assertions, no snapshots.
+describe('Facebook post mapper (max-capture extraction)', () => {
+  it('maps shares, status_type, message_tags and place', () => {
+    const item = postToContent({
+      id: '12345_111',
+      message: 'match day with Acme Co',
+      created_time: '2026-07-10T10:00:00+0000',
+      permalink_url: 'https://facebook.com/12345/posts/111',
+      full_picture: 'https://scontent.example/img.jpg',
+      shares: { count: 7 },
+      status_type: 'added_photos',
+      message_tags: [
+        { id: '99', name: 'Acme Co', type: 'page' },
+        { id: '98', name: 'Acme Co', type: 'page' },
+        { id: '97', name: '', type: 'page' },
+      ],
+      place: {
+        id: '111222333',
+        name: 'Miami, Florida',
+        location: {
+          city: 'Miami',
+          country: 'United States',
+          latitude: 25.7752,
+          longitude: -80.192,
+          street: '123 Ocean Dr',
+          zip: '33139',
+        },
+      },
+    });
+    expect(item.metrics.shares).toBe(7);
+    expect(item.mediaProductType).toBe('ADDED_PHOTOS');
+    expect(item.mentions).toEqual(['Acme Co']); // deduped, empty names dropped
+    expect(item.location).toEqual({
+      id: '111222333',
+      name: 'Miami, Florida',
+      city: 'Miami',
+      country: 'United States',
+      latitude: 25.7752,
+      longitude: -80.192,
+      address: '123 Ocean Dr',
+      postalCode: '33139',
+    });
+  });
+
+  it('maps link-share attachments to linkAttachmentUrl/Title, never media posts', () => {
+    const linkPost = postToContent({
+      id: '12345_222',
+      message: 'read this',
+      created_time: '2026-07-10T10:00:00+0000',
+      attachments: {
+        data: [
+          {
+            type: 'share',
+            title: 'Quarterly results',
+            unshimmed_url: 'https://example.com/article',
+            url: 'https://l.facebook.com/l.php?u=...',
+          },
+        ],
+      },
+    });
+    expect(linkPost.linkAttachmentUrl).toBe('https://example.com/article');
+    expect(linkPost.linkAttachmentTitle).toBe('Quarterly results');
+
+    const photoPost = postToContent({
+      id: '12345_333',
+      created_time: '2026-07-10T10:00:00+0000',
+      attachments: {
+        data: [
+          {
+            media_type: 'photo',
+            url: 'https://facebook.com/photo/123',
+            media: { image: { src: 'https://scontent.example/p.jpg' } },
+          },
+        ],
+      },
+    });
+    expect(photoPost.linkAttachmentUrl).toBeNull();
+    expect(photoPost.linkAttachmentTitle).toBeNull();
+  });
+
+  it('place without id yields no location; absent extras stay null', () => {
+    const item = postToContent({
+      id: '12345_444',
+      created_time: '2026-07-10T10:00:00+0000',
+      place: { name: 'Nowhere' },
+    });
+    expect(item.location).toBeNull();
+    expect(item.metrics.shares).toBeUndefined();
+    expect(item.mediaProductType).toBeNull();
+    expect(item.mentions).toBeNull();
+  });
+});

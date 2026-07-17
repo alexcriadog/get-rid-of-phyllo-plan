@@ -36,6 +36,8 @@ export interface RawArchiveRef {
 export interface LinkedInResolvedMedia {
   url?: string | null;
   thumbnail?: string | null;
+  /** Video length in milliseconds (Videos API `duration`). */
+  durationMs?: number | null;
 }
 
 const DEFAULT_ARCHIVE_REF: RawArchiveRef = {
@@ -100,6 +102,7 @@ export function linkedInPostToContent(
   // Resolve media URLs from the asset map the fetcher built.
   const mediaUrls: string[] = [];
   let thumbnailUrl: string | null = null;
+  let durationMs: number | null = null;
   let children: ContentChild[] | undefined;
   const lookup = (urn: string | undefined): LinkedInResolvedMedia | null =>
     urn ? (mediaByUrn?.get(urn) ?? null) : null;
@@ -121,7 +124,12 @@ export function linkedInPostToContent(
     const resolved = lookup(post.content.media.id);
     if (resolved?.url) mediaUrls.push(resolved.url);
     thumbnailUrl = resolved?.thumbnail ?? resolved?.url ?? null;
+    durationMs = resolved?.durationMs ?? null;
   }
+
+  // Article/link shares (max-capture): reuse the same additive keys Threads
+  // link posts use, so consumers read one field across platforms.
+  const article = post.content?.article ?? null;
 
   return {
     platformContentId: post.id,
@@ -135,6 +143,10 @@ export function linkedInPostToContent(
     fetchedAt: new Date(),
     privacyStatus: post.visibility ?? null,
     uploadStatus: post.lifecycleState ?? null,
+    linkAttachmentUrl: article?.source ?? null,
+    linkAttachmentTitle: article?.title ?? null,
+    // /v1 `duration` wants integer seconds; Videos API returns milliseconds.
+    duration: durationMs != null ? String(Math.round(durationMs / 1000)) : null,
     ...(decoded && decoded.hashtags.length > 0 ? { tags: decoded.hashtags } : {}),
     ...(children ? { children } : {}),
     rawResponse: raw,

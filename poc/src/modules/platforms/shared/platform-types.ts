@@ -422,6 +422,27 @@ export interface ContentData {
   /** Threads: poll attachment (options + vote percentages). */
   poll?: ContentPoll | null;
   /**
+   * Max-capture (all platforms — see docs/max-capture-all-platforms.md).
+   * All optional; adapters set only what their platform exposes.
+   *   mentions — platform-declared user tags (FB message_tags). The /v1
+   *     mapper unions these with caption-derived @mentions.
+   *   sponsored — platform-declared paid/ad flag (TikTok is_ad).
+   *   collaborators — co-author usernames (IG collaborators). Feeds the
+   *     /v1 `collaboration` + `authors` slots.
+   *   linkAttachmentTitle — title of an attached link/article (LinkedIn
+   *     article.title, FB attachment title); pairs with linkAttachmentUrl.
+   *   isCommentEnabled — whether comments are open (IG).
+   *   isFeatured — Twitch clip featured flag.
+   *   sourceVideoId — Twitch clip's source VOD id.
+   */
+  mentions?: string[] | null;
+  sponsored?: boolean | null;
+  collaborators?: string[] | null;
+  linkAttachmentTitle?: string | null;
+  isCommentEnabled?: boolean | null;
+  isFeatured?: boolean | null;
+  sourceVideoId?: string | null;
+  /**
    * Reference (hash / object id) to the raw blob stored in Mongo
    * `raw_platform_responses`. Not the blob itself — keep canonical records
    * lightweight.

@@ -15,6 +15,7 @@ exports[`Instagram media mapper (pinning) extractMetrics only like_count 1`] = `
 
 exports[`Instagram media mapper (pinning) mediaToContent CAROUSEL_ALBUM with mixed children (image + video) 1`] = `
 {
+  "altText": null,
   "caption": "Trip",
   "children": [
     {
@@ -32,8 +33,10 @@ exports[`Instagram media mapper (pinning) mediaToContent CAROUSEL_ALBUM with mix
       "thumbnailUrl": "https://scontent.cdninstagram.example/c2-thumb.jpg",
     },
   ],
+  "collaborators": null,
   "contentType": "carousel",
   "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "isCommentEnabled": null,
   "isSharedToFeed": null,
   "mediaProductType": "FEED",
   "mediaUrls": [
@@ -59,10 +62,13 @@ exports[`Instagram media mapper (pinning) mediaToContent CAROUSEL_ALBUM with mix
 
 exports[`Instagram media mapper (pinning) mediaToContent IMAGE post with all fields 1`] = `
 {
+  "altText": null,
   "caption": "Sunset",
   "children": undefined,
+  "collaborators": null,
   "contentType": "image",
   "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "isCommentEnabled": null,
   "isSharedToFeed": true,
   "mediaProductType": "FEED",
   "mediaUrls": [
@@ -87,10 +93,13 @@ exports[`Instagram media mapper (pinning) mediaToContent IMAGE post with all fie
 
 exports[`Instagram media mapper (pinning) mediaToContent REELS post 1`] = `
 {
+  "altText": null,
   "caption": "New trend",
   "children": undefined,
+  "collaborators": null,
   "contentType": "reel",
   "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "isCommentEnabled": null,
   "isSharedToFeed": null,
   "mediaProductType": "REELS",
   "mediaUrls": [
@@ -115,10 +124,13 @@ exports[`Instagram media mapper (pinning) mediaToContent REELS post 1`] = `
 
 exports[`Instagram media mapper (pinning) mediaToContent VIDEO post with thumbnail 1`] = `
 {
+  "altText": null,
   "caption": "Behind the scenes",
   "children": undefined,
+  "collaborators": null,
   "contentType": "video",
   "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "isCommentEnabled": null,
   "isSharedToFeed": null,
   "mediaProductType": "FEED",
   "mediaUrls": [
@@ -143,10 +155,13 @@ exports[`Instagram media mapper (pinning) mediaToContent VIDEO post with thumbna
 
 exports[`Instagram media mapper (pinning) mediaToContent media with unknown media_type falls through to "other" 1`] = `
 {
+  "altText": null,
   "caption": null,
   "children": undefined,
+  "collaborators": null,
   "contentType": "other",
   "fetchedAt": 2026-04-28T12:00:00.000Z,
+  "isCommentEnabled": null,
   "isSharedToFeed": null,
   "mediaProductType": null,
   "mediaUrls": [],

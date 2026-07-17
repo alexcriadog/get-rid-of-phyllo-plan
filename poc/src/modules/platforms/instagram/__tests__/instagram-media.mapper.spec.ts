@@ -186,3 +186,38 @@ describe('Instagram media mapper (pinning)', () => {
     });
   });
 });
+
+// Max-capture extraction (docs/max-capture-all-platforms.md). Explicit
+// assertions, no snapshots.
+describe('Instagram media mapper (max-capture extraction)', () => {
+  it('maps alt_text, is_comment_enabled and collaborators usernames', () => {
+    const item = mediaToContent({
+      id: 'ig-mc-1',
+      media_type: 'IMAGE',
+      media_url: 'https://scontent.cdninstagram.example/img.jpg',
+      alt_text: 'a football stadium',
+      is_comment_enabled: true,
+      collaborators: {
+        data: [
+          { id: '1', username: 'colab.user' },
+          { id: '2' }, // no username → filtered out
+        ],
+      },
+    });
+    expect(item.altText).toBe('a football stadium');
+    expect(item.isCommentEnabled).toBe(true);
+    expect(item.collaborators).toEqual(['colab.user']);
+  });
+
+  it('leaves the max-capture fields null when the media has none', () => {
+    const item = mediaToContent({
+      id: 'ig-mc-2',
+      media_type: 'IMAGE',
+      media_url: 'https://scontent.cdninstagram.example/img.jpg',
+      collaborators: { data: [] },
+    });
+    expect(item.altText).toBeNull();
+    expect(item.isCommentEnabled).toBeNull();
+    expect(item.collaborators).toBeNull();
+  });
+});

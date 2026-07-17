@@ -36,6 +36,15 @@ export function videoToContent(video: TikTokVideo): ContentData {
     insights: hasAnyInsight(insights) ? insights : undefined,
     publishedAt: parseCreateTime(video.create_time),
     fetchedAt: new Date(),
+    // Max-capture: fill the Phyllo-canonical slots instead of leaving them
+    // null (docs/max-capture-all-platforms.md). video_duration is decimal
+    // seconds; /v1 `duration` wants integer seconds. extra.video_duration_s
+    // keeps the raw decimal for consumers that already read it.
+    duration:
+      typeof video.video_duration === 'number'
+        ? String(Math.round(video.video_duration))
+        : null,
+    sponsored: typeof video.is_ad === 'boolean' ? video.is_ad : null,
     rawResponse: {
       collection: MONGO_COLLECTIONS.rawPlatformResponses,
       contentHash: hash,

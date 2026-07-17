@@ -203,6 +203,8 @@ export class LinkedInContentFetcher {
           media.set(urn, {
             url: asset.downloadUrl ?? null,
             thumbnail: asset.thumbnail ?? null,
+            // Milliseconds; the post mapper converts to /v1 integer seconds.
+            durationMs: typeof asset.duration === 'number' ? asset.duration : null,
           });
         }
       } catch (err) {

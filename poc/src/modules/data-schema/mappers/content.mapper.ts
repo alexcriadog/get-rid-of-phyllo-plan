@@ -100,8 +100,18 @@ function buildAdditionalInfo(
   const storyReplies = has("story_replies");
   const stickerInteractions = has("sticker_interactions");
   const uniqueMediaViews = has("unique_media_views");
+  // Facebook per-reaction counts land in extra as `reaction_<type>` (like,
+  // love, wow, haha, sad, angry, care) — regroup them into one object.
+  const reactionsBreakdown: Record<string, number> = {};
+  for (const [k, v] of Object.entries(extra)) {
+    if (k.startsWith("reaction_") && typeof v === "number") {
+      reactionsBreakdown[k.slice("reaction_".length)] = v;
+    }
+  }
+  const hasReactions = Object.keys(reactionsBreakdown).length > 0;
   if (
     !navHasAny &&
+    !hasReactions &&
     profileVisits === null &&
     bioLink === null &&
     followersGained === null &&
@@ -125,6 +135,7 @@ function buildAdditionalInfo(
     story_replies: storyReplies,
     sticker_interactions: stickerInteractions,
     unique_media_views: uniqueMediaViews,
+    ...(hasReactions ? { reactions_breakdown: reactionsBreakdown } : {}),
   };
 }
 
@@ -326,10 +337,17 @@ export function toApiContent(
     ? content.mediaUrls.filter(Boolean)
     : [];
 
+  const collaborators =
+    content.collaborators && content.collaborators.length > 0
+      ? content.collaborators
+      : null;
+
   return {
     ...env,
     engagement: buildEngagement(content),
-    authors: null,
+    // IG collab posts: co-author usernames. Backend renders coauthors from
+    // this list, so it stays a plain string[] (Phyllo leaves it null).
+    authors: collaborators,
     audience: buildContentAudience(content.insights, deep),
     platform: null,
     external_id: external,
@@ -352,8 +370,14 @@ export function toApiContent(
     published_at: naiveUtc(content.publishedAt),
     platform_profile_id: ctx.canonicalUserId,
     platform_profile_name: ctx.platformUsername,
-    sponsored: null,
-    collaboration: null,
+    // Platform-declared ad flag (TikTok is_ad). Phyllo's object shape; null
+    // when the platform says nothing (never guess from caption).
+    sponsored:
+      content.sponsored != null
+        ? { is_sponsored: content.sponsored, tags: null }
+        : null,
+    // IG collab posts (collaborators fetched on the FB-graph flow).
+    collaboration: collaborators ? { has_collaboration: true } : null,
     // Mentions land in `contents` too (kind: "content"); the only ownership
     // signal is ContentData.ownerHandle, set by the mentions fetchers to the
     // actual author. Own posts either omit it or set it to the connected
@@ -364,13 +388,17 @@ export function toApiContent(
           ctx.platformUsername.toLowerCase()
         : true,
     ...(content.ownerHandle ? { owner_username: content.ownerHandle } : {}),
-    ...(content.embedUrl ? { embed_url: content.embedUrl } : {}),
     hashtags:
       content.tags && content.tags.length > 0
         ? content.tags
         : extractTags(content.caption, "#"),
     content_tags: null,
-    mentions: extractTags(content.caption, "@"),
+    // Platform-declared tags (FB message_tags) unioned with caption-derived
+    // @mentions — declared ones first, caption duplicates dropped.
+    mentions: mergeMentions(
+      content.mentions,
+      extractTags(content.caption, "@"),
+    ),
     media_urls: mediaUrls.length > 1 ? mediaUrls : [],
     insights: buildInsights(content.insights, deep),
     quoted_post: referencedToApi(content.quotedPost),
@@ -389,7 +417,114 @@ export function toApiContent(
       ? { is_spoiler_media: content.isSpoilerMedia }
       : {}),
     ...(content.poll ? { poll: pollToApi(content.poll) } : {}),
+    // Max-capture additive keys (all platforms) — same only-when-present
+    // contract as the Threads block above. docs/max-capture-all-platforms.md
+    // is the field map.
+    ...(content.linkAttachmentTitle != null
+      ? { link_attachment_title: content.linkAttachmentTitle }
+      : {}),
+    ...(content.mediaProductType != null
+      ? { media_product_type: content.mediaProductType }
+      : {}),
+    ...(content.embedUrl != null ? { embed_url: content.embedUrl } : {}),
+    ...(content.categoryId != null ? { category_id: content.categoryId } : {}),
+    ...(content.defaultLanguage != null
+      ? { default_language: content.defaultLanguage }
+      : {}),
+    ...(content.defaultAudioLanguage != null
+      ? { default_audio_language: content.defaultAudioLanguage }
+      : {}),
+    ...(content.uploadStatus != null
+      ? { upload_status: content.uploadStatus }
+      : {}),
+    ...(content.isCommentEnabled != null
+      ? { is_comment_enabled: content.isCommentEnabled }
+      : {}),
+    ...(content.isSharedToFeed != null
+      ? { is_shared_to_feed: content.isSharedToFeed }
+      : {}),
+    ...(content.definition != null ? { definition: content.definition } : {}),
+    ...(content.dimension != null ? { dimension: content.dimension } : {}),
+    // YouTube returns caption availability as the string "true"/"false".
+    ...(content.hasCaptions != null
+      ? { has_captions: content.hasCaptions === "true" }
+      : {}),
+    ...(content.licensedContent != null
+      ? { licensed_content: content.licensedContent }
+      : {}),
+    ...(content.license != null ? { license: content.license } : {}),
+    ...(content.embeddable != null ? { embeddable: content.embeddable } : {}),
+    ...(content.publicStatsViewable != null
+      ? { public_stats_viewable: content.publicStatsViewable }
+      : {}),
+    ...(content.madeForKids != null
+      ? { made_for_kids: content.madeForKids }
+      : {}),
+    ...(content.liveBroadcastContent != null
+      ? { live_broadcast_content: content.liveBroadcastContent }
+      : {}),
+    ...(content.topicCategories && content.topicCategories.length > 0
+      ? { topic_categories: content.topicCategories }
+      : {}),
+    ...(content.recordingDate != null
+      ? { recording_date: content.recordingDate }
+      : {}),
+    ...(content.recordingLocation
+      ? {
+          recording_location: {
+            latitude: content.recordingLocation.latitude ?? null,
+            longitude: content.recordingLocation.longitude ?? null,
+            altitude: content.recordingLocation.altitude ?? null,
+          },
+        }
+      : {}),
+    ...(content.liveStreamingDetails
+      ? { live_streaming_details: liveDetailsToApi(content.liveStreamingDetails) }
+      : {}),
+    ...(content.isFeatured != null ? { is_featured: content.isFeatured } : {}),
+    ...(content.sourceVideoId != null
+      ? { source_video_id: content.sourceVideoId }
+      : {}),
   };
+}
+
+/** Live window + concurrent viewers → snake_case additive shape. */
+function liveDetailsToApi(
+  d: NonNullable<ContentData["liveStreamingDetails"]>,
+): NonNullable<ApiContent["live_streaming_details"]> {
+  const viewers = d.concurrentViewers;
+  return {
+    actual_start_time: d.actualStartTime ?? null,
+    actual_end_time: d.actualEndTime ?? null,
+    scheduled_start_time: d.scheduledStartTime ?? null,
+    scheduled_end_time: d.scheduledEndTime ?? null,
+    concurrent_viewers:
+      viewers != null && /^\d+$/.test(viewers) ? parseInt(viewers, 10) : null,
+  };
+}
+
+/**
+ * Union platform-declared mentions (FB message_tags) with caption-derived
+ * @mentions — declared first, caption duplicates of declared names dropped.
+ * With no declared mentions the caption-derived list passes through
+ * UNTOUCHED (duplicates included) — exact historical behavior for every
+ * platform that doesn't declare mentions. Null when neither exists (Phyllo
+ * parity: the field is null, not []).
+ */
+function mergeMentions(
+  declared: string[] | null | undefined,
+  derived: string[] | null,
+): string[] | null {
+  if (!declared || declared.length === 0) return derived;
+  const seen = new Set(declared);
+  const out = [...declared];
+  for (const m of derived ?? []) {
+    if (!seen.has(m)) {
+      seen.add(m);
+      out.push(m);
+    }
+  }
+  return out;
 }
 
 /** Map a tagged location to the additive /v1 shape. */
