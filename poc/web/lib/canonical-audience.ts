@@ -30,6 +30,11 @@ export type DemographicGroup = {
   ageDistribution?: Distribution;
   countryDistribution?: Distribution;
   cityDistribution?: Distribution;
+  /** LinkedIn professional-graph facets (page visitors / org followers). */
+  industryDistribution?: Distribution;
+  seniorityDistribution?: Distribution;
+  functionDistribution?: Distribution;
+  companySizeDistribution?: Distribution;
   errors?: DemographicBreakdownError[];
   byTimeframe?: Record<string, DemographicGroup>;
 };
@@ -76,6 +81,12 @@ export type AccountInsights = {
 };
 
 export type AudienceData = DemographicGroup & {
+  /**
+   * Why the follower breakdowns are empty (e.g. TikTok's 100-follower gate).
+   * Platforms with no reached scope report here; the Threads fetcher still
+   * borrows reachedDemographics.errors, so readers should fall back to it.
+   */
+  followerDemographicsErrors?: DemographicBreakdownError[];
   reachedDemographics?: DemographicGroup;
   engagedDemographics?: DemographicGroup;
   accountInsights?: AccountInsights;
@@ -145,9 +156,7 @@ function toGroup(v: unknown): DemographicGroup | undefined {
     }
   }
 
-  const errors = rows(src.errors).filter(
-    (e) => typeof e.breakdown === 'string' && typeof e.message === 'string',
-  ) as unknown as DemographicBreakdownError[];
+  const errors = toErrors(src.errors);
 
   const out: DemographicGroup = {
     ...whenFilled(
@@ -157,10 +166,33 @@ function toGroup(v: unknown): DemographicGroup | undefined {
     ...whenFilled('ageDistribution', toDistribution(src.age_distribution, 'label')),
     ...whenFilled('countryDistribution', toDistribution(src.countries, 'code')),
     ...whenFilled('cityDistribution', toDistribution(src.cities, 'name')),
+    ...whenFilled(
+      'industryDistribution',
+      toDistribution(src.industry_distribution, 'label'),
+    ),
+    ...whenFilled(
+      'seniorityDistribution',
+      toDistribution(src.seniority_distribution, 'label'),
+    ),
+    ...whenFilled(
+      'functionDistribution',
+      toDistribution(src.function_distribution, 'label'),
+    ),
+    ...whenFilled(
+      'companySizeDistribution',
+      toDistribution(src.company_size_distribution, 'label'),
+    ),
     ...(errors.length > 0 ? { errors } : {}),
     ...(Object.keys(byTimeframe).length > 0 ? { byTimeframe } : {}),
   };
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Shared error-row filter: the wire shape and the view shape are identical. */
+function toErrors(v: unknown): DemographicBreakdownError[] {
+  return rows(v).filter(
+    (e) => typeof e.breakdown === 'string' && typeof e.message === 'string',
+  ) as unknown as DemographicBreakdownError[];
 }
 
 /** snake_case scalar → camelCase, in ApiAudienceAccountInsights order. */
@@ -245,14 +277,25 @@ export function canonicalToAudience(
   const reached = toGroup(doc.reached_demographics);
   const engaged = toGroup(doc.engaged_demographics);
   const accountInsights = toAccountInsights(doc.account_insights);
+  const followerErrors = toErrors(doc.follower_demographics_errors);
+  // `updated_at` on the wrapper is the write time; the envelope's is the
+  // capture time. Either beats the page's "Captured …" line never rendering.
+  const fetchedAt =
+    typeof doc.updated_at === 'string'
+      ? doc.updated_at
+      : wrapper.updated_at;
 
   return {
     countryDistribution: toDistribution(doc.countries, 'code'),
     cityDistribution: toDistribution(doc.cities, 'name'),
     genderDistribution: toDistribution(doc.gender_distribution, 'label'),
     ageDistribution: toDistribution(doc.age_distribution, 'label'),
+    ...(followerErrors.length > 0
+      ? { followerDemographicsErrors: followerErrors }
+      : {}),
     ...(reached ? { reachedDemographics: reached } : {}),
     ...(engaged ? { engagedDemographics: engaged } : {}),
     ...(accountInsights ? { accountInsights } : {}),
+    ...(fetchedAt ? { fetchedAt } : {}),
   };
 }

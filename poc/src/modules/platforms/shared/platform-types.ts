@@ -169,6 +169,13 @@ export interface AccountInsightsData {
   lifetimeLikes?: number;          // total likes received across the account's lifetime
   videosCount?: number;            // total videos published lifetime
   // Daily time series (one entry per day).
+  /**
+   * Daily NET CHANGE in followers — a delta per day, negative on a losing
+   * day. NOT a running total: consumers sum it for "net change over the
+   * window" and rebuild the cumulative line from the current headcount.
+   * Platforms that only expose a running total must difference it (TikTok
+   * derives new − lost) rather than passing the total through.
+   */
   followerCountSeries?: DailySeriesPoint[];
   newFollowersSeries?: DailySeriesPoint[];
   lostFollowersSeries?: DailySeriesPoint[];
@@ -214,6 +221,19 @@ export interface AudienceData {
   seniorityDistribution?: DistributionBucket[];
   functionDistribution?: DistributionBucket[];
   companySizeDistribution?: DistributionBucket[];
+  /**
+   * Why the FOLLOWER breakdowns above came back empty (permissions, audience
+   * size…). Distinct from reachedDemographics.errors: a platform without a
+   * reached scope must report here rather than inventing one, or the UI
+   * offers a "Reached" tab the platform does not have.
+   *
+   * Keep these messages timeless — canonical docs are merged last-known-good
+   * (data-schema/coalesce-merge.ts), so a key that stops being emitted is
+   * preserved forever. Bake a live number into the text and it will still be
+   * on screen long after it stopped being true; put counts in
+   * accountInsights.extra, which is rewritten every sync.
+   */
+  followerDemographicsErrors?: DemographicBreakdownError[];
   /** Demographics of accounts that WERE reached (wider than followers). */
   reachedDemographics?: DemographicDistributions;
   /** Demographics of accounts that engaged. */

@@ -78,14 +78,20 @@ const DEMOGRAPHIC_BREAKDOWNS: ReadonlyArray<
 /**
  * TikTok refuses demographics below the follower threshold by returning empty
  * arrays with no error attached. The showroom can't tell that apart from "not
- * synced yet", so it rendered a blank panel. Mirror the Threads precedent and
- * pack the reason into DemographicBreakdownErrors — the account page surfaces
- * them under the Followers scope.
+ * synced yet", so it rendered a blank panel. We report the reason on
+ * `followerDemographicsErrors` — not the reachedDemographics slot the Threads
+ * fetcher borrows, because that would offer a "Reached" tab for a scope TikTok
+ * has no concept of.
  *
  * Only claim the threshold when we can actually prove it: TikTok must have
  * told us the follower count AND it must be under the bar. An empty response
  * from a large account is a different (unknown) problem and must not be
  * mislabelled.
+ *
+ * The message deliberately omits the live count: canonical docs keep
+ * last-known-good, so text that stops being emitted lingers. The current
+ * headcount rides on accountInsights.extra.followers_count_current instead,
+ * which every sync rewrites.
  */
 function buildThresholdErrors(
   followersCount: number | undefined,
@@ -98,8 +104,8 @@ function buildThresholdErrors(
   if (!allEmpty || !belowThreshold) return [];
 
   const message =
-    `TikTok exposes audience demographics only for accounts with ` +
-    `${DEMOGRAPHICS_FOLLOWER_THRESHOLD}+ followers (this account has ${followersCount}).`;
+    `TikTok exposes audience demographics only once an account reaches ` +
+    `${DEMOGRAPHICS_FOLLOWER_THRESHOLD} followers.`;
   return DEMOGRAPHIC_BREAKDOWNS.map((breakdown) => ({ breakdown, message }));
 }
 
@@ -128,11 +134,14 @@ export class TikTokAudienceFetcher {
     const series = account.metrics ?? [];
     if (series.length > 0) {
       accountInsights.periodDays = series.length;
-      // Followers — prefer daily_total_followers (real total at end of day);
-      // fall back to legacy followers_count if TikTok still ships it that way.
+      // followerCountSeries is a DELTA series (see AccountInsightsData) — the
+      // showroom sums it for "daily net change". TikTok's
+      // daily_total_followers is a running total at end of day, so it must NOT
+      // go here; the net delta is new − lost. The running total is served as
+      // extra.followers_count_current below.
       accountInsights.followerCountSeries = extractDailySeries(
         series,
-        (m) => m.daily_total_followers ?? m.followers_count,
+        (m) => (m.daily_new_followers ?? 0) - (m.daily_lost_followers ?? 0),
       );
       accountInsights.newFollowersSeries = extractDailySeries(series, (m) => m.daily_new_followers);
       accountInsights.lostFollowersSeries = extractDailySeries(series, (m) => m.daily_lost_followers);
@@ -195,10 +204,8 @@ export class TikTokAudienceFetcher {
       ageDistribution,
       countryDistribution,
       cityDistribution,
-      // No native "followers errors" slot on AudienceData — same workaround as
-      // the Threads fetcher, which the account page already renders.
       ...(thresholdErrors.length > 0
-        ? { reachedDemographics: { errors: thresholdErrors } }
+        ? { followerDemographicsErrors: thresholdErrors }
         : {}),
       accountInsights,
       fetchedAt: new Date(),

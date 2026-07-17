@@ -1188,18 +1188,18 @@ function PanelDemographics({
   const activeScopeHasTimeframes =
     (scope === 'reached' && !!aud.reachedDemographics?.byTimeframe) ||
     (scope === 'engaged' && !!aud.engagedDemographics?.byTimeframe);
-  // Threads packs the per-breakdown errors (e.g. "needs 100 followers") into
-  // `reachedDemographics.errors` because there's no native "followers errors"
-  // slot on AudienceData. Surface them under the Followers scope when no
-  // distribution arrived.
   const followersOwn: DemographicGroup = {
     genderDistribution: aud.genderDistribution,
     ageDistribution: aud.ageDistribution,
     countryDistribution: aud.countryDistribution,
     cityDistribution: aud.cityDistribution,
   };
+  // Why the follower breakdowns are empty. TikTok reports it on its own slot;
+  // Threads still borrows `reachedDemographics.errors`, and docs written
+  // before 2026-07-17 only have that shape — hence the fallback.
+  const followersErrors = aud.followerDemographicsErrors ?? reachedErrors;
   const showFollowersError =
-    scope === 'followers' && !hasDistribution(followersOwn) && !!reachedErrors?.length;
+    scope === 'followers' && !hasDistribution(followersOwn) && !!followersErrors?.length;
 
   return (
     <div
@@ -1323,7 +1323,7 @@ function PanelDemographics({
       </div>
 
       {showFollowersError && (
-        <DemographicsUnavailableNote scope="followers" errors={reachedErrors} />
+        <DemographicsUnavailableNote scope="followers" errors={followersErrors} />
       )}
       {showReachedError && (
         <DemographicsUnavailableNote scope="reached" errors={reachedErrors} />

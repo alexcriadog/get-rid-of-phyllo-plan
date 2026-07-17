@@ -38,10 +38,10 @@ const ctx: SchemaContext = {
 };
 
 const ADDITIVE_KEYS = [
+  "follower_demographics_errors",
   "reached_demographics",
   "engaged_demographics",
   "account_insights",
-  "interests",
   "industry_distribution",
   "seniority_distribution",
   "function_distribution",
@@ -223,12 +223,11 @@ describe("audience mapper — account insights", () => {
   });
 });
 
-describe("audience mapper — interests and professional facets", () => {
-  test("LinkedIn facets and interests are percent-normalized when present", () => {
+describe("audience mapper — professional facets", () => {
+  test("LinkedIn follower facets are percent-normalized when present", () => {
     const out = toApiAudience(
       ctx,
       followersOnly({
-        interests: [{ label: "Technology", value: 3, unit: "count" }],
         industryDistribution: [
           { label: "Software", value: 3, unit: "count" },
           { label: "Media", value: 1, unit: "count" },
@@ -236,12 +235,64 @@ describe("audience mapper — interests and professional facets", () => {
         seniorityDistribution: [{ label: "Senior", value: 2, unit: "count" }],
       }),
     );
-    expect(out.interests).toEqual([{ label: "Technology", value: 100 }]);
     expect(out.industry_distribution).toEqual([
       { label: "Software", value: 75 },
       { label: "Media", value: 25 },
     ]);
     expect(out.seniority_distribution).toEqual([{ label: "Senior", value: 100 }]);
     expect(out).not.toHaveProperty("function_distribution");
+  });
+
+  test("a visitor-facet-only reached scope survives instead of vanishing", () => {
+    // LinkedIn page-visitor demographics frequently carry ONLY the
+    // professional facets — no countries, no gender. Mapping just the
+    // InsightIQ five emptied the scope, so demographicsToApi returned
+    // undefined and the whole reached_demographics key disappeared.
+    const out = toApiAudience(
+      ctx,
+      followersOnly({
+        reachedDemographics: {
+          industryDistribution: [
+            { label: "Software", value: 3, unit: "count" },
+            { label: "Media", value: 1, unit: "count" },
+          ],
+        },
+      }),
+    );
+    expect(out.reached_demographics).toBeDefined();
+    expect(out.reached_demographics!.industry_distribution).toEqual([
+      { label: "Software", value: 75 },
+      { label: "Media", value: 25 },
+    ]);
+  });
+});
+
+describe("audience mapper — follower demographics errors", () => {
+  test("they get their own key, not a fabricated reached scope", () => {
+    const out = toApiAudience(
+      ctx,
+      followersOnly({
+        genderDistribution: [],
+        ageDistribution: [],
+        countryDistribution: [],
+        cityDistribution: [],
+        followerDemographicsErrors: [
+          {
+            breakdown: "age",
+            message: "TikTok exposes audience demographics only once an account reaches 100 followers.",
+          },
+        ],
+      }),
+    );
+    expect(out.follower_demographics_errors).toEqual([
+      {
+        breakdown: "age",
+        message:
+          "TikTok exposes audience demographics only once an account reaches 100 followers.",
+      },
+    ]);
+    // Crucially: no invented scope. A "Reached" tab must not appear for a
+    // platform that has no reached scope.
+    expect(out).not.toHaveProperty("reached_demographics");
   });
 });

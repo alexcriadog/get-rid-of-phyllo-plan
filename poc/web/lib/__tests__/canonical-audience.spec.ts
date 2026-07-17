@@ -121,6 +121,46 @@ describe('canonicalToAudience — reached / engaged scopes', () => {
   });
 });
 
+describe('canonicalToAudience — follower demographics errors', () => {
+  it('reads the dedicated slot without inventing a reached scope', () => {
+    const out = canonicalToAudience({
+      doc: {
+        countries: [],
+        follower_demographics_errors: [
+          {
+            breakdown: 'age',
+            message:
+              'TikTok exposes audience demographics only once an account reaches 100 followers.',
+          },
+        ],
+      },
+    });
+
+    expect(out.followerDemographicsErrors).toHaveLength(1);
+    expect(out.followerDemographicsErrors![0].message).toContain('100');
+    // A platform with no reached scope must not gain a Reached tab.
+    expect(out.reachedDemographics).toBeUndefined();
+  });
+});
+
+describe('canonicalToAudience — capture timestamp', () => {
+  it('surfaces the envelope timestamp so "Captured …" can render', () => {
+    const out = canonicalToAudience({
+      doc: { updated_at: '2026-07-17T09:00:00.000Z' },
+      updated_at: '2026-07-17T09:05:00.000Z',
+    });
+    expect(out.fetchedAt).toBe('2026-07-17T09:00:00.000Z');
+  });
+
+  it('falls back to the wrapper timestamp', () => {
+    const out = canonicalToAudience({
+      doc: {},
+      updated_at: '2026-07-17T09:05:00.000Z',
+    });
+    expect(out.fetchedAt).toBe('2026-07-17T09:05:00.000Z');
+  });
+});
+
 describe('canonicalToAudience — account insights', () => {
   it('reads scalars, series and both activity heatmaps', () => {
     const out = canonicalToAudience({

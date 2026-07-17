@@ -121,6 +121,24 @@ function demographicsToApi(
     ),
     ...whenFilled("gender_distribution", gendersToApi(group.genderDistribution)),
     ...whenFilled("age_distribution", agesToApi(group.ageDistribution)),
+    // LinkedIn's visitor demographics are often ONLY these facets; dropping
+    // them here would empty the scope and make it disappear entirely.
+    ...whenFilled(
+      "industry_distribution",
+      labelsToApi(group.industryDistribution),
+    ),
+    ...whenFilled(
+      "seniority_distribution",
+      labelsToApi(group.seniorityDistribution),
+    ),
+    ...whenFilled(
+      "function_distribution",
+      labelsToApi(group.functionDistribution),
+    ),
+    ...whenFilled(
+      "company_size_distribution",
+      labelsToApi(group.companySizeDistribution),
+    ),
     ...whenFilled("errors", group.errors ? [...group.errors] : undefined),
     ...(Object.keys(byTimeframe).length > 0 ? { by_timeframe: byTimeframe } : {}),
   };
@@ -253,10 +271,15 @@ export function toApiAudience(
     ),
     gender_distribution: gendersToApi(audience.genderDistribution),
     age_distribution: agesToApi(audience.ageDistribution),
+    ...whenFilled(
+      "follower_demographics_errors",
+      audience.followerDemographicsErrors
+        ? [...audience.followerDemographicsErrors]
+        : undefined,
+    ),
     ...(reached ? { reached_demographics: reached } : {}),
     ...(engaged ? { engaged_demographics: engaged } : {}),
     ...(accountInsights ? { account_insights: accountInsights } : {}),
-    ...whenFilled("interests", labelsToApi(audience.interests)),
     ...whenFilled(
       "industry_distribution",
       labelsToApi(audience.industryDistribution),

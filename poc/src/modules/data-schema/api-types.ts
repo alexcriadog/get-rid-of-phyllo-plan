@@ -392,6 +392,15 @@ export interface ApiAudienceDemographics {
   gender_age_distribution?: ApiGenderAgeBucket[];
   gender_distribution?: ApiLabelBucket[];
   age_distribution?: ApiLabelBucket[];
+  /**
+   * Professional-graph facets. LinkedIn fills these for page VISITORS (its
+   * reached scope), which is often all it returns — without them a
+   * visitor-industry-only response would map to an empty scope and vanish.
+   */
+  industry_distribution?: ApiLabelBucket[];
+  seniority_distribution?: ApiLabelBucket[];
+  function_distribution?: ApiLabelBucket[];
+  company_size_distribution?: ApiLabelBucket[];
   errors?: ApiDemographicError[];
   /**
    * Per-window variants. Instagram fetches reached/engaged demographics for
@@ -463,6 +472,13 @@ export interface ApiAudience extends ApiEnvelope {
   gender_distribution: ApiLabelBucket[];
   age_distribution: ApiLabelBucket[];
   /**
+   * Additive, only-when-present — why the follower breakdowns above are empty
+   * (e.g. TikTok's 100-follower gate). Separate from reached_demographics so a
+   * platform without a reached scope doesn't have to invent one to explain
+   * itself.
+   */
+  follower_demographics_errors?: ApiDemographicError[];
+  /**
    * Additive, only-when-present — scopes WIDER than followers. Instagram
    * derives these over a rolling window (12 Graph calls); other platforms
    * populate only `errors` to explain a refusal. Audiences synced before
@@ -472,8 +488,6 @@ export interface ApiAudience extends ApiEnvelope {
   engaged_demographics?: ApiAudienceDemographics;
   /** Additive, only-when-present — account-level totals + daily series. */
   account_insights?: ApiAudienceAccountInsights;
-  /** Additive, only-when-present — audience interest affinities. */
-  interests?: ApiLabelBucket[];
   /**
    * Additive, only-when-present — professional-graph facets (LinkedIn org
    * followers). Other platforms leave them absent.
