@@ -641,6 +641,7 @@ function PanelAccountInsights({
           <FollowerSparkline
             series={insights.followerCountSeries}
             currentTotal={followersCount}
+            platform={platform}
           />
         </div>
       )}
@@ -696,9 +697,11 @@ function PanelAccountInsights({
 function FollowerSparkline({
   series,
   currentTotal,
+  platform,
 }: {
   series: Array<{ endTime: string; value: number }>;
   currentTotal?: number;
+  platform?: string;
 }) {
   const sorted = useMemo(
     () => [...series].sort((a, b) => a.endTime.localeCompare(b.endTime)),
@@ -969,8 +972,10 @@ function FollowerSparkline({
           opacity: 0.7,
         }}
       >
-        today's value lands tomorrow — Meta closes daily insights at end of
-        day UTC (09:00 Madrid){cumulative && ' · purple line: cumulative total followers'}
+        {platform === 'instagram' || platform === 'facebook'
+          ? "today's value lands tomorrow — Meta closes daily insights at end of day UTC (09:00 Madrid)"
+          : 'daily net change (new − lost) over the window'}
+        {cumulative && ' · purple line: cumulative total followers'}
       </div>
     </div>
   );
