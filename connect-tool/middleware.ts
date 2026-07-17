@@ -1,29 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
-
-/**
- * Gate `/data-guide` behind the shared operator session. The Auth.js session
- * cookie is set by poc/web on the same host, so getToken (with the shared
- * AUTH_SECRET) validates it here. No valid session → redirect to the poc/web
- * login page, which lives on the same host at /login.
- */
-async function guardDataGuide(req: NextRequest): Promise<NextResponse | null> {
-  // Match how poc/web issues the cookie: in prod (HTTPS) it is
-  // `__Secure-authjs.session-token` with a matching salt. Without secureCookie
-  // getToken defaults to the non-secure name and rejects every real session,
-  // redirecting authenticated operators back to /login in a loop.
-  const secureCookie = process.env.NODE_ENV === 'production';
-  const token = await getToken({
-    req,
-    secret: process.env.AUTH_SECRET,
-    secureCookie,
-  });
-  if (token) return null;
-  const url = req.nextUrl.clone();
-  url.pathname = '/login';
-  url.search = '?callbackUrl=/data-guide';
-  return NextResponse.redirect(url);
-}
+import { guardDataGuide } from './lib/data-guide-guard';
 
 /**
  * Two jobs, by path:

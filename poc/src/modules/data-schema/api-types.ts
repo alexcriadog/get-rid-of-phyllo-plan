@@ -373,6 +373,88 @@ export interface ApiContentPoll {
   total_votes: number | null;
 }
 
+/** Additive — why a demographic breakdown came back empty (Graph/API error). */
+export interface ApiDemographicError {
+  breakdown: 'age' | 'gender' | 'country' | 'city';
+  message: string;
+  code?: number;
+  subcode?: number;
+}
+
+/**
+ * Additive — one demographic scope (reached / engaged). Same bucket shapes as
+ * the follower-level fields on ApiAudience, but every field is optional: a
+ * platform may expose only some breakdowns, and `errors` explains the rest.
+ */
+export interface ApiAudienceDemographics {
+  countries?: ApiCountryBucket[];
+  cities?: ApiCityBucket[];
+  gender_age_distribution?: ApiGenderAgeBucket[];
+  gender_distribution?: ApiLabelBucket[];
+  age_distribution?: ApiLabelBucket[];
+  errors?: ApiDemographicError[];
+  /**
+   * Per-window variants. Instagram fetches reached/engaged demographics for
+   * each Graph window it still accepts (`this_week`, `this_month`); the
+   * top-level fields carry the best-populated one.
+   */
+  by_timeframe?: Record<string, ApiAudienceDemographics>;
+}
+
+/** Additive — one point of a daily series. */
+export interface ApiDailySeriesPoint {
+  end_time: string;
+  value: number;
+}
+
+/** Additive — account-level metrics captured alongside the demographics. */
+export interface ApiAudienceAccountInsights {
+  period_days?: number;
+  reach?: number;
+  accounts_engaged?: number;
+  total_interactions?: number;
+  likes?: number;
+  comments?: number;
+  saves?: number;
+  shares?: number;
+  replies?: number;
+  views?: number;
+  profile_views?: number;
+  website_clicks?: number;
+  email_contacts?: number;
+  phone_call_clicks?: number;
+  text_message_clicks?: number;
+  get_directions_clicks?: number;
+  lifetime_likes?: number;
+  videos_count?: number;
+  follower_count_series?: ApiDailySeriesPoint[];
+  new_followers_series?: ApiDailySeriesPoint[];
+  lost_followers_series?: ApiDailySeriesPoint[];
+  video_views_series?: ApiDailySeriesPoint[];
+  unique_video_views_series?: ApiDailySeriesPoint[];
+  profile_views_series?: ApiDailySeriesPoint[];
+  likes_series?: ApiDailySeriesPoint[];
+  comments_series?: ApiDailySeriesPoint[];
+  shares_series?: ApiDailySeriesPoint[];
+  engaged_audience_series?: ApiDailySeriesPoint[];
+  bio_link_clicks_series?: ApiDailySeriesPoint[];
+  email_clicks_series?: ApiDailySeriesPoint[];
+  phone_number_clicks_series?: ApiDailySeriesPoint[];
+  address_clicks_series?: ApiDailySeriesPoint[];
+  app_download_clicks_series?: ApiDailySeriesPoint[];
+  lead_submissions_series?: ApiDailySeriesPoint[];
+  /** 24-bucket "when is the audience online" histogram. */
+  audience_activity?: Array<{ hour: number; count: number }>;
+  /** 7×24 grid of the same signal; day_of_week follows JS getDay() (0=Sun). */
+  audience_activity_weekly?: Array<{
+    day_of_week: number;
+    hour: number;
+    count: number;
+  }>;
+  /** Platform-specific overflow (already snake_case at the source). */
+  extra?: Record<string, number>;
+}
+
 export interface ApiAudience extends ApiEnvelope {
   countries: ApiCountryBucket[];
   cities: ApiCityBucket[];
@@ -380,6 +462,26 @@ export interface ApiAudience extends ApiEnvelope {
   /** Additive split fallbacks (§4.3 note / §10.3) — see ApiContentAudience. */
   gender_distribution: ApiLabelBucket[];
   age_distribution: ApiLabelBucket[];
+  /**
+   * Additive, only-when-present — scopes WIDER than followers. Instagram
+   * derives these over a rolling window (12 Graph calls); other platforms
+   * populate only `errors` to explain a refusal. Audiences synced before
+   * 2026-07-17 lack these until their next refresh.
+   */
+  reached_demographics?: ApiAudienceDemographics;
+  engaged_demographics?: ApiAudienceDemographics;
+  /** Additive, only-when-present — account-level totals + daily series. */
+  account_insights?: ApiAudienceAccountInsights;
+  /** Additive, only-when-present — audience interest affinities. */
+  interests?: ApiLabelBucket[];
+  /**
+   * Additive, only-when-present — professional-graph facets (LinkedIn org
+   * followers). Other platforms leave them absent.
+   */
+  industry_distribution?: ApiLabelBucket[];
+  seniority_distribution?: ApiLabelBucket[];
+  function_distribution?: ApiLabelBucket[];
+  company_size_distribution?: ApiLabelBucket[];
 }
 
 export interface ApiCommentContentRef {

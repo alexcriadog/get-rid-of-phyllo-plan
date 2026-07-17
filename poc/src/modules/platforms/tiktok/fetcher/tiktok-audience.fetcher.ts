@@ -10,7 +10,12 @@
 // All of those land in AudienceData.
 
 import { Inject, Injectable } from '@nestjs/common';
-import type { AccountInsightsData, AudienceData } from '../../shared/platform-types';
+import type {
+  AccountInsightsData,
+  AudienceData,
+  DemographicBreakdownError,
+  DistributionBucket,
+} from '../../shared/platform-types';
 import type {
   BoundTikTokClient,
   TikTokBusinessAccount,
@@ -57,6 +62,46 @@ const AUDIENCE_FIELDS = [
   'app_download_clicks',
   'lead_submissions',
 ];
+
+/**
+ * TikTok exposes demographics only once an account reaches this many
+ * followers. Below it the API returns EMPTY arrays rather than an error, so
+ * "empty" is ambiguous downstream — we disambiguate it here (see
+ * buildThresholdErrors).
+ */
+const DEMOGRAPHICS_FOLLOWER_THRESHOLD = 100;
+
+const DEMOGRAPHIC_BREAKDOWNS: ReadonlyArray<
+  DemographicBreakdownError['breakdown']
+> = ['age', 'city', 'country', 'gender'];
+
+/**
+ * TikTok refuses demographics below the follower threshold by returning empty
+ * arrays with no error attached. The showroom can't tell that apart from "not
+ * synced yet", so it rendered a blank panel. Mirror the Threads precedent and
+ * pack the reason into DemographicBreakdownErrors — the account page surfaces
+ * them under the Followers scope.
+ *
+ * Only claim the threshold when we can actually prove it: TikTok must have
+ * told us the follower count AND it must be under the bar. An empty response
+ * from a large account is a different (unknown) problem and must not be
+ * mislabelled.
+ */
+function buildThresholdErrors(
+  followersCount: number | undefined,
+  distributions: ReadonlyArray<DistributionBucket[]>,
+): DemographicBreakdownError[] {
+  const allEmpty = distributions.every((d) => d.length === 0);
+  const belowThreshold =
+    typeof followersCount === 'number' &&
+    followersCount < DEMOGRAPHICS_FOLLOWER_THRESHOLD;
+  if (!allEmpty || !belowThreshold) return [];
+
+  const message =
+    `TikTok exposes audience demographics only for accounts with ` +
+    `${DEMOGRAPHICS_FOLLOWER_THRESHOLD}+ followers (this account has ${followersCount}).`;
+  return DEMOGRAPHIC_BREAKDOWNS.map((breakdown) => ({ breakdown, message }));
+}
 
 @Injectable()
 export class TikTokAudienceFetcher {
@@ -123,12 +168,38 @@ export class TikTokAudienceFetcher {
     if (typeof account.videos_count === 'number') {
       accountInsights.videosCount = account.videos_count;
     }
+    // The live follower total, so the UI can say how far an account is from
+    // the demographics threshold. `followerCountSeries` above is the daily
+    // series and is empty for accounts TikTok returns no `metrics[]` for.
+    if (typeof account.followers_count === 'number') {
+      accountInsights.extra = {
+        ...accountInsights.extra,
+        followers_count_current: account.followers_count,
+      };
+    }
+
+    const genderDistribution = parseAudienceGenders(account);
+    const ageDistribution = parseAudienceAges(account);
+    const countryDistribution = parseAudienceCountries(account);
+    const cityDistribution = parseAudienceCities(account);
+
+    const thresholdErrors = buildThresholdErrors(account.followers_count, [
+      genderDistribution,
+      ageDistribution,
+      countryDistribution,
+      cityDistribution,
+    ]);
 
     return {
-      genderDistribution: parseAudienceGenders(account),
-      ageDistribution: parseAudienceAges(account),
-      countryDistribution: parseAudienceCountries(account),
-      cityDistribution: parseAudienceCities(account),
+      genderDistribution,
+      ageDistribution,
+      countryDistribution,
+      cityDistribution,
+      // No native "followers errors" slot on AudienceData — same workaround as
+      // the Threads fetcher, which the account page already renders.
+      ...(thresholdErrors.length > 0
+        ? { reachedDemographics: { errors: thresholdErrors } }
+        : {}),
       accountInsights,
       fetchedAt: new Date(),
     };

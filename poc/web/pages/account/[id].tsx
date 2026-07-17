@@ -3,6 +3,14 @@ import { useMemo, useRef, useState } from 'react';
 import type { GetServerSideProps } from 'next';
 import { getDb } from '../../lib/mongo';
 import { fmtNumber } from '../../lib/format';
+import { canonicalToAudience } from '../../lib/canonical-audience';
+import type {
+  AccountInsights,
+  AudienceData,
+  DemographicBreakdownError,
+  DemographicGroup,
+  Distribution,
+} from '../../lib/canonical-audience';
 import { RelativeTime } from '../../components/RelativeTime';
 import { MetricTile } from '../../components/account/MetricTile';
 
@@ -35,33 +43,14 @@ type IdentitySnapshot = {
   updated_at?: string;
 };
 
-type Distribution = Array<{ label: string; value: number }>;
-
-type DemographicBreakdownError = {
-  breakdown: 'age' | 'gender' | 'country' | 'city';
-  message: string;
-  code?: number;
-  subcode?: number;
-};
+// Distribution, DemographicBreakdownError, DemographicGroup, AccountInsights
+// and AudienceData are imported from lib/canonical-audience — the adapter that
+// maps the canonical doc into this page's shape owns those definitions.
 
 // Meta v20+ retired prev_month for *_audience_demographics. Only this_week
 // and this_month remain valid; older snapshots may carry a prev_month key
 // in byTimeframe but the UI no longer offers it.
 type DemographicTimeframe = 'this_week' | 'this_month';
-
-type DemographicGroup = {
-  genderDistribution?: Distribution;
-  ageDistribution?: Distribution;
-  countryDistribution?: Distribution;
-  cityDistribution?: Distribution;
-  errors?: DemographicBreakdownError[];
-  /**
-   * IG fetches reached/engaged demographics across all 3 Graph windows
-   * (`this_week`, `this_month`, `prev_month`). When present, the UI
-   * shows a sub-selector and reads from this map.
-   */
-  byTimeframe?: Partial<Record<DemographicTimeframe, DemographicGroup>>;
-};
 
 const TIMEFRAME_LABELS: Record<DemographicTimeframe, string> = {
   this_week: 'This week',
@@ -74,39 +63,6 @@ const TIMEFRAME_LABELS: Record<DemographicTimeframe, string> = {
 const TIMEFRAME_TOOLTIPS: Record<DemographicTimeframe, string> = {
   this_week: 'Last 7 days (rolling)',
   this_month: 'Last 30 days (rolling)',
-};
-
-type AccountInsights = {
-  periodDays?: number;
-  reach?: number;
-  impressions?: number;
-  accountsEngaged?: number;
-  totalInteractions?: number;
-  likes?: number;
-  comments?: number;
-  saves?: number;
-  shares?: number;
-  replies?: number;
-  views?: number;
-  profileViews?: number;
-  websiteClicks?: number;
-  emailContacts?: number;
-  phoneCallClicks?: number;
-  textMessageClicks?: number;
-  getDirectionsClicks?: number;
-  followerCountSeries?: Array<{ endTime: string; value: number }>;
-  /** 24-bucket "when followers are online" / "when audience engages" curve. */
-  audienceActivity?: Array<{ hour: number; count: number }>;
-  /** 7×24 weekly heatmap: dayOfWeek 0..6 (0=Sun) × hour 0..23. */
-  audienceActivityWeekly?: Array<{ dayOfWeek: number; hour: number; count: number }>;
-  extra?: Record<string, number>;
-};
-
-type AudienceData = DemographicGroup & {
-  reachedDemographics?: DemographicGroup;
-  engagedDemographics?: DemographicGroup;
-  accountInsights?: AccountInsights;
-  fetchedAt?: string;
 };
 
 type AudienceSnapshot = {
@@ -203,20 +159,17 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => 
       };
     }
 
-    // ── audience (canonical → old distributions; uses additive gender/age) ──
+    // ── audience (canonical → view shape; see lib/canonical-audience.ts) ──
+    // Reads the additive scopes too (reached/engaged demographics, account
+    // insights). Docs synced before 2026-07-17 carry only the four follower
+    // distributions and degrade to the previous shape.
     let audience: AudienceSnapshot | null = null;
     if (audienceDoc) {
       const w = pj(audienceDoc) as { doc?: Record<string, any>; updated_at?: string };
-      const doc = w.doc ?? {};
       audience = {
         account_id: id,
         updated_at: w.updated_at,
-        data: {
-          countryDistribution: (doc.countries ?? []).map((c: any) => ({ label: c.code, value: c.value })),
-          cityDistribution: (doc.cities ?? []).map((c: any) => ({ label: c.name, value: c.value })),
-          genderDistribution: (doc.gender_distribution ?? []).map((g: any) => ({ label: g.label, value: g.value })),
-          ageDistribution: (doc.age_distribution ?? []).map((a: any) => ({ label: a.label, value: a.value })),
-        },
+        data: canonicalToAudience(w),
       };
     }
 
